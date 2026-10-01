@@ -81,6 +81,7 @@ public sealed class OcppGateway(
         };
         db.OcppConnections.Add(connection);
         await projection.InvalidateDeviceAsync(chargePointId, ct);
+        await StageConnectionChangeAsync(chargePointId, "Connected", ct);
         await db.SaveChangesAsync(ct);
         if (transaction is not null)
             await transaction.CommitAsync(ct);
@@ -101,6 +102,7 @@ public sealed class OcppGateway(
         var device = await db.OcppChargePoints.SingleAsync(x => x.Id == chargePointId, ct);
         device.LastSeenAt = null;
         await projection.InvalidateDeviceAsync(chargePointId, ct);
+        await StageConnectionChangeAsync(chargePointId, "Disconnected", ct);
         await db.SaveChangesAsync(ct);
         if (transaction is not null)
             await transaction.CommitAsync(ct);
@@ -217,6 +219,27 @@ public sealed class OcppGateway(
             if (transaction is not null)
                 await transaction.DisposeAsync();
         }
+    }
+
+    private async Task StageConnectionChangeAsync(Guid deviceId, string state, CancellationToken ct)
+    {
+        var stationIds = await db
+            .OcppConnectors.Where(x => x.ChargePointId == deviceId && x.StationId != null)
+            .Select(x => x.StationId!.Value)
+            .Distinct()
+            .ToListAsync(ct);
+        foreach (var stationId in stationIds)
+            db.RealtimeOutbox.Add(
+                new()
+                {
+                    EventType = "DeviceConnectionChanged",
+                    EntityType = "ChargingStation",
+                    EntityId = stationId,
+                    PayloadJson = JsonSerializer.Serialize(new StationChanged(stationId, 0, state)),
+                    CreatedAt = clock.GetUtcNow(),
+                    AvailableAt = clock.GetUtcNow(),
+                }
+            );
     }
 
     private OcppInboundMessage Message(

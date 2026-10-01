@@ -17,7 +17,8 @@ public sealed class DriverQueries(
 {
     public async Task<DriverChargingState> GetChargingStateAsync(
         Guid driverId,
-        CancellationToken ct
+        CancellationToken ct,
+        Guid? stationId = null
     )
     {
         var email = configuration["Demo:DriverEmail"]?.Trim().ToUpperInvariant();
@@ -27,7 +28,11 @@ public sealed class DriverQueries(
             && await db.Accounts.AnyAsync(x => x.Id == driverId && x.NormalizedEmail == email, ct);
         var transactions = await db
             .OcppChargingTransactions.AsNoTracking()
-            .Where(x => x.DriverId == driverId && x.StationId != null)
+            .Where(x =>
+                x.DriverId == driverId
+                && x.StationId != null
+                && (stationId == null || x.StationId == stationId)
+            )
             .OrderByDescending(x => x.StartReceivedAt)
             .Take(100)
             .ToListAsync(ct);
@@ -56,6 +61,8 @@ public sealed class DriverQueries(
         {
             if (!stations.TryGetValue(transaction.StationId!.Value, out var station))
                 continue;
+            var simulationClock = station.IsDemo && options.Value.SimulatorEnabled;
+            var latestAllowedTime = simulationClock ? now.AddDays(1) : now.AddMinutes(5);
             var connector = connectors.SingleOrDefault(x =>
                 x.ChargePointId == transaction.ChargePointId
                 && x.ConnectorNumber == transaction.ConnectorNumber
@@ -75,7 +82,7 @@ public sealed class DriverQueries(
                     && x.NumericValue != null
                     && x.Format != "SignedData"
                     && x.ObservedAt >= transaction.StartedAt
-                    && x.ObservedAt <= now.AddMinutes(5)
+                    && x.ObservedAt <= latestAllowedTime
                 )
                 .OrderByDescending(x => x.ObservedAt)
                 .ThenByDescending(x => x.ReceivedAt)
@@ -83,7 +90,12 @@ public sealed class DriverQueries(
                 .ToListAsync(ct);
             // Also interpret already stored phase readings from before this fix.
             // Reading the snapshot does not mutate the original telemetry or history.
-            var readings = OcppMeterReading.FromSamples(samples, transaction.StartedAt, now);
+            var readings = OcppMeterReading.FromSamples(
+                samples,
+                transaction.StartedAt,
+                now,
+                simulationClock
+            );
             var energyReading = readings.LastOrDefault(x =>
                 x.Measurand == "Energy.Active.Import.Register"
             );
@@ -138,7 +150,10 @@ public sealed class DriverQueries(
                     transaction.StartedAt,
                     transaction.StoppedAt,
                     lastReading?.ObservedAt ?? transaction.LastMeasurementAt,
-                    transaction.CalculatedCost,
+                    transaction.StoppedAt is not null ? transaction.CalculatedCost
+                        : energy is not null && transaction.UnitPriceSnapshot is { } price
+                            ? decimal.Round(energy.Value * price, 2, MidpointRounding.AwayFromZero)
+                        : null,
                     transaction.Currency ?? "EUR",
                     station.IsDemo,
                     transaction.StartReceivedAt,
@@ -146,7 +161,8 @@ public sealed class DriverQueries(
                     lastReading?.ReceivedAt,
                     clockSkewed,
                     transaction.StoppedAt is not null ? "Total" : energyReading?.Scope,
-                    powerReading?.Scope
+                    powerReading?.Scope,
+                    transaction.UnitPriceSnapshot
                 )
             );
         }

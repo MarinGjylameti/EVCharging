@@ -22,7 +22,8 @@ internal sealed record OcppMeterReading(
     public static IReadOnlyList<OcppMeterReading> FromSamples(
         IEnumerable<OcppMeterSample> samples,
         DateTimeOffset startedAt,
-        DateTimeOffset now
+        DateTimeOffset now,
+        bool simulationClock = false
     )
     {
         var readings = new List<OcppMeterReading>();
@@ -32,7 +33,7 @@ internal sealed record OcppMeterReading(
                 && x.Format != "SignedData"
                 && x.Location is null or "Outlet"
                 && x.ObservedAt >= startedAt
-                && x.ObservedAt <= now.AddMinutes(5)
+                && x.ObservedAt <= (simulationClock ? now.AddDays(1) : now.AddMinutes(5))
                 && x.Measurand is "Energy.Active.Import.Register" or "Power.Active.Import"
             )
             .GroupBy(x => new

@@ -1,10 +1,15 @@
 using System.Text.Json;
 using EVCharging.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace EVCharging.Infrastructure.Charging.Ocpp;
 
-public sealed class OcppMeterHandler(ChargingDbContext db, TimeProvider clock)
+public sealed class OcppMeterHandler(
+    ChargingDbContext db,
+    TimeProvider clock,
+    IOptions<OcppOptions> options
+)
 {
     public async Task RecordAsync(
         Guid deviceId,
@@ -42,7 +47,11 @@ public sealed class OcppMeterHandler(ChargingDbContext db, TimeProvider clock)
                     "Unknown transaction for this connector."
                 );
         }
-        AddSamples(deviceId, message.Id, number, transaction, samples);
+        var simulationClock =
+            transaction is not null
+            && options.Value.SimulatorEnabled
+            && await db.Stations.AnyAsync(x => x.Id == transaction.StationId && x.IsDemo, ct);
+        AddSamples(deviceId, message.Id, number, transaction, samples, simulationClock);
         if (transaction is not null)
             OcppTransactionHandler.StageSessionChange(db, transaction, clock.GetUtcNow());
     }
@@ -52,7 +61,8 @@ public sealed class OcppMeterHandler(ChargingDbContext db, TimeProvider clock)
         Guid messageId,
         int connector,
         OcppChargingTransaction? transaction,
-        IReadOnlyList<ParsedSample> samples
+        IReadOnlyList<ParsedSample> samples,
+        bool simulationClock = false
     )
     {
         var now = clock.GetUtcNow();
@@ -84,7 +94,14 @@ public sealed class OcppMeterHandler(ChargingDbContext db, TimeProvider clock)
         db.OcppMeterSamples.AddRange(records);
         if (transaction is null || transaction.StoppedAt is not null)
             return;
-        foreach (var reading in OcppMeterReading.FromSamples(records, transaction.StartedAt, now))
+        foreach (
+            var reading in OcppMeterReading.FromSamples(
+                records,
+                transaction.StartedAt,
+                now,
+                simulationClock
+            )
+        )
         {
             if (reading.ObservedAt < transaction.LastMeasurementAt)
                 continue;

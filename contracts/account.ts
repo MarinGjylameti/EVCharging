@@ -35,6 +35,12 @@ export type DriverChargingSession = {
   cost: number | null; currency: string; isDemo: boolean;
   startReceivedAt?: string; stopReceivedAt?: string | null; lastMeasurementReceivedAt?: string | null;
   deviceClockSkewed?: boolean; energyScope?: string | null; powerScope?: string | null;
+  unitPricePerKWh?: number | null;
+};
+export type StationCharging = {
+  station: Station; canConnect: boolean; deviceConnected: boolean; inUse: boolean;
+  connectionRequest: { id: string; state: string; expiresAt: string } | null;
+  session: DriverChargingSession | null;
 };
 export type DriverChargingState = { canTestSimulator: boolean; sessions: DriverChargingSession[] };
 export type DriverLiveSnapshot = {

@@ -77,6 +77,21 @@ public static class OcppEndpoints
                     received = await socket.ReceiveAsync(buffer, idle.Token);
                     if (received.MessageType == WebSocketMessageType.Close)
                     {
+                        // Commit the disconnect before acknowledging it so a
+                        // subsequent snapshot cannot still show a live device.
+                        using var closeTimeout = new CancellationTokenSource(
+                            TimeSpan.FromSeconds(10)
+                        );
+                        await using var closeScope = scopes.CreateAsyncScope();
+                        await closeScope
+                            .ServiceProvider.GetRequiredService<IOcppGateway>()
+                            .CloseAsync(
+                                deviceId.Value,
+                                connectionId.Value,
+                                (int?)received.CloseStatus,
+                                closeTimeout.Token
+                            );
+                        connectionId = null;
                         await socket.CloseOutputAsync(
                             WebSocketCloseStatus.NormalClosure,
                             "Disconnected",

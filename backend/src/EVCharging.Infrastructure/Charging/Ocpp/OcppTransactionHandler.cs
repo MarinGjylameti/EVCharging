@@ -59,7 +59,29 @@ public sealed class OcppTransactionHandler(
         }
         var station = await db.Stations.SingleOrDefaultAsync(x => x.Id == connector.StationId, ct);
         var email = configuration["Demo:DriverEmail"]?.Trim().ToUpperInvariant();
-        var driverId = email is null
+        var now = clock.GetUtcNow();
+        var waiting = await db.ChargingConnectionRequests.SingleOrDefaultAsync(
+            x =>
+                x.StationId == connector.StationId
+                && x.ConnectorNumber == number
+                && x.State == "Waiting"
+                && x.ExpiresAt > now,
+            ct
+        );
+        Guid? driverId = waiting?.DriverId;
+        if (
+            driverId is not null
+            && !await db.Accounts.AnyAsync(
+                x =>
+                    x.Id == driverId
+                    && x.IsActive
+                    && x.ArchivedAt == null
+                    && x.Role == UserRole.Driver,
+                ct
+            )
+        )
+            throw new OcppFault("SecurityError", "The driver authorization is no longer active.");
+        driverId ??= email is null
             ? null
             : await db
                 .Accounts.Where(x =>
@@ -85,6 +107,21 @@ public sealed class OcppTransactionHandler(
             Currency = station?.Currency,
         };
         db.OcppChargingTransactions.Add(transaction);
+        if (waiting is not null)
+        {
+            waiting.State = "Linked";
+            waiting.SessionId = transaction.Id;
+            waiting.LinkedAt = now;
+        }
+        // A new accelerated simulation starts with a fresh device clock. Its
+        // previous completed run must not block status updates in this run.
+        if (
+            options.Value.SimulatorEnabled
+            && station?.IsDemo == true
+            && (started - now).Duration() <= TimeSpan.FromMinutes(5)
+            && connector.StatusObservedAt > started
+        )
+            connector.StatusObservedAt = null;
         await projection.SetConnectorAsync(device.Id, number, "Preparing", started, ct);
         await db.SaveChangesAsync(ct);
         StageSessionChange(db, transaction, clock.GetUtcNow());
@@ -119,11 +156,27 @@ public sealed class OcppTransactionHandler(
             );
         if (transaction.StopMessageId is not null)
             return new { };
-        meters.AddSamples(device.Id, message.Id, transaction.ConnectorNumber, transaction, samples);
+        var simulationClock =
+            options.Value.SimulatorEnabled
+            && await db.Stations.AnyAsync(x => x.Id == transaction.StationId && x.IsDemo, ct);
+        meters.AddSamples(
+            device.Id,
+            message.Id,
+            transaction.ConnectorNumber,
+            transaction,
+            samples,
+            simulationClock
+        );
         transaction.StopMessageId = message.Id;
         transaction.StoppedAt = stopped;
         transaction.StopReceivedAt = clock.GetUtcNow();
         transaction.State = "Stopped";
+        var connectionRequest = await db.ChargingConnectionRequests.SingleOrDefaultAsync(
+            x => x.SessionId == transaction.Id,
+            ct
+        );
+        if (connectionRequest is not null)
+            connectionRequest.State = "Completed";
         transaction.StopReason = reason;
         transaction.MeterStopWh = meterStop;
         transaction.CurrentPowerKW = 0;

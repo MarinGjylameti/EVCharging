@@ -183,6 +183,81 @@
   .history-chart-summary > strong { width: 100%; }
 }
 @media (prefers-reduced-motion: reduce) { .history-chart-bar { transition: none; } }
+.charge-point-page { max-width: 1240px; }
+.charge-page-navigation { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin-bottom: 34px; font-size: 12px; font-weight: 700; color: #36765b; }
+.charge-page-navigation a { text-decoration: none; padding: 5px 0; }
+.charge-page-navigation a:hover { text-decoration: underline; }
+.charge-point-title { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 18px; align-items: center; margin-bottom: 26px; }
+.charge-point-title h1 { font-size: clamp(25px, 3vw, 36px); letter-spacing: -1px; margin: 12px 0 9px; overflow-wrap: anywhere; }
+.charge-point-title p { color: #748578; font-size: 13px; line-height: 1.7; margin: 0; }
+.charge-point-specs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 20px 24px; gap: 20px; border: 1px solid #dce6dc; border-radius: 12px; background: #fff; margin-bottom: 26px; }
+.charge-point-specs > span { display: grid; gap: 9px; }
+.charge-point-specs small { font-size: 9px; font-weight: 700; letter-spacing: 1.5px; color: #86988b; }
+.charge-point-specs strong { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.charge-process { padding: 30px; background: #fff; border: 1px solid #dce6dc; border-radius: 18px; }
+.charge-process.is-charging { border-color: #bdd8c5; }
+.charge-process-heading { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; }
+.charge-status { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: #748578; border: 1px solid #e3ebe0; border-radius: 100px; padding: 8px 12px; }
+.charge-status i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.is-charging .charge-status { color: #16835d; border-color: #c5e3d2; background: #f0f9f1; }
+.is-paused .charge-status { color: #916a1d; border-color: #efe0b6; background: #fbf7e9; }
+.charge-energy-display { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; padding: 34px 0 28px; }
+.charge-energy-display > div:not(.charge-bolt) { display: grid; gap: 8px; }
+.charge-energy-display span { font-size: 12px; color: #7a8d7e; }
+.charge-energy-display strong { font-size: clamp(34px, 5vw, 54px); font-weight: 600; letter-spacing: -2px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.charge-energy-display strong small { font-size: 17px; font-weight: 400; letter-spacing: 0; color: #5b7868; }
+.charge-bolt, .charge-wait-icon { width: 68px; height: 68px; background: #edf5e9; color: #248261; border: 1px solid #d9e8d6; border-radius: 20px; display: grid; place-items: center; font-size: 45px; flex-shrink: 0; }
+.is-charging .charge-bolt { animation: charge-pulse 2.2s ease-in-out infinite; }
+.charge-energy-display .charge-battery { margin-left: auto; text-align: right; }
+.charge-progress-track { height: 12px; background: #edf2ea; border-radius: 100px; overflow: hidden; position: relative; }
+.charge-progress-fill, .charge-progress-indeterminate { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #2c9471, #88ba5c); }
+.charge-progress-fill { transition: width .5s ease; }
+.charge-progress-indeterminate { width: 35%; opacity: .35; }
+.is-charging .charge-progress-indeterminate { opacity: 1; animation: charge-flow 2.6s ease-in-out infinite; }
+.is-paused .charge-progress-fill, .is-paused .charge-progress-indeterminate { background: #c5a562; }
+.is-complete .charge-progress-indeterminate { width: 100%; opacity: .65; }
+.charge-progress-caption { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; margin: 13px 0 30px; color: #7d8e81; font-size: 11px; line-height: 1.7; }
+.charge-process-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; border-top: 1px solid #e5ede1; padding-top: 24px; }
+.charge-process-metrics > div { display: grid; align-content: start; gap: 11px; }
+.charge-process-metrics > div > span { font-size: 9px; font-weight: 700; letter-spacing: 1.2px; color: #85998b; line-height: 1.5; }
+.charge-process-metrics strong { font-size: 26px; font-weight: 600; letter-spacing: -.6px; font-variant-numeric: tabular-nums; }
+.charge-process-metrics strong small { font-size: 12px; font-weight: 400; letter-spacing: 0; }
+.charge-process-metrics > div > small { color: #7e9384; font-size: 11px; line-height: 1.6; }
+.charge-reading-details { margin-top: 24px; padding-top: 18px; border-top: 1px solid #e5ede1; color: #7a8f80; font-size: 12px; line-height: 1.7; }
+.charge-reading-details summary { cursor: pointer; width: fit-content; }
+.charge-reading-details p { margin: 10px 0 0; max-width: 760px; }
+.charge-session-end { font-size: 12px; color: #36765b; background: #f0f7ec; padding: 14px; border-radius: 8px; margin: 22px 0 0; line-height: 1.7; }
+.charge-waiting-card { padding: 40px 28px; text-align: center; background: #fff; border: 1px solid #dce6dc; border-radius: 18px; }
+.charge-wait-icon { margin: 0 auto 26px; color: #8ba392; }
+.charge-wait-icon.is-ready { color: #23845f; background: #e9f6e5; }
+.charge-waiting-card h2 { font-size: 26px; letter-spacing: -.8px; margin: 13px 0; }
+.charge-waiting-card > p { color: #7b8d80; font-size: 13px; line-height: 1.8; max-width: 480px; margin: 0 auto; }
+.charge-connection-steps { display: flex; justify-content: center; gap: 30px; list-style: none; padding: 0; margin: 34px 0 24px; }
+.charge-connection-steps li { display: grid; justify-items: center; gap: 12px; color: #8e9d92; font-size: 11px; }
+.charge-connection-steps i { font-style: normal; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: #f1f4ef; border: 1px solid #e0e8dc; }
+.charge-connection-steps .is-done { color: #247a56; }
+.charge-connection-steps .is-done i { background: #e9f5e4; border-color: #c9dfc3; }
+.charge-connect-actions { display: flex; justify-content: center; margin-top: 24px; }
+.charge-point-notice, .charge-test-instruction { font-size: 12px; line-height: 1.8; color: #7d8f81; padding: 12px 0; margin: 12px 0; }
+.charge-point-notice { background: #f3f4eb; padding: 16px; border: 1px solid #e2e5d2; border-radius: 9px; }
+@keyframes charge-flow { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }
+@keyframes charge-pulse { 50% { box-shadow: 0 0 0 7px #2992650d; } }
+@media (max-width: 700px) {
+  .charge-point-specs, .charge-process-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .charge-process { padding: 22px 18px; }
+  .charge-point-specs { padding: 18px; }
+  .charge-point-title h1 { font-size: 26px; }
+  .charge-energy-display { gap: 14px; }
+  .charge-bolt { width: 52px; height: 52px; border-radius: 15px; font-size: 35px; }
+  .charge-energy-display .charge-battery { width: 100%; margin-left: 0; text-align: left; grid-template-columns: 1fr auto; align-items: center; }
+  .charge-battery strong { font-size: 27px; letter-spacing: -.5px; }
+  .charge-connection-steps { gap: 18px; }
+  .charge-waiting-card { padding: 32px 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .is-charging .charge-bolt, .is-charging .charge-progress-indeterminate { animation: none; }
+  .charge-progress-fill { transition: none; }
+}
 .charging-waiting{display:flex;justify-content:space-between;gap:12px;padding:14px;margin:10px 0;border-radius:8px;background:#edf4e8;font-size:13px;line-height:1.6}
 .station-dot.status-unknown{background:#a1aba5}.status-text-unknown{color:#68766d}.map-pin.status-unknown{background:#778880}
 @media(max-width:650px){.charging-panel{padding:18px;margin-bottom:20px}.charging-panel .driver-section-heading{align-items:flex-start;gap:12px;flex-wrap:wrap}.charging-session{padding:16px}.charging-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.charging-test-controls button{width:100%}.charging-waiting{align-items:flex-start}.charging-state{line-height:1.5}}

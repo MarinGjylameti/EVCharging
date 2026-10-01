@@ -22,7 +22,20 @@ public sealed class OcppStationProjection(
     )
     {
         var now = clock.GetUtcNow();
-        if (observed < now.AddMinutes(-5) || observed > now.AddMinutes(5))
+        if (observed < now.AddMinutes(-5) || observed > now.AddDays(1))
+            return;
+        if (
+            observed > now.AddMinutes(5)
+            && (
+                !options.Value.SimulatorEnabled
+                || !await db.OcppConnectors.AnyAsync(
+                    x =>
+                        x.ChargePointId == deviceId
+                        && db.Stations.Any(s => s.Id == x.StationId && s.IsDemo && !s.IsArchived),
+                    ct
+                )
+            )
+        )
             return;
         var connectors = await db
             .OcppConnectors.Where(x =>

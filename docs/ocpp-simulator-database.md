@@ -38,6 +38,12 @@ ekzistuese me status `OutOfService` ose `Maintenance`.
 | `ocpp_charging_transactions` | Sesioni fizik, ID numerike e OCPP 1.6, matësi fillestar/fundor në Wh, kohët, arsyeja e ndalimit dhe snapshot opsional i çmimit. Driver lidhet vetëm pas autorizimit të verifikuar. |
 | `ocpp_meter_samples` | Çdo `sampledValue` veçmas: vlerë origjinale, vlerë numerike opsionale, measurand, unit, phase, location, context dhe format. |
 | `realtime_outbox` | Njoftimi për UI ruhet në të njëjtin transaksion me statusin e pikës. Mban llojin, ID/versionin e entitetit, audiencën, payload-in e kufizuar, kohën dhe gjendjen e publikimit. |
+| `charging_connection_requests` | Përdoruesi që pret te një pikë/lidhës, skadimi dhe lidhja me sesionin fizik. Pritja nuk krijon histori apo faturim. |
+
+Migrimi shtues `DriverChargingConnections` krijon tabelën e pritjes pa ndryshuar
+të dhënat ekzistuese. Ka foreign keys për Driver, pikën dhe sesionin; vetëm një
+pritje aktive për lidhës dhe vetëm një kërkesë të lidhur me një sesion. POST-i
+i lidhjes dhe StartTransaction përdorin të njëjtin lock të pajisjes.
 
 Përveç kolonave të zakonshme, korniza origjinale e mesazhit ruhet në JSONB. Kjo
 lejon fushat opsionale ose të prodhuesit pa migrim për çdo fushë të re. JSONB
@@ -145,17 +151,40 @@ njëjtën ID për dy lidhje njëkohësisht: lidhja e dytë refuzohet.
    numërohet bashkë me fazat. Një matje vetëm `L1` etiketohet si e tillë;
    kur `meterStart` nuk është zero, një regjistër i vetëm faze nuk përdoret
    për të llogaritur diferencën nga regjistri total.
-6. Në [web](https://evcharging-web-demo.onrender.com/driver), hyr me Driver-in
-   e `EVCHARGING_Demo__DriverEmail`. Në panelin **Ndiq karikimin**, zgjidh
-   `SIM-001` dhe **Lidhu për test**. Ky është bypass i QR; nuk nis vetë pajisjen
-   dhe nuk ndryshon pronësinë e një sesioni tjetër. Për këtë demo, `TAG-001`
-   lidhet vetëm me Driver-in e konfiguruar në backend.
-7. Te simulatori: **Start charging**. UI shfaq përgatitjen/karikimin, energjinë,
-   fuqinë, kohëzgjatjen dhe SoC/temperaturën nëse pajisja i raporton. **Stop charging**
-   ruan përmbledhjen dhe historikun. Pika lirohet vetëm pas statusit `Available`.
+6. Në [web](https://evcharging-web-demo.onrender.com/driver), hyr me një Driver
+   dhe kliko `SIM-001` në hartë ose listë. Hapet faqja e veçantë e asaj pike,
+   `/driver/stations/{id}`. Herën e parë ruhet automatikisht pritja e përdoruesit
+   për 30 minuta. Për një pikë me karikim të përfunduar, shtyp **Përgatit karikim
+   të ri**. Mund të anulosh pritjen; kjo nuk ndalon një karikim aktiv.
+7. Te simulatori: **Start charging** me `TAG-001`. StartTransaction lidhet me
+   Driver-in që pret te ajo pikë, pastaj UI shfaq energjinë, koston deri tani,
+   kohëzgjatjen dhe fuqinë/SoC kur raportohen. **Stop charging** ruan totalin dhe
+   historikun një herë. Çmimi është snapshot i tarifës në nisje. Pika lirohet
+   vetëm pas statusit `Available`. Reload nuk fsheh përmbledhjen e përfunduar.
 8. Përsërit krijimin me `SIM-002` dhe `SIM-003`, me të njëjtën URL bazë dhe
    Tag ID. Nis dy karikime njëkohësisht dhe ndalo vetëm njërin: UI duhet të
-   shfaqë dy sesione të ndara dhe të ndryshojë vetëm pikën përkatëse.
+   ndryshojë vetëm pikën përkatëse. Për dy Driver të ndryshëm përdor dy profile
+   shfletuesi: secili hap pikën e vet përpara Start charging. Sesioni i tjetrit
+   dhe matjet e tij nuk shfaqen në llogarinë tënde.
+
+Pritja e ruajtur është bypass i QR vetëm për simulatorët e konfiguruar. UI nuk
+hap një socket OCPP te pajisja: simulatori lidhet me backend-in përmes WebSocket,
+ndërsa UI ndjek SSE dhe merr snapshot-e të autorizuara në background. Kur nuk
+ka pritje aktive, mbahet sjellja e testit të mëparshëm: TAG-001 përdor Driver-in
+e `Demo:DriverEmail`. Kjo nuk është autorizim i përdoruesit për pajisje reale;
+integrimi real kërkon lidhjen e verifikuar të tag-ut/QR me Driver-in.
+
+StartTransaction → StopTransaction përbën një sesion. SuspendedEV/SuspendedEVSE
+tregon ndërprerje të transferimit nga makina/pika dhe ruan të njëjtin sesion,
+energjinë dhe pronarin. Pauza nuk shton hyrje në historik. Komandat Pause/Resume
+nga UI nuk janë implementuar; këtë test e drejton simulatori. Sjellja konkrete
+varet nga pajisja dhe makina, siç ilustrojnë [testet zyrtare OCA](https://openchargealliance.org/wp-content/uploads/2026/03/CompliancyTestTool-TestCaseDocument.pdf).
+
+Shiriti mbushet sipas SoC vetëm kur pajisja dërgon këtë matje. Pa SoC tregon
+aktivitet, pa përqindje të shpikur. Nuk ka formular objektivi kWh, kapaciteti
+baterie apo përqindjesh për ta simuluar këtë informacion. Koha e mbetur nuk
+shfaqet në faqen e karikimit: mesazhet aktuale nuk japin një ETA të verifikueshme.
+Modeli i makinës vetëm nuk e përcakton nivelin aktual, objektivin apo ritmin real.
 
 ### Matjet dhe ora e simulatorit
 
@@ -167,8 +196,12 @@ kur raportohen nga pajisja.
 
 Koha e pajisjes dhe koha e marrjes nga serveri ruhen veçmas. Paneli live
 llogarit kohëzgjatjen nga marrja e Start/Stop dhe shfaq marrjen e matjes së
-fundit. Nëse ora e pajisjes ndryshon më shumë se pesë minuta, shfaqet një
-udhëzim për të vendosur Start time në orën aktuale. Një lidhje aktive pa
+fundit. Nëse ora e pajisjes ndryshon më shumë se pesë minuta, shfaqet shpjegimi
+te detajet e matjeve. Vetëm për pikat IsDemo në simulator mode pranohen kohë
+deri një ditë përpara serverit, sepse shpejtësia 20× përshpejton orën e burimit.
+Kjo nuk shpik matje: vlerat vijnë nga mesazhet e ruajtura. Një cikël i ri
+me orën aktuale rivendos renditjen e statusit pas ciklit të përfunduar.
+Një lidhje aktive pa
 status të freskët shfaqet në pritje të statusit; nuk quhet e shkëputur.
 Statuset e vjetra nuk e bëjnë pikën të lirë në hartë.
 
@@ -176,7 +209,8 @@ Snapshot-i privat lexon edhe matjet e fazave të ruajtura nga versioni i
 mëparshëm, pa ndryshuar inbox-in origjinal apo historikun përfundimtar.
 `StopTransaction.meterStop` mbetet burimi për energjinë finale dhe koston;
 nëse simulatori dërgon një vlerë ndryshe nga matja e fundit, shfaqet vlera
-finale që ai raportoi. Ky korrigjim nuk kërkon migrim të databazës.
+finale që ai raportoi. Lidhja e re e pritjes kërkon migrimin shtues të përmendur
+më sipër; interpretimi i matjeve të fazave nuk rishkruan historikun.
 
 Render e drejton trafikun HTTP dhe WebSocket në të njëjtin port të Web Service.
 Për një lidhje publike përdoret `wss://`, jo IP-ja lokale `192.168.*` e kolegut.

@@ -64,6 +64,69 @@ namespace EVCharging.Infrastructure.Persistence.Migrations
                     b.ToTable("audit_entries", (string)null);
                 });
 
+            modelBuilder.Entity("EVCharging.Domain.Charging.ChargingConnectionRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("ConnectorNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("connector_number");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("DriverId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("driver_id");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<DateTimeOffset?>("LinkedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("linked_at");
+
+                    b.Property<Guid?>("SessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("session_id");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("state");
+
+                    b.Property<Guid>("StationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("station_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SessionId")
+                        .IsUnique()
+                        .HasFilter("session_id IS NOT NULL");
+
+                    b.HasIndex("DriverId", "CreatedAt");
+
+                    b.HasIndex("StationId", "ConnectorNumber")
+                        .IsUnique()
+                        .HasFilter("state = 'Waiting'");
+
+                    b.ToTable("charging_connection_requests", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_connection_link", "(state IN ('Linked', 'Completed')) = (session_id IS NOT NULL AND linked_at IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_connection_state", "state IN ('Waiting', 'Linked', 'Completed', 'Cancelled', 'Expired')");
+
+                            t.HasCheckConstraint("ck_connection_time", "expires_at > created_at AND connector_number > 0");
+                        });
+                });
+
             modelBuilder.Entity("EVCharging.Domain.Charging.ChargingHistory", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1190,6 +1253,26 @@ namespace EVCharging.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_realtime_outbox_version_attempts", "entity_version >= 0 AND attempts >= 0");
                         });
+                });
+
+            modelBuilder.Entity("EVCharging.Domain.Charging.ChargingConnectionRequest", b =>
+                {
+                    b.HasOne("EVCharging.Domain.Identity.Account", null)
+                        .WithMany()
+                        .HasForeignKey("DriverId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EVCharging.Infrastructure.Persistence.OcppChargingTransaction", null)
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EVCharging.Domain.Charging.ChargingStation", null)
+                        .WithMany()
+                        .HasForeignKey("StationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("EVCharging.Domain.Charging.ChargingHistory", b =>

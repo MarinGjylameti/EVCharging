@@ -41,7 +41,11 @@ public sealed record DriverHistoryDto(
 
 public interface IDriverQueries
 {
-    Task<DriverChargingState> GetChargingStateAsync(Guid driverId, CancellationToken ct);
+    Task<DriverChargingState> GetChargingStateAsync(
+        Guid driverId,
+        CancellationToken ct,
+        Guid? stationId = null
+    );
     Task<IReadOnlyList<DriverStationDto>> GetStationsAsync(CancellationToken ct);
     Task<IReadOnlyList<DriverHistoryDto>> GetHistoryAsync(Guid driverId, CancellationToken ct);
 }
@@ -73,5 +77,6 @@ public sealed record DriverChargingSession(
     DateTimeOffset? LastMeasurementReceivedAt,
     bool DeviceClockSkewed,
     string? EnergyScope,
-    string? PowerScope
+    string? PowerScope,
+    decimal? UnitPricePerKWh
 );

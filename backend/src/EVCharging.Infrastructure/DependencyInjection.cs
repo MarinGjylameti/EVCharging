@@ -31,6 +31,7 @@ public static class DependencyInjection
         AddNotifications(services);
         services.AddScoped<IStationManagement, StationManagementService>();
         services.AddScoped<IDriverQueries, DriverQueries>();
+        services.AddScoped<IDriverCharging, DriverChargingService>();
         services
             .AddOptions<OcppOptions>()
             .BindConfiguration("Ocpp")
