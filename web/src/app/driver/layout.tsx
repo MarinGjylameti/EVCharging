@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Brand } from "@/components/brand";
+import { AppNav } from "@/components/app-nav";
 import { SiteFooter } from "@/components/site-footer";
 import { currentUser } from "@/lib/backend";
 import { UserMenu } from "@/features/account/user-menu";
@@ -14,11 +14,7 @@ export default async function DriverLayout({children}: {children: React.ReactNod
     <aside className="driver-sidebar">
       <Brand/>
       <div className="driver-side-caption">{sq ? "HAPËSIRA E DREJTUESIT" : "DRIVER WORKSPACE"}</div>
-      <nav aria-label={sq ? "Menuja kryesore" : "Main navigation"}>
-        <Link href="/driver"><span aria-hidden="true">⌖</span>{sq ? "Harta e pikave" : "Charging map"}</Link>
-        <Link href="/driver/history"><span aria-hidden="true">◷</span>{sq ? "Historiku im" : "My history"}</Link>
-        <Link href="/driver/settings"><span aria-hidden="true">⚙</span>{sq ? "Cilësimet" : "Settings"}</Link>
-      </nav>
+      <AppNav area="driver" language={user.language}/>
       <div className="driver-side-footer">
         <span className="avatar">{user.firstName[0]}{user.lastName[0]}</span>
         <span>{user.firstName} {user.lastName}<small>{sq ? "Llogari drejtuesi" : "Driver account"}</small></span>

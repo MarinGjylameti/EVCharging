@@ -1,5 +1,6 @@
 export type Coordinates = {latitude: number; longitude: number};
 export type WorldPoint = {x: number; y: number};
+export type MapView = {center: Coordinates; zoom: number};
 
 const tileSize = 256;
 const maxLatitude = 85.05112878;
@@ -35,6 +36,19 @@ export function zoomAroundPixel(center: Coordinates, fromZoom: number, toZoom: n
   const anchor = coordinateAtPixel(center, fromZoom, width, height, x, y);
   const world = toWorldPixels(anchor, toZoom);
   return fromWorldPixels({x:world.x - x + width / 2, y:world.y - y + height / 2}, toZoom);
+}
+
+export function pinchMapView(start: MapView, width: number, height: number,
+  startMidpoint: WorldPoint, midpoint: WorldPoint, scale: number): MapView {
+  const zoom = Math.max(6, Math.min(19,
+    start.zoom + Math.round(Math.log2(Math.max(0.1, scale)))));
+  const anchor = coordinateAtPixel(start.center, start.zoom, width, height,
+    startMidpoint.x, startMidpoint.y);
+  const world = toWorldPixels(anchor, zoom);
+  return {zoom, center:fromWorldPixels({
+    x:world.x + width / 2 - midpoint.x,
+    y:world.y + height / 2 - midpoint.y
+  }, zoom)};
 }
 
 export function distanceKm(first: Coordinates, second: Coordinates): number {

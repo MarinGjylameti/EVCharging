@@ -8,7 +8,7 @@ import { albanianCities } from "@/lib/albanian-cities";
 import { remainingChargingMinutes } from "@/lib/availability";
 import { directionsUrl, mapProviderFromPreference, mapProviderStorageKey,
   type MapProvider } from "@/lib/map-directions";
-import { distanceKm, fromWorldPixels, toWorldPixels, visibleTiles, zoomAroundPixel, type Coordinates } from "@/lib/map-geometry";
+import { distanceKm, fromWorldPixels, pinchMapView, toWorldPixels, visibleTiles, zoomAroundPixel, type Coordinates, type MapView, type WorldPoint } from "@/lib/map-geometry";
 
 const statusSq: Record<Station["status"], string> = {
   Available:"E lirë", Occupied:"E zënë", Charging:"Në karikim",
@@ -68,6 +68,8 @@ export function DriverMap({stations, history, language, firstName}: Props) {
   const stationPanelRef = useRef<HTMLDivElement>(null);
   const stationsRef = useRef(stations);
   const dragging = useRef<{id:number,x:number,y:number,worldX:number,worldY:number}|null>(null);
+  const pointers = useRef(new Map<number,{x:number;y:number}>());
+  const pinch = useRef<{view:MapView;midpoint:WorldPoint;distance:number}|null>(null);
   const wheelDelta = useRef(0);
   const mounted = useRef(false);
   const locationRequest = useRef(0);
@@ -196,23 +198,50 @@ export function DriverMap({stations, history, language, firstName}: Props) {
         (sq?"Po kërkoj vendndodhjen tënde…":"Finding your location…") : locationStatus==="unavailable" ?
         (sq?"Vendndodhja nuk u lexua. Lejo aksesin në shfletues dhe provo ‘Vendndodhja ime’.":"Location is unavailable. Allow browser access and try ‘My location’ again.") :
         (sq?`Vendndodhja u gjet. ${nearbyCount} pika brenda 10 km.`:`Location found. ${nearbyCount} stations within 10 km.`)}</p>
+      <p className="map-touch-help">{sq ? "Lëvize hartën me gisht; zmadhoje me dy gishta." : "Drag the map with one finger; pinch with two to zoom."}</p>
       <div className="map-layout">
         <div className="map-stage" ref={mapRef} role="application" aria-label={sq ? `Harta e pikave ${city??"pranë meje"}` : `Charging map ${city??"near me"}`}
           onPointerDown={event=>{
-            if ((event.target as HTMLElement).closest("button,a")) return;
-            const world=toWorldPixels(center,zoom);
-            dragging.current={id:event.pointerId,x:event.clientX,y:event.clientY,worldX:world.x,worldY:world.y};
+            if ((event.target as HTMLElement).closest("button,a,.map-selected-card")) return;
+            pointers.current.set(event.pointerId,{x:event.clientX,y:event.clientY});
             event.currentTarget.setPointerCapture(event.pointerId);
+            if (pointers.current.size===1) {
+              const world=toWorldPixels(center,zoom);
+              dragging.current={id:event.pointerId,x:event.clientX,y:event.clientY,worldX:world.x,worldY:world.y};
+            } else if (pointers.current.size===2) {
+              const [first,second]=[...pointers.current.values()];
+              const rect=event.currentTarget.getBoundingClientRect();
+              pinch.current={view,midpoint:{x:(first.x+second.x)/2-rect.left,y:(first.y+second.y)/2-rect.top},
+                distance:Math.hypot(second.x-first.x,second.y-first.y)};
+              dragging.current=null;
+            }
           }}
           onPointerMove={event=>{
+            if (!pointers.current.has(event.pointerId)) return;
+            pointers.current.set(event.pointerId,{x:event.clientX,y:event.clientY});
+            if (pointers.current.size>=2 && pinch.current) {
+              const [first,second]=[...pointers.current.values()];
+              const rect=event.currentTarget.getBoundingClientRect();
+              const midpoint={x:(first.x+second.x)/2-rect.left,y:(first.y+second.y)/2-rect.top};
+              const distance=Math.hypot(second.x-first.x,second.y-first.y);
+              setView(pinchMapView(pinch.current.view,rect.width,rect.height,
+                pinch.current.midpoint,midpoint,distance/Math.max(1,pinch.current.distance)));
+              return;
+            }
             const drag=dragging.current;
             if (drag && drag.id===event.pointerId) setView(previous=>({...previous,
               center:fromWorldPixels({x:drag.worldX-event.clientX+drag.x,y:drag.worldY-event.clientY+drag.y},previous.zoom)}));
           }}
           onPointerUp={event=>{
+            pointers.current.delete(event.pointerId);
+            if (pointers.current.size<2) pinch.current=null;
             if (dragging.current?.id===event.pointerId) dragging.current=null;
           }}
-          onPointerCancel={()=>{dragging.current=null;}}>
+          onPointerCancel={event=>{
+            pointers.current.delete(event.pointerId);
+            if (pointers.current.size<2) pinch.current=null;
+            dragging.current=null;
+          }}>
           <div className="map-tile-field" aria-hidden="true">
             {tiles.map(tile=><img key={`${zoom}-${tile.x}-${tile.y}`}
               src={`https://tile.openstreetmap.org/${zoom}/${tile.x}/${tile.y}.png`}
@@ -233,6 +262,11 @@ export function DriverMap({stations, history, language, firstName}: Props) {
           })}
           {driverLocation&&<div className="map-user-pin" role="img" aria-label={sq?"Vendndodhja ime":"My location"}
             style={position(driverLocation)}>●</div>}
+          {active&&selectedId===active.id&&<div className="map-selected-card">
+            <div><strong>{active.name}</strong><small>{(sq?statusSq:statusEn)[active.status]} · {active.powerKW} kW</small></div>
+            <button type="button" onClick={()=>stationPanelRef.current?.scrollIntoView({behavior:"smooth",block:"start"})}>
+              {sq?"Detajet":"Details"} ↓</button>
+          </div>}
           <div className="map-city-label">{city ?
             (selectedCityHasStations?city:(sq?`Pa pika në ${city}`:`No stations in ${city}`)) :
             (driverLocation?(sq?"Vendndodhja ime":"My location"):(sq?"Shqipëri":"Albania"))}</div>

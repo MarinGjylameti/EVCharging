@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { coordinateAtPixel, distanceKm, fromWorldPixels, toWorldPixels, visibleTiles, zoomAroundPixel } from "../src/lib/map-geometry.ts";
+import { coordinateAtPixel, distanceKm, fromWorldPixels, pinchMapView, toWorldPixels, visibleTiles, zoomAroundPixel } from "../src/lib/map-geometry.ts";
 
 test("map projection returns the clicked geographic point", () => {
   const center = {latitude:41.3275,longitude:19.8187};
@@ -29,6 +29,18 @@ test("mouse wheel zoom keeps the geographic point under the cursor", () => {
   const after = coordinateAtPixel(afterCenter,17,width,height,x,y);
   assert.ok(Math.abs(after.latitude-before.latitude)<1e-6);
   assert.ok(Math.abs(after.longitude-before.longitude)<1e-6);
+});
+
+test("pinch zoom keeps its geographic anchor under moving fingers", () => {
+  const start = {center:{latitude:41.3275,longitude:19.8187},zoom:12};
+  const width = 390, height = 400;
+  const initial = {x:180,y:190}, moved = {x:210,y:215};
+  const anchor = coordinateAtPixel(start.center,start.zoom,width,height,initial.x,initial.y);
+  const result = pinchMapView(start,width,height,initial,moved,2);
+  const after = coordinateAtPixel(result.center,result.zoom,width,height,moved.x,moved.y);
+  assert.equal(result.zoom,13);
+  assert.ok(Math.abs(after.latitude-anchor.latitude)<1e-6);
+  assert.ok(Math.abs(after.longitude-anchor.longitude)<1e-6);
 });
 
 test("nearby stations can be ordered by distance from the driver", () => {
