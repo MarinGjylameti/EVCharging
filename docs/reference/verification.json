@@ -1,0 +1,32 @@
+{
+  "checkedOn": "2026-09-28",
+  "status": "passed",
+  "markdownFiles": 14,
+  "localLinksChecked": 19,
+  "sourceSections": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16
+  ],
+  "requirementRows": 63,
+  "houssFilesVerified": 615,
+  "houssUnchangedSinceDiscoveryBaseline": true,
+  "houssContentTreeSha256": "342f40ece60d9ea04a7e877eddb1e724ff1cd8c2a0910eed768c1296752bc788",
+  "productCodeFiles": 0,
+  "productBuildOrTestsRun": false,
+  "networkAccessUsed": false,
+  "errors": []
+}

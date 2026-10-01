@@ -1,0 +1,1168 @@
+You are acting as the senior software architect and lead engineer for a new production-grade EV Charging Management Platform.
+
+Your responsibility is not only to make the application work, but to establish a clean, maintainable, secure and extensible foundation so that future requirements can be implemented incrementally without rewriting the project.
+
+I will provide you with:
+
+1. An attached requirements document describing the agreed Phase 1 / MVP scope.
+2. An existing website that should be studied mainly for its information architecture, menus, user journeys and general workflow.
+3. An existing production project named **HOUSS**, available inside this Codex workspace/repository structure, which must be used as a technical reference.
+
+Read all three carefully before implementing anything.
+
+---
+
+# 1. ABSOLUTE SCOPE RULE
+
+The attached requirements document is the source of truth for functionality.
+
+Do NOT invent, add or implement functionality that was not requested.
+
+This is extremely important.
+
+Anything outside the agreed document can become additional paid work later, and adding unnecessary functionality now can create technical, business and contractual problems.
+
+You are allowed and expected to make good engineering decisions internally—architecture, validation, error handling, security, abstractions, testing, database design, observability, etc.—but those decisions must support the requested functionality, not introduce additional product features.
+
+In particular, Phase 1 explicitly does NOT include:
+
+- electronic payments;
+- wallet functionality;
+- bank integrations;
+- electronic invoicing;
+- subscriptions.
+
+Do not implement these.
+
+However, design the architecture so that features such as payments could be introduced later without requiring a rewrite of the existing system.
+
+Do NOT create fake payment pages, payment APIs, wallet tables, subscription modules or unused payment workflows "for future use".
+
+Create appropriate architectural boundaries instead.
+
+---
+
+# 2. BEFORE WRITING CODE
+
+Do not immediately start generating the application.
+
+First perform a discovery and architecture phase.
+
+Study:
+
+- the complete requirements document;
+- the provided reference website;
+- the existing HOUSS project;
+- the existing folder/repository structure.
+
+Then create a concise implementation plan and architecture proposal.
+
+Identify:
+
+- required user flows;
+- domain entities;
+- application boundaries;
+- authentication and authorization model;
+- API boundaries;
+- real-time communication requirements;
+- database model;
+- mobile/web responsibilities;
+- charger integration boundary;
+- map architecture;
+- audit requirements;
+- notification requirements;
+- expected error scenarios;
+- concurrency and consistency risks;
+- testing strategy;
+- environment/configuration strategy.
+
+Before implementation, clearly map every functional requirement from the document to the module that will implement it.
+
+If something is ambiguous in the requirements, prefer the smallest implementation consistent with the document.
+
+Do not silently invent business rules.
+
+Document important assumptions.
+
+---
+
+# 3. USE HOUSS AS A REFERENCE, NOT AS A TEMPLATE TO COPY BLINDLY
+
+The HOUSS project exists in the workspace intentionally.
+
+HOUSS is already running in production on both web and mobile and has gone through many real-world issues.
+
+Inspect it carefully.
+
+Study useful patterns such as:
+
+- backend organization;
+- API conventions;
+- authentication;
+- authorization;
+- environment configuration;
+- PostgreSQL usage;
+- frontend/backend contracts;
+- React/Next.js organization;
+- React Native / Expo organization;
+- error handling;
+- validation;
+- logging;
+- API clients;
+- mobile/web separation;
+- reusable components;
+- deployment-oriented configuration;
+- mapping abstractions;
+- platform-specific handling;
+- iOS vs Android differences;
+- configuration and environment safety;
+- patterns that make development and maintenance easier.
+
+Also look for things in HOUSS that could be improved and avoid repeating technical debt.
+
+Do NOT:
+
+- modify HOUSS;
+- rename HOUSS files;
+- move HOUSS files;
+- change HOUSS configuration;
+- share databases with HOUSS;
+- share environment variables with HOUSS;
+- depend directly on HOUSS application code;
+- copy business-specific HOUSS concepts into this application.
+
+HOUSS is READ-ONLY reference material.
+
+The new application must remain an independent product.
+
+Where a proven pattern from HOUSS is appropriate, reuse the architectural idea rather than tightly coupling the projects.
+
+---
+
+# 4. TECHNOLOGY DIRECTION
+
+Because HOUSS provides a proven full-stack reference, prefer a similar stable technology family unless there is a strong technical reason not to.
+
+Preferred direction:
+
+Backend:
+ASP.NET Core / modern .NET
+
+Database:
+PostgreSQL
+
+Web:
+Next.js + TypeScript
+
+Mobile:
+React Native with Expo + TypeScript
+
+Real-time communication:
+Use an appropriate .NET-compatible mechanism such as SignalR/WebSockets where real-time behavior is actually required.
+
+Do not introduce additional databases, queues, microservices, Kubernetes, Redis, Kafka, Elasticsearch or similar infrastructure unless the current requirements genuinely require them.
+
+Avoid unnecessary complexity.
+
+For this MVP, strongly prefer a well-structured **modular monolith** over premature microservices.
+
+The system should nevertheless have clear module boundaries so modules can later evolve independently if the product grows.
+
+---
+
+# 5. ARCHITECTURAL PRINCIPLES
+
+Build for change, but not for imaginary features.
+
+Prefer:
+
+- explicit domain boundaries;
+- low coupling;
+- high cohesion;
+- dependency inversion where useful;
+- testable business logic;
+- clear API contracts;
+- strongly typed models;
+- central validation;
+- clear ownership of state;
+- predictable error handling;
+- database constraints protecting important invariants;
+- explicit authorization;
+- immutable historical information where appropriate;
+- idempotent handling of external events;
+- soft deletion / archiving where history must be retained;
+- migrations for every schema change;
+- environment-driven configuration;
+- secure defaults.
+
+Avoid:
+
+- giant services;
+- giant controllers;
+- giant React components;
+- generic repositories that hide useful database capabilities;
+- business logic inside controllers;
+- business logic duplicated between web/mobile/backend;
+- magic strings;
+- hidden state;
+- unnecessary abstractions;
+- speculative abstractions with no current purpose;
+- premature microservices;
+- circular dependencies.
+
+Use domain terminology consistently across backend, database, web and mobile.
+
+---
+
+# 6. SUGGESTED DOMAIN MODULES
+
+The exact implementation is your architectural decision, but the boundaries should approximately correspond to the actual business capabilities.
+
+Likely modules include:
+
+Identity & Access
+
+Responsible for:
+- authentication;
+- users;
+- Driver / Admin / Superadmin roles;
+- authorization;
+- administrator activation/deactivation;
+- access assignments.
+
+Driver Profile
+
+Responsible for the profile and vehicle information required by the document.
+
+Locations
+
+Responsible for charging locations and their geographic information.
+
+Charging Points
+
+Responsible for charging point configuration, status and administrator assignments.
+
+Charging Sessions
+
+Responsible for active and completed charging sessions and their measurements.
+
+Pricing
+
+Responsible for:
+- price per kWh;
+- current price;
+- price history;
+- the price snapshot used by each charging session.
+
+Notifications
+
+Responsible only for notification types required by the specification.
+
+Audit
+
+Responsible for administrative/system action history required by the document.
+
+Settings
+
+Responsible for driver settings explicitly listed in the specification.
+
+These boundaries are architectural guidance, not permission to add additional product functionality.
+
+---
+
+# 7. USER ROLES AND ACCESS
+
+There are exactly three functional roles defined in Phase 1:
+
+DRIVER
+
+ADMIN
+
+SUPERADMIN
+
+Authorization must be enforced on the backend.
+
+Hiding a button in the frontend is NOT security.
+
+A Driver must never gain administrative access through a manually crafted API request.
+
+An Admin may operate only on locations / charging points assigned to that administrator.
+
+A Superadmin has system-wide access as described in the requirements.
+
+Centralize authorization rules so that permission logic is not scattered throughout controllers.
+
+Where appropriate, use policies rather than repeated role checks.
+
+Design assignments so that future permission adjustments do not require rewriting the entire authorization system, while implementing only the permissions currently required.
+
+---
+
+# 8. DRIVER EXPERIENCE
+
+Implement only what is included in the requirements.
+
+The Driver must be able to work with:
+
+- authentication;
+- charging map;
+- charging point details;
+- charging point availability/status;
+- connector type;
+- charging power;
+- price per kWh;
+- active charging monitoring;
+- charging history;
+- profile;
+- vehicle information;
+- settings.
+
+Do not invent features such as:
+
+- charger reservations;
+- remote charge start;
+- remote charge stop;
+- route planning;
+- loyalty points;
+- social features;
+- ratings/reviews;
+- payment;
+- wallet functionality;
+
+unless they are explicitly added to the requirements later.
+
+---
+
+# 9. MAP ARCHITECTURE
+
+The map is a core feature and must be treated as an architectural component rather than a page-specific hack.
+
+The Driver must see charging points with their geographic location and current state.
+
+Statuses in the requirements include concepts equivalent to:
+
+- Available
+- Occupied / Vehicle connected
+- Charging
+- Out of service
+- Maintenance
+
+Do not scatter status-to-color mappings throughout the application.
+
+Create one shared semantic representation.
+
+Web and mobile can map semantic statuses to visual tokens appropriate to each platform.
+
+Pay particular attention to lessons from the HOUSS mobile map implementation.
+
+Map business logic must not depend directly on one specific map SDK.
+
+Create a small map/provider abstraction where appropriate so that iOS and Android implementation differences do not contaminate domain/business logic.
+
+Do not sacrifice stability on iOS merely to force identical native implementation details across Android and iOS.
+
+Map provider concerns should remain presentation/infrastructure concerns.
+
+---
+
+# 10. REAL-TIME STATE
+
+Real-time information is an explicit part of the application.
+
+The architecture must support updates such as:
+
+- vehicle connected;
+- charging started;
+- charging measurements changed;
+- charging ended;
+- charging point status changed;
+- charging point unavailable;
+- charging point moved into maintenance;
+- unexpected disconnect where supported.
+
+Use a clear distinction between:
+
+SOURCE STATE
+information originating from the charger/integration layer.
+
+APPLICATION STATE
+the normalized representation stored by our platform.
+
+CLIENT REAL-TIME STATE
+updates sent to web/mobile clients.
+
+Do not make UI clients responsible for calculating authoritative state.
+
+The backend is authoritative.
+
+The UI can optimistically render only where safe.
+
+---
+
+# 11. CHARGER INTEGRATION
+
+The requirements describe receiving data from charging equipment, but they do not define the exact hardware vendor/protocol.
+
+Therefore do NOT hardcode the domain to one charger manufacturer.
+
+Create a clean charger integration boundary such as an adapter/gateway interface.
+
+Domain/application code should consume normalized events rather than vendor-specific payloads.
+
+Examples conceptually include:
+
+VehicleConnected
+ChargingStarted
+MeasurementReceived
+ChargingStopped
+VehicleDisconnected
+ChargerFaulted
+StatusChanged
+
+These names are examples, not mandatory API names.
+
+If no real charger API/protocol has been provided yet, do NOT fabricate a production integration.
+
+Instead:
+
+- establish the integration contract;
+- create test fixtures / simulator support necessary for development and automated testing;
+- clearly isolate it from production integrations.
+
+When the real charger protocol/API is supplied later, implementing an adapter should not require rewriting Charging Sessions, Pricing, Admin or UI logic.
+
+Take into account:
+
+- duplicate events;
+- retries;
+- events arriving out of order where realistically possible;
+- reconnects;
+- stale data;
+- temporary network failures;
+- missing optional telemetry.
+
+Do not assume that external devices always behave perfectly.
+
+---
+
+# 12. CHARGING SESSION CONSISTENCY
+
+Charging sessions are financially relevant even though electronic payments are not currently implemented.
+
+Be careful with data correctness.
+
+A charging session should preserve enough historical information to reproduce its calculated cost.
+
+For example, if the administrator changes a charging point from €0.35/kWh to €0.40/kWh tomorrow, a historical session performed at €0.35/kWh must NOT change its cost.
+
+Use the appropriate price snapshot/history strategy.
+
+Money values must never rely on floating-point arithmetic.
+
+Use decimal / numeric values with appropriate precision.
+
+Charging energy, duration and price calculation rules should exist in testable domain/application logic rather than being implemented separately by each client.
+
+The backend should produce the authoritative calculated cost.
+
+---
+
+# 13. CHARGING POINT STATUS MODEL
+
+Do not treat statuses as arbitrary strings.
+
+Model status transitions explicitly.
+
+Protect the application against impossible or contradictory transitions.
+
+Manual status changes by Admin/Superadmin must retain:
+
+- who performed the action;
+- old state;
+- new state;
+- timestamp;
+- reason.
+
+Think carefully about interactions between:
+
+- device-reported state;
+- manual maintenance state;
+- manual out-of-service state.
+
+Do not silently overwrite important manual administrative decisions because a charger sent a normal heartbeat.
+
+The final state model should have deterministic behavior and be documented.
+
+---
+
+# 14. ARCHIVING AND DATA HISTORY
+
+Where the requirements recommend archiving rather than permanent deletion, implement it accordingly.
+
+Historical charging sessions, prices and audit entries must not become invalid because a charging point or location was later archived.
+
+Prefer references that preserve historical integrity.
+
+Do not cascade-delete important historical data.
+
+---
+
+# 15. AUDIT LOGGING
+
+Audit history is a business requirement, not simply technical application logs.
+
+Important administrative actions must retain relevant information such as:
+
+- actor;
+- role;
+- action;
+- affected entity;
+- previous state where relevant;
+- new state where relevant;
+- timestamp.
+
+Audit records should be resistant to accidental modification.
+
+Do not confuse:
+
+application logs
+
+with
+
+business audit history.
+
+Both have different responsibilities.
+
+---
+
+# 16. ADMIN DASHBOARD
+
+Implement the Admin capabilities described in the requirements, including visibility only over allowed resources.
+
+Dashboard values must originate from backend queries rather than client-side guesses.
+
+Pay attention to query efficiency.
+
+The dashboard should remain maintainable as data volume increases.
+
+Do not load thousands of records to the browser just to count them.
+
+---
+
+# 17. SUPERADMIN
+
+The Superadmin provides system-wide administration as explicitly described in the specification.
+
+This includes the required management of:
+
+- administrators;
+- administrator activation/deactivation;
+- administrator assignments;
+- locations;
+- charging points;
+- drivers where required;
+- charging sessions;
+- pricing;
+- access;
+- notifications;
+- audit history.
+
+Do not turn Superadmin into an unrestricted technical database editor.
+
+All changes must go through application rules and authorization.
+
+---
+
+# 18. FRONTEND DESIGN
+
+Study the provided example website primarily for:
+
+- navigation structure;
+- menu organization;
+- information hierarchy;
+- relevant workflows;
+- user journeys.
+
+Do NOT blindly reproduce its visual design.
+
+The supplied example is primarily a functional reference.
+
+Create a modern, professional, clean EV-oriented UI.
+
+Visual principles:
+
+- simple;
+- modern;
+- uncluttered;
+- strong hierarchy;
+- excellent readability;
+- responsive;
+- consistent;
+- accessible;
+- appropriate for operational dashboards;
+- appropriate for mobile usage.
+
+Avoid gratuitous animations and visual effects.
+
+The UI must prioritize status clarity.
+
+A charging point being Available, Charging, Offline or in Maintenance should be immediately understandable.
+
+Create reusable design tokens/components instead of individual page-specific styling.
+
+Web and mobile should feel like the same product without forcing identical layouts onto different platforms.
+
+---
+
+# 19. WEB VS MOBILE RESPONSIBILITY
+
+Before implementation, explicitly derive which requirements belong to:
+
+- Web;
+- Mobile;
+- Both.
+
+Use the attached requirements and supplied reference website to determine this.
+
+Do not duplicate every page across both platforms merely because technically possible.
+
+Default assumption, unless requirements/reference clearly indicate otherwise:
+
+- Mobile is primarily optimized for the Driver experience.
+- Web is primarily optimized for Admin and Superadmin operational management.
+- Shared backend exposes common capabilities.
+
+If driver web functionality is required by the provided references/requirements, implement the required parts.
+
+Document this responsibility matrix.
+
+---
+
+# 20. API DESIGN
+
+Create versionable, predictable API contracts.
+
+Keep transport DTOs separate from persistence entities where appropriate.
+
+Validate all input at the system boundary.
+
+Use consistent error responses.
+
+Do not leak:
+
+- stack traces;
+- database implementation details;
+- secrets;
+- internal exception messages.
+
+Plan API evolution so new fields can generally be added without unnecessarily breaking old mobile application versions.
+
+Mobile clients cannot always update immediately.
+
+Be careful with enum evolution for the same reason.
+
+---
+
+# 21. DATABASE
+
+Use proper PostgreSQL migrations.
+
+The schema must support current requirements while avoiding unnecessary future-specific tables.
+
+Pay special attention to:
+
+- indexes;
+- unique constraints;
+- foreign keys;
+- price history;
+- status history;
+- audit history;
+- charging sessions;
+- soft archive state;
+- administrator assignments;
+- location relationships;
+- timestamps;
+- concurrency.
+
+Use UTC internally for persisted timestamps.
+
+Perform timezone/display conversion at appropriate boundaries.
+
+Never rely on client-supplied timestamps as authoritative for security/audit operations.
+
+---
+
+# 22. CONCURRENCY AND IDEMPOTENCY
+
+Real charging infrastructure can produce simultaneous or repeated events.
+
+Design for cases such as:
+
+- duplicate start event;
+- duplicate stop event;
+- measurement retry;
+- status update arriving twice;
+- administrator updating a charger while another event is being processed;
+- two admins editing the same resource;
+- mobile reconnecting after temporarily losing internet;
+- WebSocket/SignalR reconnect;
+- API retry after timeout.
+
+Critical operations should be idempotent where appropriate.
+
+Use optimistic concurrency/versioning where needed.
+
+Do not simply rely on "the UI won't allow that."
+
+---
+
+# 23. ERROR HANDLING
+
+Create predictable handling for at least:
+
+- unauthorized access;
+- forbidden access;
+- missing resources;
+- duplicate resources;
+- invalid status transitions;
+- archived resources;
+- conflicting updates;
+- stale updates;
+- charger unavailable;
+- missing telemetry;
+- database failures;
+- network failures;
+- real-time connection loss;
+- malformed external events.
+
+User-facing messages should be understandable.
+
+Technical information should go to structured logs, not to end users.
+
+---
+
+# 24. MOBILE RELIABILITY
+
+The mobile application must account for real mobile conditions.
+
+Handle:
+
+- temporary network loss;
+- application resume;
+- stale cached data;
+- token expiration;
+- API errors;
+- real-time reconnect;
+- loading states;
+- empty states;
+- unavailable location permission;
+- denied notification permission;
+- map loading errors.
+
+Do not crash because optional data is missing.
+
+Keep API/server state and UI state clearly separated.
+
+Do not put business rules in React Native screens.
+
+---
+
+# 25. SECURITY
+
+Apply secure defaults.
+
+At minimum consider:
+
+- secure password handling;
+- token lifecycle;
+- role-based authorization;
+- assignment-based authorization;
+- input validation;
+- server-side ownership checks;
+- secret management;
+- secure environment configuration;
+- HTTPS assumptions;
+- rate limiting where appropriate;
+- protection of sensitive logs;
+- safe CORS configuration;
+- secure production settings.
+
+Never commit secrets.
+
+Never place production credentials in example configuration.
+
+Use `.env.example`, appsettings templates or equivalent placeholders.
+
+---
+
+# 26. OBSERVABILITY
+
+Use structured logging.
+
+Important workflows should be traceable without exposing private information.
+
+Failures in charger integration should be diagnosable.
+
+Do not log passwords, tokens or secrets.
+
+Keep technical logs separate from the user-visible/auditable business history.
+
+---
+
+# 27. TESTING EXPECTATIONS
+
+Do not treat tests as optional.
+
+Prioritize tests around business rules where bugs would be difficult or expensive.
+
+At minimum cover:
+
+- authorization;
+- Admin assignment restrictions;
+- Superadmin access;
+- charging state transitions;
+- manual overrides;
+- pricing;
+- historical price correctness;
+- charging cost calculation;
+- archive behavior;
+- audit creation;
+- duplicate external events;
+- session lifecycle;
+- important validation rules.
+
+Use integration tests for important database/API behavior.
+
+Use targeted frontend/mobile tests for critical flows where they provide value.
+
+Do not chase artificial coverage percentages.
+
+Test meaningful behavior.
+
+---
+
+# 28. CODE QUALITY
+
+Before adding a new implementation, check whether a proper abstraction already exists.
+
+Keep files/components focused.
+
+Avoid `Utils` becoming a dumping ground.
+
+Names must communicate business intent.
+
+Prefer readable code over clever code.
+
+Add comments for WHY, not obvious WHAT.
+
+Do not create unnecessary generic frameworks inside the application.
+
+---
+
+# 29. DOCUMENTATION THAT MUST LIVE WITH THE REPOSITORY
+
+Maintain concise documentation as development progresses.
+
+At minimum maintain:
+
+README.md
+
+Explain:
+- solution structure;
+- local setup;
+- required tooling;
+- environment configuration;
+- how to run backend;
+- how to run web;
+- how to run mobile;
+- database migration workflow;
+- test workflow.
+
+docs/architecture.md
+
+Explain:
+- system architecture;
+- module boundaries;
+- communication flow;
+- web/mobile/backend responsibilities;
+- charger integration boundary;
+- real-time architecture.
+
+docs/domain.md
+
+Explain:
+- core entities;
+- charging session lifecycle;
+- charging point status model;
+- price handling.
+
+docs/requirements-matrix.md
+
+Map every requirement from the provided requirements document to its implementation.
+
+Use statuses such as:
+- Planned
+- Implemented
+- Tested
+
+This document is important to prevent scope drift.
+
+docs/decisions/
+
+Use lightweight Architecture Decision Records for important architectural decisions that future developers would otherwise need to rediscover.
+
+Do not create paperwork for trivial decisions.
+
+---
+
+# 30. PROJECT STRUCTURE
+
+Create the new application independently from HOUSS.
+
+Use an understandable root structure such as:
+
+/backend
+/web
+/mobile
+/docs
+
+or another structure if you can clearly justify why it is better.
+
+Within projects organize around coherent functionality rather than creating arbitrary technical folders everywhere.
+
+Keep shared contracts deliberately managed.
+
+Do not create dangerous coupling where mobile or web imports backend implementation code.
+
+---
+
+# 31. DEVELOPMENT APPROACH
+
+Work incrementally.
+
+Do not try to generate the entire platform blindly in one enormous change.
+
+A good implementation sequence would be approximately:
+
+Architecture + solution skeleton
+
+→ Database + Identity/RBAC
+
+→ Locations + Charging Points
+
+→ Admin assignment rules
+
+→ Pricing + price history
+
+→ Charging session domain
+
+→ Charger integration boundary
+
+→ Real-time backend infrastructure
+
+→ Driver map / charging monitoring
+
+→ Admin dashboard
+
+→ Superadmin management
+
+→ Notifications
+
+→ Audit history
+
+→ Profile / Settings
+
+→ Hardening + tests + documentation
+
+This sequence is guidance.
+
+Adjust it if repository analysis suggests a better dependency order.
+
+After each logical milestone:
+
+- build;
+- run tests;
+- fix regressions;
+- keep documentation synchronized;
+- confirm that no unrequested feature has slipped into scope.
+
+---
+
+# 32. FUTURE CHANGE PRINCIPLE
+
+Assume that new requirements will arrive.
+
+A good architecture should allow statements such as:
+
+"Add another charger provider."
+
+"Add another notification channel."
+
+"Add payment in Phase 2."
+
+"Add another role."
+
+"Add another charging status."
+
+"Add another mobile map provider."
+
+without requiring the project to be rebuilt from zero.
+
+However, preparation for future features should normally mean:
+
+- clean boundaries;
+- extensible contracts;
+- well-designed schemas;
+- modular code;
+
+NOT implementing future features prematurely.
+
+---
+
+# 33. BACKWARD COMPATIBILITY
+
+Once APIs are consumed by released mobile applications, treat compatibility seriously.
+
+Do not casually rename or remove response properties.
+
+Prefer additive change.
+
+When a breaking change eventually becomes necessary, plan an explicit migration/versioning strategy.
+
+This is particularly important because App Store / Play Store users may run older application versions.
+
+---
+
+# 34. IMPORTANT SAFETY RULES FOR THIS COMPUTER
+
+This development environment is running on my WORK LAPTOP.
+
+Treat the machine as sensitive corporate equipment.
+
+Be conservative with shell/system commands.
+
+You may work inside the project/workspace, install project-local dependencies where appropriate, compile, test and run the project.
+
+However:
+
+DO NOT disable or interfere with:
+
+- Cortex / Cortex XDR;
+- EDR software;
+- antivirus;
+- firewall;
+- VPN;
+- company device-management software;
+- security policies;
+- Windows Defender;
+- system certificates;
+- corporate proxies;
+- company monitoring/security services.
+
+DO NOT attempt to bypass security software because a command, package, emulator, build process or development server is being blocked.
+
+DO NOT:
+
+- edit Group Policy;
+- modify security registry settings;
+- disable Windows services;
+- disable endpoint protection;
+- modify corporate security configuration;
+- execute scripts intended to bypass execution policies/security controls;
+- run destructive cleanup commands;
+- recursively delete directories outside the new project;
+- delete or alter the HOUSS repository;
+- reconfigure the whole machine for convenience.
+
+Avoid commands such as broad recursive deletion or destructive Git operations unless the exact target has been verified and the operation is genuinely necessary.
+
+Prefer project-scoped commands.
+
+Prefer local/package-managed dependencies over unnecessary machine-wide installations.
+
+Before performing an unusual system-level operation, determine whether there is a safer project-level solution.
+
+If security tooling blocks something, STOP that approach and find a safe alternative.
+
+Never attempt to deactivate Cortex XDR or any corporate protection software.
+
+---
+
+# 35. GIT SAFETY
+
+Before making significant changes:
+
+- understand the current repository state;
+- check which repository/folder you are actually in;
+- verify that you are not inside HOUSS when creating the new application.
+
+Do not force-push.
+
+Do not rewrite unrelated Git history.
+
+Do not use `git reset --hard`, broad `git clean`, recursive deletion or equivalent destructive operations casually.
+
+Do not commit generated secrets.
+
+Keep commits logical when commits are requested.
+
+---
+
+# 36. DEFINITION OF DONE
+
+A feature is not considered complete merely because a screen exists.
+
+For a functional requirement, Done means as applicable:
+
+- backend/domain behavior exists;
+- authorization is enforced;
+- persistence is correct;
+- validation exists;
+- error cases are handled;
+- frontend/mobile state is handled;
+- loading/empty/error states exist;
+- relevant audit history is created;
+- real-time behavior works where required;
+- tests cover important business rules;
+- documentation/requirements matrix is updated;
+- implementation stays inside the agreed scope.
+
+---
+
+# 37. FIRST TASK
+
+Start by doing ONLY the discovery/architecture phase.
+
+1. Read the complete attached requirements document.
+2. Inspect the reference website and map its relevant menus and workflows.
+3. Inspect the HOUSS project carefully as a read-only technical reference.
+4. Inspect the surrounding workspace and identify where the NEW project should live without modifying HOUSS.
+5. Produce:
+   - requirement breakdown;
+   - Web vs Mobile responsibility matrix;
+   - proposed architecture;
+   - proposed solution/folder structure;
+   - domain model;
+   - database model outline;
+   - role/permission model;
+   - charging-point state model;
+   - charging-session lifecycle;
+   - charger integration boundary;
+   - real-time architecture;
+   - map architecture;
+   - error/concurrency strategy;
+   - testing strategy;
+   - implementation phases;
+   - technical risks or ambiguities found in the supplied requirements.
+
+Do not begin implementing product functionality until this architecture/discovery step is complete.
+
+When evaluating alternatives, make a recommendation rather than presenting ten equivalent options.
+
+Prefer simple, proven engineering over fashionable complexity.
+
+Most importantly:
+
+BUILD EXACTLY THE AGREED PRODUCT,
+BUILD IT WELL,
+AND CREATE A FOUNDATION THAT CAN EVOLVE WITHOUT NEEDING TO START AGAIN FROM ZERO.

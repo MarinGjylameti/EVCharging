@@ -1,0 +1,3 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup><ProjectReference Include="../EVCharging.Domain/EVCharging.Domain.csproj" /></ItemGroup>
+</Project>

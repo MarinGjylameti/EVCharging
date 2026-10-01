@@ -1,0 +1,71 @@
+{
+  "reviewedOn": "2026-09-28",
+  "sourceDocument": {
+    "name": "Aplikacion pÃ«r Menaxhimin e Karikimit tÃ« Automjeteve Elektrike.docx",
+    "sha256": "bf29235cf8f82a9f30a4e060fe801763120a7bd0c479f6e14a72e5f5c427a541",
+    "bodyParagraphs": 308,
+    "additionalTextParts": []
+  },
+  "engineeringBrief": {
+    "name": "Pasted text.txt",
+    "sha256": "020fa24ef86728c7811cf0c3c3db62657f30571b96d60e7934d5b02db35bcc7a"
+  },
+  "screenshots": [
+    {
+      "name": "WhatsApp Image 2026-09-28 at 6.07.08 PM (1).jpeg",
+      "sha256": "a50b51f542dd5a2b3d9c6e05027876674b9ae77f0a1898f6504d159b3ea846c2"
+    },
+    {
+      "name": "WhatsApp Image 2026-09-28 at 6.07.08 PM (2).jpeg",
+      "sha256": "7bd919b18160b662cae4e539f106ca19a9d0299b33c842b50f715c8c3bd0c25f"
+    },
+    {
+      "name": "WhatsApp Image 2026-09-28 at 6.07.08 PM (3).jpeg",
+      "sha256": "8763d5492ef168f36c85099306369b0d61b8ad6e0e74ad5bacc0a3d1961bcd35"
+    },
+    {
+      "name": "WhatsApp Image 2026-09-28 at 6.07.08 PM (4).jpeg",
+      "sha256": "946946ae25ab01ddd877c376abd72296efa78d904d423bc8e633fe2089dc0a99"
+    },
+    {
+      "name": "WhatsApp Image 2026-09-28 at 6.07.08 PM.jpeg",
+      "sha256": "535f243f8a237c060154d7a96f016b8b1882e7144a0dcc8015363d6687ea0f5a"
+    },
+    {
+      "name": "WhatsApp Image 2026-09-28 at 6.07.09 PM (1).jpeg",
+      "sha256": "0eebdd2cfe1465dd5bdb2a89c98caac90b04a3b90e923af8291e68d2844fefb0"
+    },
+    {
+      "name": "WhatsApp Image 2026-09-28 at 6.07.09 PM (2).jpeg",
+      "sha256": "0f55735ce2378ea6c23580077a8fc47336ad063e52e62138f108b88281574f47"
+    },
+    {
+      "name": "WhatsApp Image 2026-09-28 at 6.07.09 PM (3).jpeg",
+      "sha256": "9fc85b89cad8223a0a3aeb81db4eb8d13622e4b0aa3ab092ca38da6eda2c539c"
+    },
+    {
+      "name": "WhatsApp Image 2026-09-28 at 6.07.09 PM (4).jpeg",
+      "sha256": "6bffa2b9ed86ddec82636e0210996e67ff7eaff8be705900da716dc5a2545bf4"
+    },
+    {
+      "name": "WhatsApp Image 2026-09-28 at 6.07.09 PM (5).jpeg",
+      "sha256": "0d7e1f210fafbbb42cc19ce8a0fbb0fa5c65a660a152e49628d1cbd8b09e1ffd"
+    },
+    {
+      "name": "WhatsApp Image 2026-09-28 at 6.07.09 PM (6).jpeg",
+      "sha256": "62b43a5847a16e46e5351ea5211b962c8659666d0512b2b74a25b5129e21662e"
+    },
+    {
+      "name": "WhatsApp Image 2026-09-28 at 6.07.09 PM.jpeg",
+      "sha256": "47dcf24894da2b0ca81b78c569c3ea17d937b3cba7589b840a64a625c4c3aafb"
+    }
+  ],
+  "liveWebsiteVisited": false,
+  "networkAccessUsed": false,
+  "productCodeImplemented": false,
+  "houssReadOnlyBaseline": {
+    "files": 615,
+    "contentTreeSha256": "342f40ece60d9ea04a7e877eddb1e724ff1cd8c2a0910eed768c1296752bc788",
+    "note": "Baseline captured after read-only discovery and before final documentation verification."
+  }
+}

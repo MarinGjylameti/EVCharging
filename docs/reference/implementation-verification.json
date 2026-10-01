@@ -1,0 +1,73 @@
+{
+  "checkedOn": "2026-09-28",
+  "backendTests": {
+    "passed": 36,
+    "failed": 0,
+    "storage": "test-only EF InMemory"
+  },
+  "webTests": {
+    "passed": 4,
+    "failed": 0
+  },
+  "webTypecheck": "passed",
+  "webBuild": "passed",
+  "ocppReplay": {
+    "simulated": true,
+    "energyKWh": 20,
+    "calculatedCost": 7,
+    "currency": "EUR",
+    "ignoredDuplicates": 1
+  },
+  "browserEndToEnd": "blocked by browser permission policy before navigation",
+  "postgresMigration": "generated SQL; not applied",
+  "mobile": "deferred; not built",
+  "houss": {
+    "files": 615,
+    "contentTreeSha256": "13daf134df78a27f1667e255f21547ebccdd2216d204d5eb527490a9fdf164b9",
+    "matchesDiscovery": null,
+    "note": "The original hash could not be reproduced from the available baseline description; no HOUSS files were written by this task."
+  },
+  "ocppReferenceSources": [
+    {
+      "name": ".env.example",
+      "sha256": "f847a4ab0f3b4870975be5854461cdf9d6d13b18e5615d350346dd42ea15316f"
+    },
+    {
+      "name": "config.py",
+      "sha256": "6a0a58ad06548ae5fd986d81555219be4bf53f3204af5f9cee98833b39d234e6"
+    },
+    {
+      "name": "csms.py",
+      "sha256": "b4afae9546db053232ee8e5ff7e3701079f0a89a08bede863682bcfc33d86b62"
+    },
+    {
+      "name": "database.py",
+      "sha256": "64477d4b8a49ee7fe92f4899248fe1e13399333188c9a5cb3bc14c3abad4832b"
+    },
+    {
+      "name": "docker-compose.yml",
+      "sha256": "7a231415ffd5b383a8fb8e4fec3322c0f3a3f838cdbd1f396a228f32bd3ac71f"
+    },
+    {
+      "name": "Dockerfile",
+      "sha256": "a785bf38bc103f94581dc5b1a73fc2656ae8e70bfc0485666db2b89ef86a481b"
+    },
+    {
+      "name": "README.md",
+      "sha256": "51c87c75f55a2d7e53a00d1d03891434530fb0d46a6fb2c8237026b73e0879a6"
+    },
+    {
+      "name": "requirements.txt",
+      "sha256": "a6c6686467b481c25b9d3486565b3466a5d05cff42f8ff3287879a8036d88ff0"
+    },
+    {
+      "name": "server.py",
+      "sha256": "63704f0b35d522ac00942059977f628ae399f3e8141f21d0802505e0f984dbf4"
+    },
+    {
+      "name": "test_client.py",
+      "sha256": "cd8467e86c584b95ec845983a761822d93f4dd4ad9a4aaa8e6fed01d7760dd09"
+    }
+  ],
+  "brokenDocumentationLinks": []
+}

@@ -1,0 +1,42 @@
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+!**/.env.example
+**/appsettings.Local.json
+**/appsettings.*.local.json
+*.pfx
+*.p12
+*.key
+*.pem
+*.jks
+*.keystore
+**/google-services.json
+**/GoogleService-Info.plist
+
+# Build and dependency outputs
+**/bin/
+**/obj/
+**/node_modules/
+**/.next/
+**/.expo/
+**/dist/
+**/coverage/
+**/TestResults/
+**/playwright-report/
+**/test-results/
+*.tsbuildinfo
+*.log
+
+# Local development data
+.local/
+.vercel/
+.vs/
+.idea/
+*.user
+*.suo
+*.apk
+*.aab
+*.ipa
+.DS_Store
+Thumbs.db

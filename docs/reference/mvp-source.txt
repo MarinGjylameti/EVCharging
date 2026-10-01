@@ -1,0 +1,308 @@
+P001: Aplikacion për Menaxhimin e Karikimit të Automjeteve Elektrike 
+P002: 1. Përshkrimi i aplikacionit
+P003: Platformë për monitorimin dhe menaxhimin në kohë reale të pikave të karikimit të automjeteve elektrike.
+P004: Platforma do të ketë tre lloje përdoruesish:
+P005: Drejtues automjeti
+P006: Admin
+P007: Superadmin
+P008: Sistemi do të mundësojë shikimin e pikave të karikimit në hartë, statusin e tyre në kohë reale, monitorimin e karikimit, menaxhimin e pikave nga administratorët dhe konfigurimin e çmimeve të karikimit.
+P009: Pagesat nuk janë pjesë e versionit të pare. Çmimi i karikimit do të shfaqet dhe do të përdoret për llogaritjen e kostos së sesionit, por pagesa elektronike nuk do të kryhet në aplikacion.
+P010: 
+P011: 2. Pamja e Drejtuesit të Automjetit
+P012: Drejtuesi përdor aplikacionin për të gjetur dhe monitoruar pikat e karikimit.
+P013: Harta në kohë reale
+P014: Harta do të shfaqë të gjitha pikat e karikimit me:
+P015: Vendndodhjen
+P016: Emrin ose identifikuesin e pikës
+P017: Gjendjen aktuale
+P018: Disponueshmërinë
+P019: Llojin e lidhësit
+P020: Fuqinë e karikimit
+P021: Çmimin e karikimit
+P022: Ngjyrat e hartës mund të përdoren për të dalluar gjendjen e pikës:
+P023: 🟢 E disponueshme
+P024: 🟡 E zënë / automjeti i lidhur
+P025: 🔵 Në karikim
+P026: 🔴 Jashtë funksionit
+P027: ⚫ Në mirëmbajtje
+P028: 
+P029: Detajet e pikës së karikimit
+P030: Drejtuesi mund të shikojë:
+P031: Emrin e pikës
+P032: Identifikuesin e pikës
+P033: Vendndodhjen
+P034: Gjendjen
+P035: Llojin e lidhësit
+P036: Fuqinë e karikimit
+P037: Çmimin për kWh
+P038: Disponueshmërinë
+P039: 
+P040: Gjendja e karikimit
+P041: Kur automjeti lidhet me pikën e karikimit, aplikacioni duhet të tregojë në kohë reale:
+P042: Orën e lidhjes
+P043: Fillimin e karikimit
+P044: Gjendjen e karikimit
+P045: Energjinë e marrë në kWh
+P046: Fuqinë aktuale të karikimit, nëse informacioni është i disponueshëm (në rast se na vjen nga karikuesi si informacion)
+P047: Kohëzgjatjen e karikimit
+P048: Koston e llogaritur të karikimit
+P049: Në përfundim të karikimit:
+P050: Ora e përfundimit
+P051: Kohëzgjatja totale
+P052: Energjia totale e konsumuar
+P053: Kostoja totale e llogaritur
+P054: 
+P055: 3. Profili im
+P056: Drejtuesi do të ketë një seksion “Profili im”.
+P057: Mund të përfshijë:
+P058: Emër
+P059: Mbiemër
+P060: Adresë email
+P061: Numër telefoni
+P062: Të dhëna të makinës
+P063: Marka dhe modeli i automjetit
+P064: Lloji i baterisë
+P065: Ndryshimin e fjalëkalimit
+P066: Daljen nga llogaria
+P067: Në fazat e ardhshme mund të shtohen edhe:
+P068: Të shtohen dhe llogaritë bankare.
+P069: 
+P070: 4. Settings
+P071: Drejtuesi do të ketë seksionin “Cilësimet”.
+P072: Mund të përfshijë:
+P073: Gjuha e aplikacionit
+P074: Njoftimet
+P075: Cilësimet e hartës
+P076: Njësitë e matjes
+P077: Privatësia
+P078: Siguria
+P079: Ndryshimi i fjalëkalimit
+P080: Dalja nga llogaria
+P081: 
+P082: 5. Menaxhimi i pikave të karikimit
+P083: Administratori mund të menaxhojë pikat e karikimit që i janë caktuar.
+P084: Shtimi i një pike
+P085: Administratori mund të shtojë një pikë të re duke vendosur:
+P086: Emrin
+P087: Identifikuesin
+P088: Numrin serial
+P089: Vendndodhjen
+P090: Koordinatat
+P091: Llojin e lidhësit
+P092: Fuqinë e karikimit
+P093: Gjendjen
+P094: Çmimin për kWh
+P095: Ndryshimi i një pike
+P096: Administratori mund të ndryshojë:
+P097: Emrin
+P098: Vendndodhjen
+P099: Të dhënat e pikës
+P100: Llojin e lidhësit
+P101: Fuqinë
+P102: Çmimin
+P103: Gjendjen
+P104: Heqja e një pike
+P105: Administratori mund të heqë një pikë nga sistemi.
+P106: Rekomandohet që pika të arkivohet dhe jo të fshihet përfundimisht, në mënyrë që të ruhet historiku i saj.
+P107: 
+P108: 6. Ndryshimi manual i gjendjes
+P109: Administratori dhe Administratori kryesor mund të ndryshojnë manualisht gjendjen e një pike kur është e nevojshme.
+P110: Shembuj:
+P111: E disponueshme → Në mirëmbajtje
+P112: Në mirëmbajtje → E disponueshme
+P113: E disponueshme → Jashtë funksionit
+P114: Çdo ndryshim manual duhet të ruajë:
+P115: Përdoruesin që bëri ndryshimin
+P116: Gjendjen e mëparshme
+P117: Gjendjen e re
+P118: Datën dhe orën
+P119: Arsyen e ndryshimit
+P120: 
+P121: 7. Çmimet e karikimit
+P122: Çdo pikë karikimi do të ketë çmimin e saj.
+P123: Për versionin MVP mund të përdoret:
+P124: Çmimi për kWh
+P125: Shembull:
+P126: 0.35 € / kWh
+P127: Nëse automjeti merr:
+P128: 20 kWh
+P129: kostoja e llogaritur është:
+P130: 20 × 0.35 € = 7 €
+P131: Administratori mund të:
+P132: Vendosë çmimin
+P133: Ndryshojë çmimin
+P134: Shikojë çmimin aktual
+P135: Shikojë historikun e çmimeve
+P136: Çdo ndryshim çmimi duhet të regjistrohet në historikun e sistemit.
+P137: 
+P138: 8. Paneli i Administratorit
+P139: Paneli i administratorit do të shfaqë informacionin kryesor në kohë reale.
+P140: Treguesit kryesorë
+P141: Numri total i pikave
+P142: Pikat e disponueshme
+P143: Pikat e zëna
+P144: Pikat në karikim
+P145: Pikat jashtë funksionit
+P146: Pikat në mirëmbajtje
+P147: Karikimet aktive
+P148: Karikimet e përfunduara
+P149: Energjia totale e konsumuar
+P150: Çmimet e karikimit
+P151: Aktivitetet e fundit
+P152: Administratori mund të shikojë aktivitetet e fundit:
+P153: Filloi karikimi
+P154: Përfundoi karikimi
+P155: Automjeti u lidh
+P156: Automjeti u shkëput
+P157: Pika doli jashtë funksionit
+P158: U ndryshua gjendja
+P159: U ndryshua çmimi
+P160: 
+P161: 9. Monitorimi i karikimeve
+P162: Administratori mund të shikojë të gjitha karikimet aktive dhe të përfunduara.
+P163: Për çdo karikim:
+P164: Identifikuesi i karikimit
+P165: Pika e karikimit
+P166: Drejtuesi
+P167: Ora e fillimit
+P168: Ora e përfundimit
+P169: Kohëzgjatja
+P170: Energjia në kWh
+P171: Gjendja
+P172: Çmimi për kWh
+P173: Kostoja e llogaritur
+P174: Mund të përdoren filtra sipas:
+P175: Pikës
+P176: Vendndodhjes
+P177: Gjendjes
+P178: Datës
+P179: Drejtuesit
+P180: 
+P181: 10. Paneli i Administratorit Kryesor
+P182: Administratori kryesor ka akses në të gjithë sistemin.
+P183: Përmbledhje e sistemit
+P184: Shfaq:
+P185: Numrin total të pikave
+P186: Numrin total të vendndodhjeve
+P187: Numrin total të administratorëve
+P188: Numrin total të drejtuesve
+P189: Pikat aktive
+P190: Pikat jashtë funksionit
+P191: Pikat në mirëmbajtje
+P192: Karikimet aktive
+P193: Energjinë totale të konsumuar
+P194: Aktivitetin e sistemit
+P195: 
+P196: 11. Menaxhimi i administratorëve
+P197: Administratori kryesor mund të:
+P198: Shtojë administrator
+P199: Ndryshojë të dhënat e administratorit
+P200: Aktivizojë ose çaktivizojë administratorin
+P201: Heqë administratorin
+P202: Caktojë administratorin në një vendndodhje
+P203: Caktojë pikat që administratori mund të menaxhojë
+P204: Menaxhojë të drejtat e aksesit
+P205: Shembull:
+P206: Administratori A→ Vendndodhja 1→ Pikat 1–10
+P207: Administratori B→ Vendndodhja 2→ Pikat 11–20
+P208: Administratori kryesor ka akses në të gjitha.
+P209: 
+P210: 12. Menaxhimi i vendndodhjeve
+P211: Administratori kryesor mund të:
+P212: Shtojë vendndodhje
+P213: Ndryshojë vendndodhje
+P214: Arkivojë vendndodhje
+P215: Vendosë adresën
+P216: Vendosë koordinatat
+P217: Caktojë pikat e karikimit
+P218: Shikojë të gjitha pikat brenda një vendndodhjeje
+P219: Një vendndodhje mund të ketë shumë pika karikimi.
+P220: 
+P221: 13. Njoftimet dhe sinjalizimet
+P222: Sistemi mund të gjenerojë njoftime për:
+P223: Pikë jashtë funksionit
+P224: Defekt
+P225: Fillim karikimi
+P226: Përfundim karikimi
+P227: Shkëputje të papritur
+P228: Ndryshim manual të gjendjes
+P229: Ndryshim të çmimit
+P230: 
+P231: 14. Historiku i veprimeve
+P232: Çdo veprim i rëndësishëm administrativ duhet të ruhet në historik.
+P233: Historiku përfshin:
+P234: Përdoruesin
+P235: Rolin
+P236: Veprimin
+P237: Pikën/vendndodhjen
+P238: Gjendjen e mëparshme
+P239: Gjendjen e re
+P240: Datën dhe orën
+P241: Shembull:
+P242: Administratori X ndryshoi gjendjen e Pikës 12
+P243: E disponueshme → Në mirëmbajtje
+P244: 10 Gusht 2026 – 14:35
+P245: 
+P246: 15. Rolet e përdoruesve
+P247: Drejtues automjeti
+P248: Mund të:
+P249: Shikojë hartën në kohë reale
+P250: Shikojë pikat e karikimit
+P251: Shikojë gjendjen
+P252: Shikojë çmimin
+P253: Monitorojë karikimin
+P254: Shikojë historikun e karikimeve
+P255: Menaxhojë profilin
+P256: Menaxhojë cilësimet
+P257: Administrator
+P258: Mund të:
+P259: Menaxhojë pikat e caktuara
+P260: Shtojë pika
+P261: Ndryshojë pika
+P262: Arkivojë pika
+P263: Ndryshojë gjendjen manualisht
+P264: Menaxhojë çmimet
+P265: Monitorojë karikimet
+P266: Shikojë njoftimet
+P267: Shikojë historikun e veprimeve
+P268: Administrator kryesor
+P269: Ka akses të plotë në:
+P270: Të gjitha pikat
+P271: Të gjitha vendndodhjet
+P272: Të gjithë administratorët
+P273: Të gjithë drejtuesit
+P274: Të gjitha karikimet
+P275: Çmimet
+P276: Të drejtat e aksesit
+P277: Njoftimet
+P278: Historikun e veprimeve
+P279: Menaxhimin e plotë të sistemit
+P280: 
+P281: 16. Përmbledhja e Fazës se pare të aplikacionit
+P282: Përfshihet
+P283: Aplikacioni për drejtuesin
+P284: Harta në kohë reale
+P285: Vendndodhjet e pikave
+P286: Gjendja e pikave
+P287: Zbulimi i lidhjes së automjetit
+P288: Monitorimi i karikimit në kohë reale
+P289: Monitorimi i energjisë në kWh
+P290: Çmimi për çdo pikë
+P291: Llogaritja e kostos
+P292: Paneli i administratorit
+P293: Paneli i administratorit kryesor
+P294: Menaxhimi i pikave
+P295: Menaxhimi i vendndodhjeve
+P296: Menaxhimi i administratorëve
+P297: Rolet dhe të drejtat e aksesit
+P298: Ndryshimi manual i gjendjes
+P299: Njoftimet
+P300: Historiku i veprimeve
+P301: Nuk përfshihet në këtë fazë 
+P302: Pagesat elektronike
+P303: Portofoli elektronik
+P304: Integrimi me banka
+P305: Faturimi elektronik
+P306: Abonimet
+P307: Pagesat mund të shtohen në një fazë të ardhshme pa ndryshuar strukturën bazë të platformës.
+P308: 

@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../../src/EVCharging.Infrastructure/EVCharging.Infrastructure.csproj"/></ItemGroup>
+  <ItemGroup><None Include="sample-session.jsonl" CopyToOutputDirectory="PreserveNewest"/></ItemGroup>
+</Project>

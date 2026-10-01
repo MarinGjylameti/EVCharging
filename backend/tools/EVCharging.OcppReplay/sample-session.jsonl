@@ -1,0 +1,4 @@
+[2,"start-1","StartTransaction",{"connectorId":1,"idTag":"SIMULATED-TAG","meterStart":123000,"timestamp":"2026-09-28T16:00:00Z"}]
+[2,"meter-1","MeterValues",{"connectorId":1,"transactionId":1,"meterValue":[{"timestamp":"2026-09-28T16:30:00Z","sampledValue":[{"value":"133000","unit":"Wh"},{"value":"22000","measurand":"Power.Active.Import","unit":"W"}]}]}]
+[2,"meter-1","MeterValues",{"connectorId":1,"transactionId":1,"meterValue":[{"timestamp":"2026-09-28T16:30:00Z","sampledValue":[{"value":"133000","unit":"Wh"},{"value":"22000","measurand":"Power.Active.Import","unit":"W"}]}]}]
+[2,"stop-1","StopTransaction",{"transactionId":1,"meterStop":143000,"timestamp":"2026-09-28T17:00:00Z","reason":"Local"}]
