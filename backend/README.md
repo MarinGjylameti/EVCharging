@@ -16,6 +16,17 @@ API është vendi ku lidhen implementimet me interfacet. Parseri OCPP është
 offline; endpoint-i WebSocket, procesuesi i eventeve dhe publikimi SignalR janë
 ende për t'u implementuar. [Skema OCPP dhe rrjedha realtime](../docs/ocpp-simulator-database.md).
 
+`Program.cs` tregon rendin e nisjes dhe regjistron grupet e endpoint-eve.
+Pjesët që ndryshohen veçmas janë:
+
+| Skedari/folderi | Përgjegjësia |
+|---|---|
+| `Api/Hosting` | Leximi dhe validimi i konfigurimit, JSON/Kestrel/CORS dhe rendi i middleware-ve. |
+| `Api/Security/ApiSecurityRegistration.cs` | Autentikimi, politikat e roleve dhe kufizimi i kërkesave të autentikimit. |
+| `Api/Startup/StartupCommands.cs` | Komandat `--migrate`, `--bootstrap-superadmin` dhe `--seed-demo`. |
+| `Infrastructure/DependencyInjection.cs` | Regjistrimi i databazës, shërbimeve dhe transportit të njoftimeve. |
+| `Infrastructure/Identity/SuperadminBootstrapper.cs` | Krijimi i Superadmin-it fillestar dhe auditimi; refuzon kur ekziston një i tillë. |
+
 ## Formatimi C#
 
 CSharpier përdor `.editorconfig` të projektit dhe `backend/.csharpierignore`
