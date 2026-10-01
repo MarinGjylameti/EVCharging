@@ -66,16 +66,16 @@ duhen përpara se një transaksion të shfaqet si histori personale ose kosto.
    por nuk e kthejnë gjendjen publike pas në kohë. Kufizimet manuale kanë
    përparësi; një pikë me disa lidhës është e disponueshme nëse të paktën një
    lidhës i verifikuar është i lirë dhe i freskët.
-4. Pas commit-it, një procesues i outbox-it publikon `PointChanged` te kanali
-   SignalR i hartës. Publikohet vetëm ID, versioni, statusi/disponueshmëria dhe
-   koha e freskisë; `idTag`, driverId dhe matjet private nuk dalin në kanalin
-   publik. `MeterValues` ruhet i plotë, por për UI mund të dërgohet i bashkuar
-   periodikisht që të mos mbingarkohet harta. Ndryshimet e statusit nuk bashkohen.
+4. Pas commit-it, procesuesi i outbox-it publikon invalidime përmes SSE.
+   Eventet private filtrohen sipas Driver-it. Shfletuesit i dërgohet vetëm
+   sinjali `changed`; ai merr snapshot-in përmes endpoint-eve të autorizuara.
+   Payload-i origjinal OCPP dhe idTag nuk dalin në stream.
 5. Shfletuesi merr fillimisht snapshot-in REST të pikave dhe ndjek kanalin.
-   Zbaton vetëm evente me version më të ri. Pas ndërprerjes/mbylljes së tab-it
-   merr snapshot të ri; polling-u ekzistues çdo 60 sekonda mbetet rrugë
-   rikuperimi. Kur të dhënat e pajisjes vjetrohen ose ajo del offline, UI duhet
-   të tregojë gjendje të pasigurt, jo `Available` të vjetër.
+   Bashkon invalidimet brenda 250 ms dhe nuk bën kërkesa të mbivendosura.
+   Pas rilidhjes ose rikthimit te tab-i merr snapshot të ri. Polling çdo
+   30 sekonda në background shërben për rikuperim. Zoom, pan, filtri dhe pika
+   e zgjedhur ruhen; nuk përdoret `router.refresh()`. Pajisja offline shfaqet
+   `Unknown`, pa u paraqitur si e lirë.
 
 `PublishedAt` në outbox do të thotë dorëzim te transporti i eventeve, jo që çdo
 shfletues e ka parë. Versioni dhe snapshot-i e bëjnë klientin tolerant ndaj
@@ -83,23 +83,51 @@ eventeve të dubluara ose të humbura. Për më shumë se një instancë API,
 procesuesit e outbox-it duhet të përdorin lease/`SKIP LOCKED` dhe një transport
 të përbashkët; nuk mbështetemi në memorie lokale si burim të vërtetës.
 
-Sot kjo është **skemë dhe rrjedhë e projektuar**. API-ja ende nuk ka endpoint
-OCPP, përpunues outbox ose hub SignalR; harta aktualisht bën refresh çdo
-60 sekonda. Këto pjesë duhen implementuar dhe testuar para se simulatori të
-mund të ndryshojë statusin live.
+Endpoint-i OCPP, inbox, përpunuesit e mesazheve, outbox dhe SSE janë
+implementuar për këtë demo me një instancë API. Sesionet personale lexohen
+nga databaza përmes `/api/v1/driver/charging-sessions`; historia krijohet kur
+merret `StopTransaction`. Testet përdorin WebSocket të vërtetë të TestServer
+me ruajtje InMemory: provojnë rrjedhën HTTP/OCPP/SSE, jo izolimin dhe
+kufizimet e PostgreSQL. Prova me simulatorin online kërkon deploy-in tënd.
 
-## Si do të konfigurohet simulatori
+## Konfigurimi në Render për testin aktual
 
-API-ja duhet së pari të implementojë endpoint-in WebSocket dhe përpunuesin e
-mesazheve. Migrimi i databazës vetëm nuk e hap këtë endpoint; adresa më poshtë
-është formati i synuar, jo adresë aktive aktualisht.
+1. Bëj vetë commit dhe push. Deploy backend-in dhe web-in nga ky commit.
+2. Në **backend → Environment** shto:
 
-1. Në simulator zgjidh OCPP **1.6J** dhe `Charge Point ID` të qëndrueshëm, p.sh.
-   `SIM-002`. E njëjta ID duhet provision-uar te `ocpp_charge_points` dhe të
-   aktivizohet vetëm pasi të përcaktohet mënyra e autentikimit të simulatorit.
+   ```dotenv
+   EVCHARGING_Ocpp__SimulatorEnabled=true
+   EVCHARGING_Ocpp__AllowAnonymousSimulators=true
+   ```
+
+   Mbaj `DATABASE_URL`, `EVCHARGING_MIGRATE_ON_START=true` dhe
+   `EVCHARGING_Demo__DriverEmail` të llogarisë demo ekzistuese.
+   Ky konfigurim i posaçëm testimi pranon pa Basic Auth vetëm ID-të e
+   konfiguruara dhe pikat `IsDemo`. Endpoint-i është i çaktivizuar si parazgjedhje.
+3. **Save, rebuild and deploy**. Krijohen automatikisht tri pika të veçanta:
+   `SIM-001`, `SIM-002`, `SIM-003`, secila me lidhësin 1 dhe koordinata të
+   qëndrueshme në Tiranë. Para mesazhit të parë statusi është `Unknown`.
+4. Web-i ruan `EVCHARGING_API_BASE_URL=https://vcharging-api-demo.onrender.com`.
+
+Për transport që dërgon header Basic Auth, përdor
+`EVCHARGING_Ocpp__AllowAnonymousSimulators=false` dhe
+`EVCHARGING_Ocpp__SimulatorPassword=<fjalëkalim 12–128 karaktere>`;
+username duhet të jetë Charge Point ID. Identitetet e reja të autentikuara
+krijojnë pika demo, deri në kufirin 50. Për simulatorin e shfletuesit, konfigurimi
+anonim i mësipërm shmang nevojën për header Basic Auth.
+
+Për më shumë pika në testimin anonim, cakto vargje si
+`EVCHARGING_Ocpp__SimulatorIdentities__0=SIM-001`, `__1=SIM-002`,
+`__2=SIM-003`, `__3=SIM-004`. Maksimumi i listës është 20. Mos përdor të
+njëjtën ID për dy lidhje njëkohësisht: lidhja e dytë refuzohet.
+
+## Konfigurimi i simulatorit
+
+1. **Add new simulator**: emër sipas dëshirës, protokoll **OCPP 1.6**,
+   `Charge Point ID=SIM-001`; `Basic Auth Password` bosh për testin anonim.
 2. `WebSocket URL (CMS)` duhet të jetë host-i publik i API-së me `wss://`, p.sh.
-   `wss://<api-host>/ws/cs`. Kontrollo që `Station connection URL` të përfundojë
-   si `wss://<api-host>/ws/cs/SIM-002` (nëse simulatori nuk e shton ID-në vetë,
+   `wss://vcharging-api-demo.onrender.com/ws/cs`. Kontrollo që `Station connection URL` të përfundojë
+   si `wss://vcharging-api-demo.onrender.com/ws/cs/SIM-001` (nëse simulatori nuk e shton ID-në vetë,
    vendos URL-në e plotë). Nënprotokolli duhet të jetë `ocpp1.6`.
 3. Pas `Connect`, dërgo BootNotification, Heartbeat, StatusNotification,
    Authorize dhe një cikël StartTransaction → MeterValues → StopTransaction.
@@ -108,10 +136,31 @@ mesazheve. Migrimi i databazës vetëm nuk e hap këtë endpoint; adresa më pos
 4. Në konfigurimin e simulimit `meterStart`/`meterStop` jepen si **integer Wh**.
    `MeterValues.sampledValue.value` mbetet string sipas mesazhit. Mos përdor
    kohë historike në testin live të statusit.
+5. Për provë të shpejtë: Tag ID `TAG-001`, lidhësi `1`, Meter start `0`,
+   Total kWh `1`, Charging speed `22`, Meter interval `5` sekonda. Përdor
+   orën aktuale UTC; mos mbaj një Start time të vjetër. Nëse dërgon matje
+   manuale, vendos Phase bosh për matjen totale të energjisë/fuqisë.
+6. Në [web](https://evcharging-web-demo.onrender.com/driver), hyr me Driver-in
+   e `EVCHARGING_Demo__DriverEmail`. Në panelin **Ndiq karikimin**, zgjidh
+   `SIM-001` dhe **Lidhu për test**. Ky është bypass i QR; nuk nis vetë pajisjen
+   dhe nuk ndryshon pronësinë e një sesioni tjetër. Për këtë demo, `TAG-001`
+   lidhet vetëm me Driver-in e konfiguruar në backend.
+7. Te simulatori: **Start charging**. UI shfaq përgatitjen/karikimin, energjinë,
+   fuqinë, kohëzgjatjen dhe SoC/temperaturën nëse pajisja i raporton. **Stop charging**
+   ruan përmbledhjen dhe historikun. Pika lirohet vetëm pas statusit `Available`.
+8. Përsërit krijimin me `SIM-002` dhe `SIM-003`, me të njëjtën URL bazë dhe
+   Tag ID. Nis dy karikime njëkohësisht dhe ndalo vetëm njërin: UI duhet të
+   shfaqë dy sesione të ndara dhe të ndryshojë vetëm pikën përkatëse.
 
 Render e drejton trafikun HTTP dhe WebSocket në të njëjtin port të Web Service.
 Për një lidhje publike përdoret `wss://`, jo IP-ja lokale `192.168.*` e kolegut.
 Lidhja mund të ndërpritet nga deploy/restart; klienti OCPP duhet të rilidhet.
 Plani Free shërben për provë, por monitorimi operacional kërkon konfigurim dhe
-kapacitet të përshtatshëm. Ende nuk ka endpoint WebSocket ose sinkronizim live
-të hartës në këtë commit të databazës.
+kapacitet të përshtatshëm. API kërkon heartbeat sipas intervalit të dhënë në
+BootNotification (30 sekonda); pas 120 sekondash pa mesazhe pika bëhet Unknown.
+Në restart duhen rilidhje dhe status i ri. Karikimi aktiv nuk mbyllet ose faturohet
+automatikisht vetëm sepse socket-i humbi lidhjen.
+
+Veprimet e implementuara janë shtatë mesazhet e përmendura më sipër.
+OCPP 2.0.1, RemoteStart/RemoteStop, QR reale, autorizimi i hardware real dhe
+shpërndarja e stream-it në disa instanca mbeten punë të veçanta.

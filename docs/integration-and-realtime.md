@@ -63,13 +63,20 @@ Nuk shtohen RemoteStart/RemoteStop/rezervim/pagesë nga ky propozim. Nëse prodh
 
 ## Realtime
 
+**Implementimi aktual i demo-s:** pajisjet përdorin `/ws/cs/{identity}` me
+OCPP 1.6; web-i përdor SSE të autentikuar për invalidim dhe REST në background
+për snapshot-in. Nuk instalohet klient SignalR. Përshkrimi SignalR më poshtë
+mbetet projektimi për kanalet e ardhshme mobile/admin. Për testin funksional,
+konfigurimin dhe kufijtë aktualë, shiko
+[lidhjen e simulatorit](ocpp-simulator-database.md).
+
 SignalR dërgon evente vetëm pas commit-it: `PointChanged`, `SessionChanged`, `PriceChanged`, `NotificationCreated` dhe invalidim të përmbledhjes kur duhet. Envelope përmban eventId, entityId, entityVersion, occurredAt dhe DTO të kufizuar.
 
 Për pajisjet OCPP, ndryshimi i statusit dhe rreshti `realtime_outbox` ruhen në
 të njëjtin transaksion. Dispatcher-i e publikon rreshtin pas commit-it dhe
 retry nuk ndryshon statusin në databazë. [Skema e simulatorit](ocpp-simulator-database.md)
-ndan WebSocket-in e pajisjes nga kanali SignalR i shfletuesit. As endpoint-i
-OCPP, as hub-i dhe dispatcher-i nuk janë implementuar ende.
+ndan WebSocket-in e pajisjes nga SSE i shfletuesit. Endpoint-i OCPP dhe
+dispatcher-i janë implementuar për një instancë API; hub SignalR nuk është implementuar.
 
 - Hartës i dërgohen vetëm gjendje/disponueshmëri/çmim/koordinata të publikueshme. Asnjë driverId ose telemetri personale në grupin e përgjithshëm.
 - Driver merr vetëm sesionet me pronësi të verifikuar. Admin merr evente vetëm për scope aktual; Superadmin globale. Subscribe nuk i beson grupit ose pikës që kërkon klienti.

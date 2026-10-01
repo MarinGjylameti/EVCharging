@@ -7,6 +7,7 @@ public enum PointState
     Charging,
     OutOfService,
     Maintenance,
+    Unknown,
 }
 
 public enum ManualRestriction

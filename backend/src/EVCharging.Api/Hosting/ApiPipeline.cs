@@ -14,6 +14,7 @@ public static class ApiPipeline
             }
         );
         app.UseCors();
+        app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(20) });
         app.UseRateLimiter();
         app.UseAuthentication();
         app.UseAuthorization();

@@ -41,6 +41,31 @@ public sealed record DriverHistoryDto(
 
 public interface IDriverQueries
 {
+    Task<DriverChargingState> GetChargingStateAsync(Guid driverId, CancellationToken ct);
     Task<IReadOnlyList<DriverStationDto>> GetStationsAsync(CancellationToken ct);
     Task<IReadOnlyList<DriverHistoryDto>> GetHistoryAsync(Guid driverId, CancellationToken ct);
 }
+
+public sealed record DriverChargingState(
+    bool CanTestSimulator,
+    IReadOnlyList<DriverChargingSession> Sessions
+);
+
+public sealed record DriverChargingSession(
+    Guid Id,
+    Guid StationId,
+    string StationName,
+    string StationCode,
+    int ConnectorId,
+    string Status,
+    decimal EnergyKWh,
+    decimal? PowerKW,
+    decimal? StateOfCharge,
+    decimal? TemperatureCelsius,
+    DateTimeOffset StartedAt,
+    DateTimeOffset? StoppedAt,
+    DateTimeOffset? LastMeasurementAt,
+    decimal? Cost,
+    string Currency,
+    bool IsDemo
+);

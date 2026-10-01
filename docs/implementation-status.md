@@ -14,9 +14,9 @@ Prioriteti i konfirmuar: **backend dhe web përpara mobile**. Pas avancimit të 
 | Mobile | Një kod Expo/React Native për iOS/Android: regjistrim/hyrje Driver, profil, cilësime, push scaffold, listë pikash me filtra dhe hapje në hartën e telefonit, histori personale | Sintaksa e 10 skedarëve TS/TSX kaloi; paketat Expo, typecheck i plotë dhe prova në pajisje mbeten të bllokuara |
 | Harta dhe historiku | Lexim i pikave jo të arkivuara dhe i maksimumi 100 seancave të Driver-it të hyrë; host-i lokal krijon 10 pika dhe 6 seanca demo, përfshirë një pikë në Lushnjë me vlerësim ilustrues prej 40 minutash | Teste API për autorizimin, filtrimin e arkivimit, freskinë e vlerësimit dhe izolimin e historikut sipas përdoruesit |
 | Njoftimet | Shtatë tekste sq/en, inbox personal, regjistrim pajisjeje, push queue me retries/receipts | 7 teste të radhës: gjuha aktuale, opt-out, logout, ndërrim llogarie, çaktivizim, retry i kufizuar dhe deduplikim |
-| OCPP | Parser C# për StatusNotification, StartTransaction, MeterValues, StopTransaction | 12 raste parseri; replay i një sesioni sintetik me matje të përsëritur |
+| OCPP | WebSocket 1.6 për BootNotification, Heartbeat, Authorize, StatusNotification, StartTransaction, MeterValues, StopTransaction; inbox, sesione dhe matje persistente | Parser/replay dhe testet WebSocket → DB → stream, disa simulatorë, duplicate dhe status i vjetër |
 | Domeni | Gjendje manuale me përparësi, freshness, arkivim i bllokuar kur është aktiv, snapshot çmimi, matje monotone dhe decimal cost | 8 raste domeni/validimi |
-| PostgreSQL | EF mappings dhe katër migrime për identitetin/njoftimet, pikat/historikun, versionin e pikës dhe fushat opsionale të vlerësimit | Migrimet dhe SQL u gjeneruan; aplikimi në PostgreSQL nuk është testuar |
+| PostgreSQL | EF mappings dhe pesë migrime, përfshirë tabelat OCPP/outbox | Modeli përputhet me migrimin e fundit; kufizimet dhe izolimi në PostgreSQL lokal nuk janë testuar |
 
 Referencat e kodit: `backend/src`, `backend/tests/EVCharging.Tests`, `web/src`, `backend/tools/EVCharging.OcppReplay`.
 
@@ -27,22 +27,22 @@ Referencat e kodit: `backend/src`, `backend/tests/EVCharging.Tests`, `web/src`, 
 - Sesionet e hyrjes përdorin token opaque me 32 bytes rastësore, hash në DB dhe skadim absolut të konfigurueshëm (24 orë parazgjedhje). Refresh token rotation/JWT mbeten për më vonë. Web-i mban token-in në cookie HttpOnly; token-i nuk futet në JSON të kthyer nga BFF.
 - Password change revokon sesionet dhe pajisjet push. Login ndryshon versionin e llogarisë, që krijimi i sesionit të konfliktojë me një ndryshim paralel fjalëkalimi.
 - Push worker fillestar kërkon **një instancë aktive**; claim/lease për shumë instanca ende mungon. Rezultati i receipt është konfirmim nga provider-i, jo provë se përdoruesi e pa njoftimin.
-- Parseri OCPP nuk autorizon idTag dhe nuk krijon lidhje Driver–session. Dedup në domen është në memorie; inbox/replay pas restart-it kërkon implementim persistent.
-- Pikat dhe seancat demo krijohen vetëm në `BrowserTestHost`, jo në API-në e prodhimit. Koordinatat, statuset dhe çmimet janë ilustrime. Historia ruan çmimin e momentit si snapshot dhe nuk nënkupton pagesë të kryer.
+- Gateway OCPP ka inbox persistent dhe retry të përgjigjeve. Për këtë demo `TAG-001` lidhet vetëm me Driver-in e konfiguruar në `Demo:DriverEmail`; autorizimi i përdoruesve/pajisjeve reale kërkon kontraktin e hardware.
+- Të dhënat demo krijohen vetëm kur aktivizohet shprehimisht seed/simulator mode, ose në host-in lokal të testit. Koordinatat dhe çmimet e simulatorëve janë ilustrime; statusi dhe matjet vijnë nga mesazhet OCPP. Historia ruan çmimin e momentit si snapshot dhe nuk nënkupton pagesë të kryer.
 - Vlerësimi i kohës së mbetur lidhet me një lidhës dhe shfaqet vetëm sa kohë pika është në karikim, vlerësimi nuk ka skaduar dhe burimi është i njohur. Për burimin e pajisjes kufiri i freskisë është 15 minuta. Në Lushnjë burimi është vetëm simulim demo; nuk ka ende marrje reale të kohës nga pajisja. Drejtuesi nuk fut kohë udhëtimi. Parashikimi nuk rezervon lidhësin. Pajisja duhet të ofrojë një vlerësim të verifikueshëm; energjia ose fuqia e matur nuk mjaftojnë për të premtuar minutat e mbetura.
 - Udhëzimet për pikën e zgjedhur hapen nga Google Maps si parazgjedhje. Te `/driver/settings` përdoruesi mund të zgjedhë Apple Maps. Preferenca mbahet në shfletuesin lokal dhe nuk sinkronizohet me llogarinë në pajisje të tjera.
-- Statusi në panelin e pikave vendoset manualisht dhe shënohet si i tillë derisa telemetria OCPP të lidhet. Ndryshimi i pikave është kufizuar te Superadmin deri në implementimin e caktimeve/scope për Admin.
+- Pikat OCPP të simulatorëve marrin status nga telemetria; shkëputja shfaqet Unknown. Pikat e tjera mbeten manuale/demo. Ndryshimi i pikave është kufizuar te Superadmin deri në implementimin e caktimeve/scope për Admin.
 
 ## Çfarë nuk është përfunduar
 
-Caktimet dhe scope sipas pikës për Admin, struktura të plota të lidhësve dhe çmimeve me versionim; statistika reale; krijimi i historikut nga sesione reale OCPP; SignalR; QR dhe lidhja Driver–sesion; autentikimi i pajisjes, WebSocket OCPP, transaction IDs persistente dhe reconnect; audit read API/DB grants; rikuperim/verifikim email-i; deployment dhe konfigurimi production. Mobile kërkon hartë të integruar, QR, build-e native dhe prova në pajisje.
+Caktimet dhe scope sipas pikës për Admin; çmimet me versionim dhe statistikat; provat me hardware real, autorizimi real Driver–sesion dhe QR; OCPP 2.0.1 dhe komandat RemoteStart/RemoteStop; shpërndarja e eventeve në shumë instanca; audit read API/DB grants; rikuperim/verifikim email-i dhe konfigurimi production. Mobile kërkon hartë të integruar, QR, build-e native dhe prova në pajisje. Demo web ka bypass QR dhe panel me sesione të ndara, energji, fuqi, kohëzgjatje dhe përmbledhje pas ndalimit.
 
 Faqja e përmbledhjes llogarit pikat nga API-ja dhe i shënon qartë të dhënat demo. Nuk paraqet histori ose telemetri sintetike si sesione reale.
 
 ## Provat dhe kufijtë
 
-- `dotnet test`: **44 kaluar, 0 dështuar**. EF InMemory përdoret vetëm në projektet e testit dhe host-in e përkohshëm. Nuk zëvendëson provën PostgreSQL për unique/FK/locking/rollback.
-- `npm run test`: **16 kaluar**. `npm run typecheck` dhe `npm run build` kalojnë. Pozicioni real i drejtuesit kërkon lejen e shfletuesit; refuzimi mban pamjen e pikave të regjistruara pa qytet të zgjedhur. Lidhjet Google Maps dhe Apple Maps përdorin koordinatat e pikës; hapja e aplikacioneve të jashtme nuk është provuar në pajisje.
+- `dotnet test`: **61 kaluar, 0 dështuar**, përfshirë WebSocket/SSE dhe testin me tre simulatorë. EF InMemory përdoret vetëm në test; ID-të numerike simulohen me interceptor sepse InMemory nuk zbaton identity të PostgreSQL në kolona jo-key. Nuk zëvendëson provën PostgreSQL për unique/FK/locking/rollback.
+- `npm test`: **20 kaluar**. `npm run typecheck` dhe `npm run build` kalojnë; tre teste provojnë renderimin e panelit të karikimit. Pozicioni real i drejtuesit kërkon lejen e shfletuesit; refuzimi mban pamjen e pikave të regjistruara pa qytet të zgjedhur. Lidhjet Google Maps dhe Apple Maps përdorin koordinatat e pikës; hapja e aplikacioneve të jashtme nuk është provuar në pajisje.
 - Replay offline: **20 kWh, 7.00 EUR, 1 matje e përsëritur e injoruar**. Çmimi dhe ID-të janë fixture; nuk janë tarifë ose pajisje reale.
 - Host-i demo dhe web-i u lanë në `127.0.0.1:5202` dhe `127.0.0.1:3100`; të dy portet u konfirmuan në gjendje LISTENING. Host-i përdor InMemory dhe të dhëna sintetike që zhduken pas ndalimit. Pllakat OpenStreetMap ngarkohen nga shfletuesi kur hapet harta; përdoruesi e autorizoi këtë. Mjeti i shfletuesit refuzoi hapjen e localhost-it duke raportuar leje të refuzuar. Nuk u krye test vizual ose klikim end-to-end nga agjenti.
 - Docker ekziston në PATH, por daemon-i lokal refuzoi aksesin. Nuk u ndryshuan lejet/politikat e laptopit. Nuk u krijua databazë reale.

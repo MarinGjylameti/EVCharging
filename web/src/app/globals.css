@@ -131,3 +131,23 @@
   .station-picker-header h2{margin-bottom:0}
   .station-picker-map{min-height:130px}
 }
+
+.charging-panel{margin:0 0 28px;padding:24px;background:#fff;border:1px solid #dce6dc;border-radius:14px}
+.charging-live,.charging-state{display:inline-flex;align-items:center;gap:8px;color:#64796e;font-size:12px;font-weight:600}
+.charging-live i,.charging-state i{width:8px;height:8px;border-radius:50%;background:#a1aba5;flex:none}
+.charging-live.is-live{color:#197454}.charging-live.is-live i,.is-charging .charging-state i{background:#21956c}
+.charging-test-controls{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px;margin:18px 0}
+.charging-test-controls label{display:grid;gap:7px;flex:1 1 240px;font-size:12px;font-weight:600}
+.charging-test-controls select{width:100%;min-height:44px;padding:10px;border:1px solid #cbdccd;border-radius:8px;background:#fff;color:#163f35}
+.charging-test-controls button{min-height:44px}.charging-test-controls p{flex-basis:100%;font-size:12px;color:#6e8278;line-height:1.6;margin:0}
+.charging-session-list{display:grid;gap:14px}.charging-session{border:1px solid #dce6dc;border-radius:12px;padding:20px;background:#f8faf7}
+.charging-session.is-charging{background:#f0f8f1;border-color:#b9d9c5}
+.charging-session-heading{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px}
+.charging-session-heading>div{display:grid;gap:5px}.charging-session-heading small{font-size:12px;color:#6e8278}
+.charging-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:18px;margin:22px 0 16px}
+.charging-metrics>div{display:grid;gap:8px}.charging-metrics span{font-size:10px;letter-spacing:.1em;color:#6e8278;font-weight:700}
+.charging-metrics strong{font-size:27px;font-variant-numeric:tabular-nums}.charging-metrics strong small{font-size:13px;font-weight:500}
+.charging-session-note{font-size:12px;line-height:1.7;color:#6e8278;margin-bottom:0}
+.charging-waiting{display:flex;justify-content:space-between;gap:12px;padding:14px;margin:10px 0;border-radius:8px;background:#edf4e8;font-size:13px;line-height:1.6}
+.station-dot.status-unknown{background:#a1aba5}.status-text-unknown{color:#68766d}.map-pin.status-unknown{background:#778880}
+@media(max-width:650px){.charging-panel{padding:18px;margin-bottom:20px}.charging-panel .driver-section-heading{align-items:flex-start;gap:12px;flex-wrap:wrap}.charging-session{padding:16px}.charging-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.charging-test-controls button{width:100%}.charging-waiting{align-items:flex-start}.charging-state{line-height:1.5}}

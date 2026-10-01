@@ -2,6 +2,7 @@ using EVCharging.Application.Charging;
 using EVCharging.Application.Notifications;
 using EVCharging.Domain.Identity;
 using EVCharging.Infrastructure.Charging;
+using EVCharging.Infrastructure.Charging.Ocpp;
 using EVCharging.Infrastructure.Identity;
 using EVCharging.Infrastructure.Notifications;
 using EVCharging.Infrastructure.Persistence;
@@ -30,6 +31,44 @@ public static class DependencyInjection
         AddNotifications(services);
         services.AddScoped<IStationManagement, StationManagementService>();
         services.AddScoped<IDriverQueries, DriverQueries>();
+        services
+            .AddOptions<OcppOptions>()
+            .BindConfiguration("Ocpp")
+            .Validate(
+                x =>
+                    !x.SimulatorEnabled
+                    || x.AllowAnonymousSimulators
+                    || x.SimulatorPassword.Length is >= 12 and <= 128,
+                "OCPP simulator mode requires a password between 12 and 128 characters."
+            )
+            .Validate(
+                x =>
+                    x.SimulatorIdentities.Length is >= 1 and <= 20
+                    && x.SimulatorIdentities.All(id =>
+                        System.Text.RegularExpressions.Regex.IsMatch(id, "^[A-Za-z0-9_-]{1,40}$")
+                    ),
+                "Invalid simulator identities."
+            )
+            .Validate(
+                x =>
+                    x.SimulatorTagId.Length is >= 1 and <= 20
+                    && x.HeartbeatSeconds is >= 10 and <= 60
+                    && x.OfflineSeconds >= x.HeartbeatSeconds * 2
+                    && x.OfflineSeconds <= 180,
+                "Invalid OCPP timing or tag configuration."
+            )
+            .ValidateOnStart();
+        services.AddScoped<OcppSimulatorProvisioner>();
+        services.AddScoped<OcppStationProjection>();
+        services.AddScoped<OcppMeterHandler>();
+        services.AddScoped<OcppTransactionHandler>();
+        services.AddScoped<OcppActionHandler>();
+        services.AddScoped<IOcppGateway, OcppGateway>();
+        services.AddSingleton<StationEventBus>();
+        services.AddSingleton<IStationEventStream>(provider =>
+            provider.GetRequiredService<StationEventBus>()
+        );
+        services.AddHostedService<StationEventWorker>();
 
         return services;
     }

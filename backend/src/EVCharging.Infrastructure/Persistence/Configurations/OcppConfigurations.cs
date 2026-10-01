@@ -158,7 +158,7 @@ internal sealed class OcppChargingTransactionConfiguration
             }
         );
         e.HasKey(x => x.Id);
-        e.Property(x => x.Ocpp16TransactionId).UseIdentityByDefaultColumn();
+        e.Property(x => x.Ocpp16TransactionId).ValueGeneratedOnAdd().UseIdentityByDefaultColumn();
         e.Property(x => x.ExternalTransactionId).HasMaxLength(100);
         e.Property(x => x.State).HasMaxLength(32);
         e.Property(x => x.StopReason).HasMaxLength(40);

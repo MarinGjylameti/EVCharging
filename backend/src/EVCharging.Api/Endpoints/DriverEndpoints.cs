@@ -9,6 +9,11 @@ public static class DriverEndpoints
     public static void MapDriverEndpoints(this WebApplication app)
     {
         var driver = app.MapGroup("/api/v1/driver").RequireAuthorization("Driver");
+        driver.MapGet(
+            "/charging-sessions",
+            async (ClaimsPrincipal user, IDriverQueries queries, CancellationToken ct) =>
+                Results.Ok(await queries.GetChargingStateAsync(user.UserId(), ct))
+        );
 
         driver.MapGet(
             "/stations",

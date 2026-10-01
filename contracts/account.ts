@@ -12,7 +12,10 @@ export type Station = {
   id: string; code: string; name: string; city: string; address: string;
   latitude: number; longitude: number; connectorType: string; connectorCount: number;
   powerKW: number; pricePerKWh: number; currency: string;
-  status: "Available" | "Occupied" | "Charging" | "OutOfService" | "Maintenance";
+  status: "Available" | "Occupied" | "Charging" | "OutOfService" | "Maintenance" | "Unknown";
+  statusSource?: string;
+  statusObservedAt?: string | null;
+  statusReceivedAt?: string | null;
   availabilityForecast?: {
     connectorId: number; estimatedAvailableAt: string; observedAt: string;
     source: "Device" | "Demo";
@@ -23,4 +26,15 @@ export type ChargingHistory = {
   id: string; startedAt: string; endedAt: string; energyKWh: number;
   unitPriceSnapshot: number; totalCost: number; currency: string;
   isDemo: boolean; stationId: string; stationCode: string; stationName: string; city: string;
+};
+export type DriverChargingSession = {
+  id: string; stationId: string; stationName: string; stationCode: string;
+  connectorId: number; status: string; energyKWh: number; powerKW: number | null;
+  stateOfCharge: number | null; temperatureCelsius: number | null;
+  startedAt: string; stoppedAt: string | null; lastMeasurementAt: string | null;
+  cost: number | null; currency: string; isDemo: boolean;
+};
+export type DriverChargingState = { canTestSimulator: boolean; sessions: DriverChargingSession[] };
+export type DriverLiveSnapshot = {
+  stations: Station[]; history: ChargingHistory[]; chargingState: DriverChargingState;
 };

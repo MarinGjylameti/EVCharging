@@ -1,3 +1,4 @@
+using EVCharging.Infrastructure.Charging.Ocpp;
 using EVCharging.Infrastructure.Identity;
 using EVCharging.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -6,6 +7,14 @@ namespace EVCharging.Api.Startup;
 
 public static class StartupCommands
 {
+    public static async Task InitializeOcppSimulatorsAsync(this WebApplication app)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        await scope
+            .ServiceProvider.GetRequiredService<OcppSimulatorProvisioner>()
+            .InitializeAsync();
+    }
+
     public static async Task<bool> TryRunStartupCommandAsync(this WebApplication app, string[] args)
     {
         if (args.Contains("--migrate"))

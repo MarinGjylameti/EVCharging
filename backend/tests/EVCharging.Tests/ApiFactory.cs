@@ -1,7 +1,9 @@
+using EVCharging.Infrastructure.Charging.Ocpp;
 using EVCharging.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -9,7 +11,8 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 namespace EVCharging.Tests;
 
 // Test-only storage verifies HTTP/auth behavior, not PostgreSQL constraints or transaction isolation.
-public sealed class ApiFactory : WebApplicationFactory<Program>
+public sealed class ApiFactory(bool simulator = false, bool anonymousSimulators = false)
+    : WebApplicationFactory<Program>
 {
     private readonly string database = Guid.NewGuid().ToString();
 
@@ -23,12 +26,41 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         );
         builder.ConfigureServices(services =>
         {
+            if (simulator)
+            {
+                services.PostConfigure<OcppOptions>(options =>
+                {
+                    options.SimulatorEnabled = true;
+                    options.AllowAnonymousSimulators = anonymousSimulators;
+                    options.SimulatorPassword = "simulator-test-passphrase";
+                });
+            }
             services.RemoveAll<DbContextOptions<ChargingDbContext>>();
             services.RemoveAll<IDbContextOptionsConfiguration<ChargingDbContext>>();
             services.RemoveAll<ChargingDbContext>();
             services.AddDbContext<ChargingDbContext>(options =>
-                options.UseInMemoryDatabase(database)
+                options.UseInMemoryDatabase(database).AddInterceptors(new TestTransactionIds())
             );
         });
+    }
+
+    // InMemory does not implement PostgreSQL identity columns on non-key properties.
+    private sealed class TestTransactionIds : SaveChangesInterceptor
+    {
+        private static int nextId;
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData data,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default
+        )
+        {
+            foreach (
+                var entry in data.Context!.ChangeTracker.Entries<OcppChargingTransaction>()
+                    .Where(x => x.State == EntityState.Added && x.Entity.Ocpp16TransactionId == 0)
+            )
+                entry.Entity.Ocpp16TransactionId = Interlocked.Increment(ref nextId);
+            return ValueTask.FromResult(result);
+        }
     }
 }

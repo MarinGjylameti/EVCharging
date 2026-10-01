@@ -11,7 +11,7 @@ const statuses: Station["status"][] = ["Available","Occupied","Charging","OutOfS
 const labels: Record<Station["status"],{sq:string;en:string}> = {
   Available:{sq:"E lirë",en:"Available"}, Occupied:{sq:"E zënë",en:"Occupied"},
   Charging:{sq:"Në karikim",en:"Charging"}, OutOfService:{sq:"Jashtë funksionit",en:"Out of service"},
-  Maintenance:{sq:"Në mirëmbajtje",en:"Maintenance"}
+  Maintenance:{sq:"Në mirëmbajtje",en:"Maintenance"}, Unknown:{sq:"Pa informacion aktual",en:"No current information"}
 };
 const formOf = (station: Station): Draft => ({code:station.code,name:station.name,city:station.city,
   address:station.address,latitude:station.latitude,longitude:station.longitude,connectorType:station.connectorType,

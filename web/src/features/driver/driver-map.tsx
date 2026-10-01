@@ -2,7 +2,8 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useDriverLiveData } from "./use-driver-live-data";
+import { ChargingPanel } from "./charging-panel";
 import type { ChargingHistory, Language, Station } from "../../../../contracts/account";
 import { albanianCities } from "@/lib/albanian-cities";
 import { remainingChargingMinutes } from "@/lib/availability";
@@ -12,11 +13,11 @@ import { distanceKm, fromWorldPixels, pinchMapView, toWorldPixels, visibleTiles,
 
 const statusSq: Record<Station["status"], string> = {
   Available:"E lirë", Occupied:"E zënë", Charging:"Në karikim",
-  OutOfService:"Jashtë funksionit", Maintenance:"Në mirëmbajtje"
+  OutOfService:"Jashtë funksionit", Maintenance:"Në mirëmbajtje", Unknown:"Pa informacion aktual"
 };
 const statusEn: Record<Station["status"], string> = {
   Available:"Available", Occupied:"Occupied", Charging:"Charging",
-  OutOfService:"Out of service", Maintenance:"Maintenance"
+  OutOfService:"Out of service", Maintenance:"Maintenance", Unknown:"No current information"
 };
 const euro = (value: number) => new Intl.NumberFormat("sq-AL", {minimumFractionDigits:2, maximumFractionDigits:2}).format(value);
 const centerOf = (stations: Station[]): Coordinates => stations.length ? {
@@ -49,9 +50,9 @@ function AvailabilityCard({station,language,nowMs}: {
   </div>;
 }
 
-export function DriverMap({stations, history, language, firstName}: Props) {
+export function DriverMap({stations: initialStations, history: initialHistory, language, firstName}: Props) {
   const sq = language === "sq";
-  const router = useRouter();
+  const { stations, history, chargingState, connected, unavailable } = useDriverLiveData(initialStations, initialHistory);
   const stationCities = useMemo(() => [...new Set(stations.map(x => x.city))].sort((a,b)=>a.localeCompare(b,"sq")), [stations]);
   const cityOptions = useMemo(() => [...new Set([...albanianCities,...stationCities])].sort((a,b)=>a.localeCompare(b,"sq")), [stationCities]);
   const [city, setCity] = useState<string|null>(null);
@@ -86,9 +87,8 @@ export function DriverMap({stations, history, language, firstName}: Props) {
   useEffect(() => {
     setNowMs(Date.now());
     const clock=setInterval(()=>setNowMs(Date.now()),30_000);
-    const refresh=setInterval(()=>router.refresh(),60_000);
-    return () => {clearInterval(clock);clearInterval(refresh);};
-  }, [router]);
+    return () => {clearInterval(clock);};
+  }, []);
   const locate = useCallback(() => {
     if (!navigator.geolocation) { setLocationStatus("unavailable"); return; }
     const request = ++locationRequest.current;
@@ -163,6 +163,7 @@ export function DriverMap({stations, history, language, firstName}: Props) {
       <article><span>{sq ? "TË SHËNUARA TË LIRA" : "MARKED AVAILABLE"}</span><strong className="green">{available}</strong><small>{sq ? "sipas gjendjes së ruajtur" : "from saved status"}</small></article>
       <article><span>{sq ? "KARIKIMET E MIA" : "MY CHARGES"}</span><strong>{sessionCount}</strong><small>{totalEnergy.toFixed(1)} kWh {sq ? "gjithsej" : "total"}</small></article>
     </div>
+    <ChargingPanel stations={stations} state={chargingState} connected={connected} unavailable={unavailable} language={language} />
     <section className="driver-map-section" aria-labelledby="map-title">
       <div className="driver-section-heading"><div><span className="driver-eyebrow">{sq ? "EKSPLORO RRJETIN" : "EXPLORE THE NETWORK"}</span>
         <h2 id="map-title">{sq ? "Pikat e karikimit" : "Charging stations"}</h2></div>
@@ -315,7 +316,7 @@ export function DriverMap({stations, history, language, firstName}: Props) {
           </div>
         </div>
       </div>
-      <div className="map-legend">{(["Available","Occupied","Charging","OutOfService","Maintenance"] as const).map(status=>
+      <div className="map-legend">{(["Available","Occupied","Charging","OutOfService","Maintenance","Unknown"] as const).map(status=>
         <span key={status}><i className={`station-dot status-${status.toLowerCase()}`}/>{(sq?statusSq:statusEn)[status]}</span>)}</div>
     </section>
   </div>;
