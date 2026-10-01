@@ -140,6 +140,11 @@ njëjtën ID për dy lidhje njëkohësisht: lidhja e dytë refuzohet.
    Total kWh `1`, Charging speed `22`, Meter interval `5` sekonda. Përdor
    orën aktuale UTC; mos mbaj një Start time të vjetër. Nëse dërgon matje
    manuale, vendos Phase bosh për matjen totale të energjisë/fuqisë.
+   Matjet `L1`, `L2`, `L3` pranohen gjithashtu: fazat brenda të njëjtit
+   meter value mblidhen, ndërsa një total i raportuar ka përparësi dhe nuk
+   numërohet bashkë me fazat. Një matje vetëm `L1` etiketohet si e tillë;
+   kur `meterStart` nuk është zero, një regjistër i vetëm faze nuk përdoret
+   për të llogaritur diferencën nga regjistri total.
 6. Në [web](https://evcharging-web-demo.onrender.com/driver), hyr me Driver-in
    e `EVCHARGING_Demo__DriverEmail`. Në panelin **Ndiq karikimin**, zgjidh
    `SIM-001` dhe **Lidhu për test**. Ky është bypass i QR; nuk nis vetë pajisjen
@@ -151,6 +156,27 @@ njëjtën ID për dy lidhje njëkohësisht: lidhja e dytë refuzohet.
 8. Përsërit krijimin me `SIM-002` dhe `SIM-003`, me të njëjtën URL bazë dhe
    Tag ID. Nis dy karikime njëkohësisht dhe ndalo vetëm njërin: UI duhet të
    shfaqë dy sesione të ndara dhe të ndryshojë vetëm pikën përkatëse.
+
+### Matjet dhe ora e simulatorit
+
+Nëse logu përmban vetëm `Energy.Active.Import.Register`, UI shfaq energjinë
+gjatë karikimit dhe sqaron që fuqia nuk është raportuar. Parametri
+`Charging speed` i simulatorit nuk është vetë një mesazh `Power.Active.Import`;
+backend-i nuk e paraqet si matje të marrë. SoC dhe temperatura shfaqen vetëm
+kur raportohen nga pajisja.
+
+Koha e pajisjes dhe koha e marrjes nga serveri ruhen veçmas. Paneli live
+llogarit kohëzgjatjen nga marrja e Start/Stop dhe shfaq marrjen e matjes së
+fundit. Nëse ora e pajisjes ndryshon më shumë se pesë minuta, shfaqet një
+udhëzim për të vendosur Start time në orën aktuale. Një lidhje aktive pa
+status të freskët shfaqet në pritje të statusit; nuk quhet e shkëputur.
+Statuset e vjetra nuk e bëjnë pikën të lirë në hartë.
+
+Snapshot-i privat lexon edhe matjet e fazave të ruajtura nga versioni i
+mëparshëm, pa ndryshuar inbox-in origjinal apo historikun përfundimtar.
+`StopTransaction.meterStop` mbetet burimi për energjinë finale dhe koston;
+nëse simulatori dërgon një vlerë ndryshe nga matja e fundit, shfaqet vlera
+finale që ai raportoi. Ky korrigjim nuk kërkon migrim të databazës.
 
 Render e drejton trafikun HTTP dhe WebSocket në të njëjtin port të Web Service.
 Për një lidhje publike përdoret `wss://`, jo IP-ja lokale `192.168.*` e kolegut.

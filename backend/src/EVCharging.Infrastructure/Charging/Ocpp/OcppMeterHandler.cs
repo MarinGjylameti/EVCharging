@@ -55,9 +55,11 @@ public sealed class OcppMeterHandler(ChargingDbContext db, TimeProvider clock)
         IReadOnlyList<ParsedSample> samples
     )
     {
+        var now = clock.GetUtcNow();
+        var records = new List<OcppMeterSample>();
         foreach (var sample in samples)
         {
-            db.OcppMeterSamples.Add(
+            records.Add(
                 new OcppMeterSample
                 {
                     ChargePointId = deviceId,
@@ -67,7 +69,7 @@ public sealed class OcppMeterHandler(ChargingDbContext db, TimeProvider clock)
                     MeterValueIndex = sample.MeterIndex,
                     SampleIndex = sample.SampleIndex,
                     ObservedAt = sample.Timestamp,
-                    ReceivedAt = clock.GetUtcNow(),
+                    ReceivedAt = now,
                     ValueText = sample.Text,
                     NumericValue = sample.Numeric,
                     Measurand = sample.Measurand,
@@ -78,35 +80,22 @@ public sealed class OcppMeterHandler(ChargingDbContext db, TimeProvider clock)
                     Format = sample.Format,
                 }
             );
-            if (
-                transaction is null
-                || transaction.StoppedAt is not null
-                || sample.Phase is not null
-                || sample.Format == "SignedData"
-                || sample.Timestamp < transaction.StartedAt
-                || sample.Timestamp > clock.GetUtcNow().AddMinutes(5)
-                || sample.Timestamp < transaction.LastMeasurementAt
-                || sample.Numeric is not { } value
-                || value < 0
-            )
+        }
+        db.OcppMeterSamples.AddRange(records);
+        if (transaction is null || transaction.StoppedAt is not null)
+            return;
+        foreach (var reading in OcppMeterReading.FromSamples(records, transaction.StartedAt, now))
+        {
+            if (reading.ObservedAt < transaction.LastMeasurementAt)
                 continue;
             if (
-                sample.Measurand == "Energy.Active.Import.Register"
-                && sample.Unit is null or "Wh" or "kWh"
+                reading.SessionEnergy(transaction.MeterStartWh) is { } energy
+                && energy >= (transaction.EnergyKWh ?? 0)
             )
-            {
-                var wh = sample.Unit == "kWh" ? value * 1000 : value;
-                var energy = (wh - transaction.MeterStartWh) / 1000m;
-                if (energy >= (transaction.EnergyKWh ?? 0) && energy < 1_000_000_000_000m)
-                    transaction.EnergyKWh = decimal.Round(energy, 6);
-            }
-            if (sample.Measurand == "Power.Active.Import" && sample.Unit is "W" or "kW")
-            {
-                var power = sample.Unit == "W" ? value / 1000 : value;
-                if (power < 999_999_999m)
-                    transaction.CurrentPowerKW = decimal.Round(power, 3);
-            }
-            transaction.LastMeasurementAt = sample.Timestamp;
+                transaction.EnergyKWh = energy;
+            if (reading.Measurand == "Power.Active.Import")
+                transaction.CurrentPowerKW = decimal.Round(reading.Value, 3);
+            transaction.LastMeasurementAt = reading.ObservedAt;
         }
     }
 }

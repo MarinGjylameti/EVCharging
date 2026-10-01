@@ -44,6 +44,13 @@ public sealed class DriverQueries(
             .OcppConnectors.AsNoTracking()
             .Where(x => x.StationId != null && stationIds.Contains(x.StationId.Value))
             .ToListAsync(ct);
+        var deviceIds = latest.Select(x => x.ChargePointId).Distinct().ToArray();
+        var devices = await db
+            .OcppChargePoints.AsNoTracking()
+            .Where(x => deviceIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, ct);
+        var now = clock.GetUtcNow();
+        var liveCutoff = now.AddSeconds(-options.Value.OfflineSeconds);
         var result = new List<DriverChargingSession>();
         foreach (var transaction in latest)
         {
@@ -55,22 +62,52 @@ public sealed class DriverQueries(
             );
             var status =
                 transaction.StoppedAt is not null ? "Stopped"
-                : station.Status == PointState.Unknown ? "Disconnected"
-                : connector?.ReportedStatus ?? "Preparing";
+                : !devices.TryGetValue(transaction.ChargePointId, out var device)
+                || !device.IsEnabled
+                || device.LastSeenAt is null
+                || device.LastSeenAt < liveCutoff
+                    ? "Disconnected"
+                : connector?.ReportedStatus ?? "AwaitingStatus";
             var samples = await db
                 .OcppMeterSamples.AsNoTracking()
                 .Where(x =>
                     x.TransactionId == transaction.Id
-                    && (x.Measurand == "SoC" || x.Measurand == "Temperature")
                     && x.NumericValue != null
                     && x.Format != "SignedData"
-                    && x.Phase == null
                     && x.ObservedAt >= transaction.StartedAt
-                    && x.ObservedAt <= clock.GetUtcNow().AddMinutes(5)
+                    && x.ObservedAt <= now.AddMinutes(5)
                 )
                 .OrderByDescending(x => x.ObservedAt)
-                .Take(20)
+                .ThenByDescending(x => x.ReceivedAt)
+                .Take(256)
                 .ToListAsync(ct);
+            // Also interpret already stored phase readings from before this fix.
+            // Reading the snapshot does not mutate the original telemetry or history.
+            var readings = OcppMeterReading.FromSamples(samples, transaction.StartedAt, now);
+            var energyReading = readings.LastOrDefault(x =>
+                x.Measurand == "Energy.Active.Import.Register"
+            );
+            var powerReading = readings.LastOrDefault(x => x.Measurand == "Power.Active.Import");
+            var energy = transaction.StoppedAt is not null
+                ? transaction.EnergyKWh
+                : energyReading?.SessionEnergy(transaction.MeterStartWh);
+            if (transaction.StoppedAt is null && energyReading is null)
+                energy = transaction.EnergyKWh;
+            else if (
+                transaction.StoppedAt is null
+                && energy is not null
+                && transaction.EnergyKWh > energy
+            )
+                energy = transaction.EnergyKWh;
+            var lastReading = readings.LastOrDefault();
+            var clockSkewed =
+                (transaction.StartReceivedAt - transaction.StartedAt).Duration()
+                    > TimeSpan.FromMinutes(5)
+                || (
+                    lastReading is not null
+                    && (lastReading.ReceivedAt - lastReading.ObservedAt).Duration()
+                        > TimeSpan.FromMinutes(5)
+                );
             result.Add(
                 new DriverChargingSession(
                     transaction.Id,
@@ -79,26 +116,37 @@ public sealed class DriverQueries(
                     station.Code,
                     transaction.ConnectorNumber,
                     status,
-                    transaction.EnergyKWh ?? 0,
-                    status == "Disconnected" ? null : transaction.CurrentPowerKW,
+                    energy,
+                    status == "Disconnected" ? null
+                        : transaction.StoppedAt is not null ? 0
+                        : powerReading?.Value ?? transaction.CurrentPowerKW,
                     samples
                         .FirstOrDefault(x =>
                             x.Measurand == "SoC"
+                            && x.Phase == null
                             && x.NumericValue is >= 0 and <= 100
                             && x.Unit is (null or "Percent")
                         )
                         ?.NumericValue,
                     samples
                         .FirstOrDefault(x =>
-                            x.Measurand == "Temperature" && x.Unit is null or "Celsius"
+                            x.Measurand == "Temperature"
+                            && x.Phase == null
+                            && x.Unit is null or "Celsius"
                         )
                         ?.NumericValue,
                     transaction.StartedAt,
                     transaction.StoppedAt,
-                    transaction.LastMeasurementAt,
+                    lastReading?.ObservedAt ?? transaction.LastMeasurementAt,
                     transaction.CalculatedCost,
                     transaction.Currency ?? "EUR",
-                    station.IsDemo
+                    station.IsDemo,
+                    transaction.StartReceivedAt,
+                    transaction.StopReceivedAt,
+                    lastReading?.ReceivedAt,
+                    clockSkewed,
+                    transaction.StoppedAt is not null ? "Total" : energyReading?.Scope,
+                    powerReading?.Scope
                 )
             );
         }

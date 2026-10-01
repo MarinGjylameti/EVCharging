@@ -9,13 +9,18 @@ const labels: Record<string, [string, string]> = {
   SuspendedEVSE: ["Karikimi në pauzë nga pika", "Paused by charger"],
   Finishing: ["Duke përfunduar", "Finishing"], Stopped: ["Karikimi përfundoi", "Charge finished"],
   Disconnected: ["Pajisja nuk është e lidhur", "Device disconnected"],
+  AwaitingStatus: ["Pajisja është lidhur · në pritje të statusit", "Device connected · awaiting status"],
   Faulted: ["Pajisja ka raportuar defekt", "Charger reported a fault"],
   Unavailable: ["Pajisja është jashtë shërbimit", "Charger unavailable"],
 };
 
 function SessionCard({ session, sq, now }: { session: DriverChargingSession; sq: boolean; now: number }) {
-  const end = session.stoppedAt ? Date.parse(session.stoppedAt) : now;
-  const seconds = Math.max(0, Math.floor((end - Date.parse(session.startedAt)) / 1000));
+  // Receipt times measure this live connection even when the simulator clock is old.
+  // Keep source times available in the API for device history and diagnostics.
+  const start = session.startReceivedAt ?? session.startedAt;
+  const stop = session.stopReceivedAt ?? session.stoppedAt;
+  const end = stop ? Date.parse(stop) : now;
+  const seconds = Math.max(0, Math.floor((end - Date.parse(start)) / 1000));
   const duration = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
   const state = labels[session.status]?.[sq ? 0 : 1] ?? session.status;
   const format = (value: number) => new Intl.NumberFormat(sq ? "sq-AL" : "en", { maximumFractionDigits: 3 }).format(value);
@@ -25,8 +30,8 @@ function SessionCard({ session, sq, now }: { session: DriverChargingSession; sq:
       <span className="charging-state"><i aria-hidden="true" />{state}</span>
     </div>
     <div className="charging-metrics">
-      <div><span>{sq ? "ENERGJIA" : "ENERGY"}</span><strong>{format(session.energyKWh)} <small>kWh</small></strong></div>
-      <div><span>{sq ? "FUQIA AKTUALE" : "CURRENT POWER"}</span><strong>{session.powerKW === null ? "—" : format(session.powerKW)} <small>kW</small></strong></div>
+      <div><span>{sq ? "ENERGJIA" : "ENERGY"}{session.energyScope && session.energyScope !== "Total" && ` · ${session.energyScope}`}</span><strong>{session.energyKWh === null ? "—" : format(session.energyKWh)} <small>kWh</small></strong></div>
+      <div><span>{sq ? "FUQIA AKTUALE" : "CURRENT POWER"}{session.powerScope && session.powerScope !== "Total" && ` · ${session.powerScope}`}</span><strong>{session.powerKW === null ? "—" : format(session.powerKW)} <small>kW</small></strong></div>
       <div><span>{sq ? "KOHA" : "DURATION"}</span><strong>{duration}</strong></div>
       {session.stateOfCharge !== null && <div><span>{sq ? "BATERIA" : "BATTERY"}</span><strong>{format(session.stateOfCharge)}<small>%</small></strong></div>}
       {session.temperatureCelsius !== null && <div><span>{sq ? "TEMPERATURA" : "TEMPERATURE"}</span><strong>{format(session.temperatureCelsius)}<small>°C</small></strong></div>}
@@ -36,8 +41,11 @@ function SessionCard({ session, sq, now }: { session: DriverChargingSession; sq:
         (sq ? "Matjet fundore duhen verifikuar." : "Final measurements need verification.") :
         (sq ? "Matjet përditësohen kur i dërgon pajisja." : "Measurements update when reported by the device.")}
       {session.stoppedAt && session.cost !== null && ` · ${format(session.cost)} ${session.currency}`}
-      {session.lastMeasurementAt && <> · {sq ? "Matja e fundit" : "Last measurement"}: {new Date(session.lastMeasurementAt).toLocaleTimeString(sq ? "sq-AL" : "en")}</>}
+      {(session.lastMeasurementReceivedAt ?? session.lastMeasurementAt) && <> · {sq ? "Matja e fundit u mor" : "Last measurement received"}: {new Date((session.lastMeasurementReceivedAt ?? session.lastMeasurementAt)!).toLocaleTimeString(sq ? "sq-AL" : "en")}</>}
     </p>
+    {session.energyScope && session.energyScope !== "Total" && <p className="charging-session-note">{sq ? `Matja mbulon vetëm ${session.energyScope}; totali shfaqet kur e dërgon pajisja.` : `Reading covers ${session.energyScope} only; total appears when reported by the device.`}</p>}
+    {!session.stoppedAt && session.powerKW === null && <p className="charging-session-note">{sq ? "Pajisja nuk ka dërguar matje të fuqisë aktuale." : "The device has not reported current power."}</p>}
+    {session.deviceClockSkewed && <p className="charging-session-note" role="status">{sq ? "Ora e pajisjes ndryshon nga ora e serverit. Në simulator vendos Start time në orën aktuale. Koha këtu llogaritet nga marrja e mesazheve." : "Device time differs from server time. Set the simulator Start time to the current time. Duration here uses message receipt times."}</p>}
   </article>;
 }
 
@@ -64,7 +72,7 @@ export function ChargingPanel({ stations, state, connected, unavailable, languag
       <h2 id="charging-title">{sq ? "Ndiq karikimin" : "Follow your charge"}</h2>
     </div><span className={`charging-live ${connected && !unavailable ? "is-live" : ""}`} role="status">
       <i aria-hidden="true" />{unavailable ? (sq ? "Lidhja po rikthehet…" : "Reconnecting…") :
-        connected ? (sq ? "Në kohë reale" : "Live updates") : (sq ? "Po rilidhet…" : "Reconnecting…")}
+        connected ? (sq ? "Përditësime aktive" : "Live updates") : (sq ? "Po rilidhet…" : "Reconnecting…")}
     </span></div>
     {state.canTestSimulator && <div className="charging-test-controls">
       <label><span>{sq ? "Pika për testim" : "Test charge point"}</span>
@@ -85,7 +93,7 @@ export function ChargingPanel({ stations, state, connected, unavailable, languag
         <button type="button" className="text-button" onClick={() => setLinked(ids => ids.filter(value => value !== id))}>{sq ? "Hiq" : "Remove"}</button></div>;
     })}
     <div className="charging-session-list">
-      {state.sessions.map(session => <SessionCard key={session.id} session={session} sq={sq} now={now || Date.parse(session.startedAt)} />)}
+      {state.sessions.map(session => <SessionCard key={session.id} session={session} sq={sq} now={now || Date.parse(session.startReceivedAt ?? session.startedAt)} />)}
     </div>
     {state.sessions.length === 0 && waiting.length === 0 && <p className="charging-session-note">{sq ? "Zgjidh një pikë testimi. Karikimi do të shfaqet këtu sapo të fillojë." : "Choose a test point. Your charge appears here when it starts."}</p>}
   </section>;

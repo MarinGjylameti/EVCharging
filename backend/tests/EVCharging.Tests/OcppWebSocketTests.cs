@@ -276,6 +276,250 @@ public sealed class OcppWebSocketTests : IDisposable
     }
 
     [Fact]
+    public async Task SimulatorPhaseReadingsAppearWhileChargingEvenWithAnOldDeviceClock()
+    {
+        using var driver = await DriverAsync();
+        using var socket = await ConnectAsync();
+        var serverStart = DateTimeOffset.UtcNow;
+        var deviceStart = serverStart.AddMinutes(-68);
+        var start = await CallAsync(
+            socket,
+            "StartTransaction",
+            new
+            {
+                connectorId = 1,
+                idTag = "TAG-001",
+                meterStart = 0,
+                timestamp = deviceStart,
+            }
+        );
+        var transactionId = start[2].GetProperty("transactionId").GetInt32();
+        await StatusAsync(socket, "Charging", deviceStart.AddSeconds(2));
+        var deviceReadingTime = deviceStart;
+        foreach (var wh in new[] { 31, 61, 6906 })
+        {
+            deviceReadingTime = deviceReadingTime.AddSeconds(5);
+            var reply = await CallAsync(
+                socket,
+                "MeterValues",
+                new
+                {
+                    connectorId = 1,
+                    transactionId,
+                    meterValue = new[]
+                    {
+                        new
+                        {
+                            timestamp = deviceReadingTime,
+                            sampledValue = new[]
+                            {
+                                new
+                                {
+                                    value = wh.ToString(),
+                                    context = "Sample.Periodic",
+                                    measurand = "Energy.Active.Import.Register",
+                                    phase = "L1",
+                                    location = "Outlet",
+                                    unit = "Wh",
+                                },
+                            },
+                        },
+                    },
+                }
+            );
+            Assert.Equal(3, reply[0].GetInt32());
+        }
+        var state = (
+            await driver.GetFromJsonAsync<DriverChargingState>(
+                "/api/v1/driver/charging-sessions",
+                timeout.Token
+            )
+        )!;
+        var session = Assert.Single(state.Sessions);
+        Assert.Equal(6.906m, session.EnergyKWh);
+        Assert.Equal("L1", session.EnergyScope);
+        Assert.Null(session.PowerKW); // This simulator trace never reports power.
+        Assert.Equal("AwaitingStatus", session.Status);
+        Assert.True(session.DeviceClockSkewed);
+        Assert.InRange(session.StartReceivedAt, serverStart, DateTimeOffset.UtcNow);
+        Assert.True(session.LastMeasurementReceivedAt >= serverStart);
+        Assert.Equal("Unknown", await StationStatusAsync(driver, "SIM-001"));
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ChargingDbContext>();
+            var transaction = await db.OcppChargingTransactions.SingleAsync(timeout.Token);
+            Assert.Equal(6.906m, transaction.EnergyKWh);
+            Assert.All(
+                await db.OcppMeterSamples.ToListAsync(timeout.Token),
+                sample => Assert.Equal("L1", sample.Phase)
+            );
+            // Older deployments already stored these frames but left the summary at zero.
+            transaction.EnergyKWh = 0;
+            transaction.LastMeasurementAt = null;
+            await db.SaveChangesAsync(timeout.Token);
+        }
+        session = Assert.Single(
+            (
+                await driver.GetFromJsonAsync<DriverChargingState>(
+                    "/api/v1/driver/charging-sessions",
+                    timeout.Token
+                )
+            )!.Sessions
+        );
+        Assert.Equal(6.906m, session.EnergyKWh);
+        Assert.NotNull(session.LastMeasurementAt);
+        await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);
+        session = Assert.Single(
+            (
+                await driver.GetFromJsonAsync<DriverChargingState>(
+                    "/api/v1/driver/charging-sessions",
+                    timeout.Token
+                )
+            )!.Sessions
+        );
+        Assert.Equal("Disconnected", session.Status);
+        Assert.Equal(6.906m, session.EnergyKWh);
+    }
+
+    [Fact]
+    public async Task PhaseTotalsUseMatchingUnitsAndDoNotAddTheAggregateTwice()
+    {
+        using var driver = await DriverAsync();
+        using var socket = await ConnectAsync();
+        var started = DateTimeOffset.UtcNow;
+        var start = await CallAsync(
+            socket,
+            "StartTransaction",
+            new
+            {
+                connectorId = 1,
+                idTag = "TAG-001",
+                meterStart = 1000,
+                timestamp = started,
+            }
+        );
+        var transactionId = start[2].GetProperty("transactionId").GetInt32();
+        async Task<DriverChargingSession> MeterAsync(object[] samples, int seconds)
+        {
+            Assert.Equal(3, (
+                    await CallAsync(
+                        socket,
+                        "MeterValues",
+                        new
+                        {
+                            connectorId = 1,
+                            transactionId,
+                            meterValue = new[]
+                            {
+                                new
+                                {
+                                    timestamp = started.AddSeconds(seconds),
+                                    sampledValue = samples,
+                                },
+                            },
+                        }
+                    )
+                )[0].GetInt32());
+            return Assert.Single(
+                (
+                    await driver.GetFromJsonAsync<DriverChargingState>(
+                        "/api/v1/driver/charging-sessions",
+                        timeout.Token
+                    )
+                )!.Sessions
+            );
+        }
+        var partial = await MeterAsync(
+            [
+                new
+                {
+                    value = "1500",
+                    phase = "L1",
+                    unit = "Wh",
+                },
+            ],
+            1
+        );
+        Assert.Null(partial.EnergyKWh); // Total meterStart cannot be subtracted from one phase.
+        Assert.Equal("L1", partial.EnergyScope);
+        var phases = await MeterAsync(
+            [
+                new
+                {
+                    value = "1000",
+                    phase = "L1",
+                    unit = "Wh",
+                },
+                new
+                {
+                    value = "1.5",
+                    phase = "L2",
+                    unit = "kWh",
+                },
+                new
+                {
+                    value = "500",
+                    phase = "L3",
+                    unit = "Wh",
+                },
+                new
+                {
+                    value = "7000",
+                    phase = "L1",
+                    unit = "W",
+                    measurand = "Power.Active.Import",
+                },
+                new
+                {
+                    value = "7.5",
+                    phase = "L2",
+                    unit = "kW",
+                    measurand = "Power.Active.Import",
+                },
+                new
+                {
+                    value = "7500",
+                    phase = "L3",
+                    unit = "W",
+                    measurand = "Power.Active.Import",
+                },
+            ],
+            2
+        );
+        Assert.Equal(2m, phases.EnergyKWh);
+        Assert.Equal(22m, phases.PowerKW);
+        Assert.Equal("Total", phases.EnergyScope);
+        var total = await MeterAsync(
+            [
+                new { value = "5000", unit = "Wh" },
+                new
+                {
+                    value = "10000",
+                    phase = "L1",
+                    unit = "Wh",
+                },
+                new
+                {
+                    value = "10000",
+                    phase = "L2",
+                    unit = "Wh",
+                },
+                new
+                {
+                    value = "10000",
+                    phase = "L3",
+                    unit = "Wh",
+                },
+            ],
+            3
+        );
+        Assert.Equal(4m, total.EnergyKWh);
+        var old = await MeterAsync([new { value = "2000", unit = "Wh" }], 1);
+        Assert.Equal(4m, old.EnergyKWh);
+        await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);
+    }
+
+    [Fact]
     public async Task CommittedWebSocketStatusReachesAuthenticatedEventStream()
     {
         using var driver = await DriverAsync();

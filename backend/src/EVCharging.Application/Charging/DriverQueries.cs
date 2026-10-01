@@ -58,7 +58,7 @@ public sealed record DriverChargingSession(
     string StationCode,
     int ConnectorId,
     string Status,
-    decimal EnergyKWh,
+    decimal? EnergyKWh,
     decimal? PowerKW,
     decimal? StateOfCharge,
     decimal? TemperatureCelsius,
@@ -67,5 +67,11 @@ public sealed record DriverChargingSession(
     DateTimeOffset? LastMeasurementAt,
     decimal? Cost,
     string Currency,
-    bool IsDemo
+    bool IsDemo,
+    DateTimeOffset StartReceivedAt,
+    DateTimeOffset? StopReceivedAt,
+    DateTimeOffset? LastMeasurementReceivedAt,
+    bool DeviceClockSkewed,
+    string? EnergyScope,
+    string? PowerScope
 );

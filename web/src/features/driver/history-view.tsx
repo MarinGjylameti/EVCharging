@@ -2,6 +2,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { ChargingHistory, Language } from "../../../../contracts/account";
+import { HistoryChart } from "./history-chart";
 
 export function HistoryView({history, language}: {history:ChargingHistory[];language:Language}) {
   const sq=language==="sq";
@@ -23,6 +24,7 @@ export function HistoryView({history, language}: {history:ChargingHistory[];lang
       <article><span>{sq?"ENERGJI TOTALE":"TOTAL ENERGY"}</span><strong>{number(totalEnergy)}<small className="unit"> kWh</small></strong><small>{sq?"nga seancat e tua":"from your sessions"}</small></article>
       <article><span>{sq?"KOSTO E LLOGARITUR":"CALCULATED COST"}</span><strong>€{number(totalCost,2)}</strong><small>{sq?"pa pagesë elektronike":"no electronic payment"}</small></article>
     </div>
+    <HistoryChart history={history} language={language} />
     {history.length ? <div className="history-layout">
       <section className="history-list" aria-label={sq?"Seancat e karikimit":"Charging sessions"}>
         <div className="history-list-head"><span className="driver-eyebrow">{sq?"AKTIVITETI I FUNDIT":"RECENT ACTIVITY"}</span>

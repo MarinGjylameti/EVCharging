@@ -29,10 +29,12 @@ export type ChargingHistory = {
 };
 export type DriverChargingSession = {
   id: string; stationId: string; stationName: string; stationCode: string;
-  connectorId: number; status: string; energyKWh: number; powerKW: number | null;
+  connectorId: number; status: string; energyKWh: number | null; powerKW: number | null;
   stateOfCharge: number | null; temperatureCelsius: number | null;
   startedAt: string; stoppedAt: string | null; lastMeasurementAt: string | null;
   cost: number | null; currency: string; isDemo: boolean;
+  startReceivedAt?: string; stopReceivedAt?: string | null; lastMeasurementReceivedAt?: string | null;
+  deviceClockSkewed?: boolean; energyScope?: string | null; powerScope?: string | null;
 };
 export type DriverChargingState = { canTestSimulator: boolean; sessions: DriverChargingSession[] };
 export type DriverLiveSnapshot = {
