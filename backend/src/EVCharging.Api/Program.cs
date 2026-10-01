@@ -15,11 +15,14 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddEnvironmentVariables("EVCHARGING_");
+var configuredConnection = builder.Configuration.GetConnectionString("Default") ?? builder.Configuration["DATABASE_URL"];
+var connectionString = string.IsNullOrWhiteSpace(configuredConnection)
+    ? null : DatabaseConnection.Normalize(configuredConnection);
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 32_768);
 builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow);
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddDbContext<ChargingDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("Default")
+    options.UseNpgsql(connectionString
         ?? "Host=127.0.0.1;Port=5440;Database=evcharging_dev;Username=evcharging;Timeout=3"));
 builder.Services.AddScoped<IPasswordHasher<Account>, PasswordHasher<Account>>();
 builder.Services.AddOptions<EVCharging.Infrastructure.Identity.SessionOptions>().BindConfiguration("Sessions")
@@ -51,7 +54,7 @@ builder.Services.AddRateLimiter(options =>
 var origins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 if (!builder.Environment.IsDevelopment() && !builder.Environment.IsEnvironment("Testing"))
 {
-    if (string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("Default")))
+    if (string.IsNullOrWhiteSpace(connectionString))
         throw new InvalidOperationException("Production requires an explicit database connection string.");
     if (origins.Any(x => !Uri.TryCreate(x, UriKind.Absolute, out var uri) || uri.Scheme != "https" || uri.IsLoopback))
         throw new InvalidOperationException("Production CORS origins must use HTTPS.");
@@ -102,6 +105,11 @@ if (args.Contains("--bootstrap-superadmin"))
     db.Accounts.Add(account);
     db.Audit.Add(new AuditEntry { ActorId = account.Id, ActorRole = "Superadmin", EntityId = account.Id, Action = "SuperadminBootstrapped" });
     await db.SaveChangesAsync();
+    return;
+}
+if (args.Contains("--seed-demo"))
+{
+    await DemoDataSeeder.SeedAsync(app.Services, builder.Configuration);
     return;
 }
 app.Run();
