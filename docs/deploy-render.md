@@ -31,9 +31,10 @@ Krijo **New Web Service** nga e njëjta repo private:
 | Project / Environment | `EVCharging` / `Demo` |
 | Region | Frankfurt, njësoj si databaza |
 | Branch | `main` |
-| Root Directory | `backend` |
+| Root Directory | Lëre bosh; Docker merr vetëm kontekstin `backend` |
 | Language / Runtime | Docker |
-| Dockerfile | `Dockerfile` brenda `backend` |
+| Dockerfile Path | `backend/Dockerfile` (nga rrënja e repo-s) |
+| Docker Build Context Directory | `backend` |
 | Instance Type | Free |
 | Health Check Path | `/health/ready` |
 
