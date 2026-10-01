@@ -28,8 +28,14 @@ public sealed class AvailabilityForecastTests
     {
         var now = DateTimeOffset.UtcNow;
         var station = new ChargingStation { ConnectorCount = 2, Status = PointState.Charging };
-        Assert.Throws<ArgumentException>(() => AvailabilityForecastRules.SetDeviceEstimate(station, 3, now.AddMinutes(40), now));
-        Assert.Throws<ArgumentException>(() => AvailabilityForecastRules.SetDeviceEstimate(station, 1, now.AddHours(25), now));
-        Assert.Throws<ArgumentException>(() => AvailabilityForecastRules.SetDeviceEstimate(station, 1, now.AddMinutes(-1), now));
+        Assert.Throws<ArgumentException>(() =>
+            AvailabilityForecastRules.SetDeviceEstimate(station, 3, now.AddMinutes(40), now)
+        );
+        Assert.Throws<ArgumentException>(() =>
+            AvailabilityForecastRules.SetDeviceEstimate(station, 1, now.AddHours(25), now)
+        );
+        Assert.Throws<ArgumentException>(() =>
+            AvailabilityForecastRules.SetDeviceEstimate(station, 1, now.AddMinutes(-1), now)
+        );
     }
 }

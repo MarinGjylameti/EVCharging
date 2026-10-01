@@ -4,8 +4,13 @@ namespace EVCharging.Domain.Notifications;
 
 public enum NotificationKind
 {
-    PointOutOfService, ChargerFaulted, ChargingStarted, ChargingCompleted,
-    UnexpectedDisconnect, ManualStatusChanged, PriceChanged
+    PointOutOfService,
+    ChargerFaulted,
+    ChargingStarted,
+    ChargingCompleted,
+    UnexpectedDisconnect,
+    ManualStatusChanged,
+    PriceChanged,
 }
 
 public sealed class DeviceRegistration
@@ -47,22 +52,65 @@ public sealed record NotificationText(string Title, string Body);
 public static class NotificationTemplates
 {
     // Keep lock-screen payloads generic. Private details are fetched after authentication.
-    public static NotificationText Get(NotificationKind kind, AppLanguage language) => (kind, language) switch
-    {
-        (NotificationKind.PointOutOfService, AppLanguage.Sq) => new("Pika jashtë funksionit", "Një pikë karikimi ka dalë jashtë funksionit."),
-        (NotificationKind.ChargerFaulted, AppLanguage.Sq) => new("Defekt në karikues", "U raportua një defekt. Hap aplikacionin për detajet."),
-        (NotificationKind.ChargingStarted, AppLanguage.Sq) => new("Karikimi filloi", "Karikimi ka filluar. Mund ta monitorosh në aplikacion."),
-        (NotificationKind.ChargingCompleted, AppLanguage.Sq) => new("Karikimi përfundoi", "Përmbledhja e karikimit është gati në aplikacion."),
-        (NotificationKind.UnexpectedDisconnect, AppLanguage.Sq) => new("Karikimi u ndërpre", "U raportua një shkëputje e papritur."),
-        (NotificationKind.ManualStatusChanged, AppLanguage.Sq) => new("Gjendja u ndryshua", "Një administrator ndryshoi gjendjen e pikës."),
-        (NotificationKind.PriceChanged, AppLanguage.Sq) => new("Çmimi u ndryshua", "Çmimi i një pike karikimi u përditësua."),
-        (NotificationKind.PointOutOfService, AppLanguage.En) => new("Charge point out of service", "A charge point is now out of service."),
-        (NotificationKind.ChargerFaulted, AppLanguage.En) => new("Charger fault", "A fault was reported. Open the app for details."),
-        (NotificationKind.ChargingStarted, AppLanguage.En) => new("Charging started", "Charging has started. Follow the session in the app."),
-        (NotificationKind.ChargingCompleted, AppLanguage.En) => new("Charging completed", "Your charging summary is ready in the app."),
-        (NotificationKind.UnexpectedDisconnect, AppLanguage.En) => new("Charging interrupted", "An unexpected disconnection was reported."),
-        (NotificationKind.ManualStatusChanged, AppLanguage.En) => new("Status changed", "An administrator changed the charge point status."),
-        (NotificationKind.PriceChanged, AppLanguage.En) => new("Price updated", "A charge point price was updated."),
-        _ => throw new ArgumentOutOfRangeException(nameof(kind))
-    };
+    public static NotificationText Get(NotificationKind kind, AppLanguage language) =>
+        (kind, language) switch
+        {
+            (NotificationKind.PointOutOfService, AppLanguage.Sq) => new(
+                "Pika jashtë funksionit",
+                "Një pikë karikimi ka dalë jashtë funksionit."
+            ),
+            (NotificationKind.ChargerFaulted, AppLanguage.Sq) => new(
+                "Defekt në karikues",
+                "U raportua një defekt. Hap aplikacionin për detajet."
+            ),
+            (NotificationKind.ChargingStarted, AppLanguage.Sq) => new(
+                "Karikimi filloi",
+                "Karikimi ka filluar. Mund ta monitorosh në aplikacion."
+            ),
+            (NotificationKind.ChargingCompleted, AppLanguage.Sq) => new(
+                "Karikimi përfundoi",
+                "Përmbledhja e karikimit është gati në aplikacion."
+            ),
+            (NotificationKind.UnexpectedDisconnect, AppLanguage.Sq) => new(
+                "Karikimi u ndërpre",
+                "U raportua një shkëputje e papritur."
+            ),
+            (NotificationKind.ManualStatusChanged, AppLanguage.Sq) => new(
+                "Gjendja u ndryshua",
+                "Një administrator ndryshoi gjendjen e pikës."
+            ),
+            (NotificationKind.PriceChanged, AppLanguage.Sq) => new(
+                "Çmimi u ndryshua",
+                "Çmimi i një pike karikimi u përditësua."
+            ),
+            (NotificationKind.PointOutOfService, AppLanguage.En) => new(
+                "Charge point out of service",
+                "A charge point is now out of service."
+            ),
+            (NotificationKind.ChargerFaulted, AppLanguage.En) => new(
+                "Charger fault",
+                "A fault was reported. Open the app for details."
+            ),
+            (NotificationKind.ChargingStarted, AppLanguage.En) => new(
+                "Charging started",
+                "Charging has started. Follow the session in the app."
+            ),
+            (NotificationKind.ChargingCompleted, AppLanguage.En) => new(
+                "Charging completed",
+                "Your charging summary is ready in the app."
+            ),
+            (NotificationKind.UnexpectedDisconnect, AppLanguage.En) => new(
+                "Charging interrupted",
+                "An unexpected disconnection was reported."
+            ),
+            (NotificationKind.ManualStatusChanged, AppLanguage.En) => new(
+                "Status changed",
+                "An administrator changed the charge point status."
+            ),
+            (NotificationKind.PriceChanged, AppLanguage.En) => new(
+                "Price updated",
+                "A charge point price was updated."
+            ),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+        };
 }

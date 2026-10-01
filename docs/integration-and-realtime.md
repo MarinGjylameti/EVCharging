@@ -65,6 +65,12 @@ Nuk shtohen RemoteStart/RemoteStop/rezervim/pagesë nga ky propozim. Nëse prodh
 
 SignalR dërgon evente vetëm pas commit-it: `PointChanged`, `SessionChanged`, `PriceChanged`, `NotificationCreated` dhe invalidim të përmbledhjes kur duhet. Envelope përmban eventId, entityId, entityVersion, occurredAt dhe DTO të kufizuar.
 
+Për pajisjet OCPP, ndryshimi i statusit dhe rreshti `realtime_outbox` ruhen në
+të njëjtin transaksion. Dispatcher-i e publikon rreshtin pas commit-it dhe
+retry nuk ndryshon statusin në databazë. [Skema e simulatorit](ocpp-simulator-database.md)
+ndan WebSocket-in e pajisjes nga kanali SignalR i shfletuesit. As endpoint-i
+OCPP, as hub-i dhe dispatcher-i nuk janë implementuar ende.
+
 - Hartës i dërgohen vetëm gjendje/disponueshmëri/çmim/koordinata të publikueshme. Asnjë driverId ose telemetri personale në grupin e përgjithshëm.
 - Driver merr vetëm sesionet me pronësi të verifikuar. Admin merr evente vetëm për scope aktual; Superadmin globale. Subscribe nuk i beson grupit ose pikës që kërkon klienti.
 - Autentikimi bëhet gjatë handshake dhe rivlerësohet për subscribe/dispatch. Revokimi i llogarisë/caktimit pas commit-it heq subscriptions, ndalon dërgimet private dhe mbyll lidhjen kur nevojitet; dispatcher koordinon versionin e aksesit me revokimin. Një socket i hapur nuk ruan leje përgjithmonë.

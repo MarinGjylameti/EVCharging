@@ -18,8 +18,17 @@ public sealed class StationManagementTests : IDisposable
     private async Task<(HttpClient Client, Guid UserId)> Login(string email, UserRole role)
     {
         var client = factory.CreateClient();
-        var response = await client.PostAsJsonAsync("/api/v1/auth/register",
-            new { email, password = "a-long-demo-passphrase", firstName = "Demo", lastName = "User", language = "sq" });
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/auth/register",
+            new
+            {
+                email,
+                password = "a-long-demo-passphrase",
+                firstName = "Demo",
+                lastName = "User",
+                language = "sq",
+            }
+        );
         var auth = (await response.Content.ReadFromJsonAsync<AuthResult>())!;
         using (var scope = factory.Services.CreateScope())
         {
@@ -27,16 +36,34 @@ public sealed class StationManagementTests : IDisposable
             (await db.Accounts.SingleAsync(x => x.Id == auth.User.Id)).Role = role;
             await db.SaveChangesAsync();
         }
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.AccessToken);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            auth.AccessToken
+        );
         return (client, auth.User.Id);
     }
 
-    private static object Input(string code = "TIR-001", decimal price = 0.35m, string status = "Available", long version = 0) => new
-    {
-        code, name = "Qendra", city = "Tiranë", address = "Sheshi Skënderbej",
-        latitude = 41.3275, longitude = 19.8187, connectorType = "CCS2",
-        connectorCount = 2, powerKW = 120, pricePerKWh = price, status, version
-    };
+    private static object Input(
+        string code = "TIR-001",
+        decimal price = 0.35m,
+        string status = "Available",
+        long version = 0
+    ) =>
+        new
+        {
+            code,
+            name = "Qendra",
+            city = "Tiranë",
+            address = "Sheshi Skënderbej",
+            latitude = 41.3275,
+            longitude = 19.8187,
+            connectorType = "CCS2",
+            connectorCount = 2,
+            powerKW = 120,
+            pricePerKWh = price,
+            status,
+            version,
+        };
 
     [Fact]
     public async Task SuperadminCreatesUpdatesAndArchivesWithAuditAndVersion()
@@ -52,29 +79,81 @@ public sealed class StationManagementTests : IDisposable
         using (var scope = factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<ChargingDbContext>();
-            db.ChargingHistory.Add(new ChargingHistory
-            {
-                DriverId = driverId, StationId = id, StartedAt = DateTimeOffset.UtcNow.AddHours(-1),
-                EndedAt = DateTimeOffset.UtcNow, EnergyKWh = 20, UnitPriceSnapshot = 0.35m, TotalCost = 7
-            });
+            db.ChargingHistory.Add(
+                new ChargingHistory
+                {
+                    DriverId = driverId,
+                    StationId = id,
+                    StartedAt = DateTimeOffset.UtcNow.AddHours(-1),
+                    EndedAt = DateTimeOffset.UtcNow,
+                    EnergyKWh = 20,
+                    UnitPriceSnapshot = 0.35m,
+                    TotalCost = 7,
+                }
+            );
             await db.SaveChangesAsync();
         }
-        var stale = await admin.PatchAsJsonAsync($"/api/v1/admin/stations/{id}", Input(price: 0.40m, version: 9));
+        var stale = await admin.PatchAsJsonAsync(
+            $"/api/v1/admin/stations/{id}",
+            Input(price: 0.40m, version: 9)
+        );
         Assert.Equal(HttpStatusCode.PreconditionFailed, stale.StatusCode);
-        var updated = await admin.PatchAsJsonAsync($"/api/v1/admin/stations/{id}", Input(price: 0.40m));
+        var updated = await admin.PatchAsJsonAsync(
+            $"/api/v1/admin/stations/{id}",
+            Input(price: 0.40m)
+        );
         Assert.Equal(HttpStatusCode.OK, updated.StatusCode);
         var changed = (await updated.Content.ReadFromJsonAsync<JsonElement>());
         Assert.Equal(1, changed.GetProperty("version").GetInt64());
         Assert.Equal(0.40m, changed.GetProperty("pricePerKWh").GetDecimal());
         var history = await driver.GetFromJsonAsync<JsonElement>("/api/v1/driver/history");
         Assert.Equal(0.35m, history[0].GetProperty("unitPriceSnapshot").GetDecimal());
-        var archived = await admin.PostAsJsonAsync($"/api/v1/admin/stations/{id}/archive", new { version = 1 });
+        var archived = await admin.PostAsJsonAsync(
+            $"/api/v1/admin/stations/{id}/archive",
+            new { version = 1 }
+        );
         Assert.Equal(HttpStatusCode.OK, archived.StatusCode);
-        Assert.Equal(0, (await driver.GetFromJsonAsync<JsonElement>("/api/v1/driver/stations")).GetArrayLength());
+        Assert.Equal(
+            0,
+            (await driver.GetFromJsonAsync<JsonElement>("/api/v1/driver/stations")).GetArrayLength()
+        );
         using var check = factory.Services.CreateScope();
-        var audit = await check.ServiceProvider.GetRequiredService<ChargingDbContext>().Audit
-            .Where(x => x.EntityId == id).OrderBy(x => x.RecordedAt).Select(x => x.Action).ToListAsync();
+        var audit = await check
+            .ServiceProvider.GetRequiredService<ChargingDbContext>()
+            .Audit.Where(x => x.EntityId == id)
+            .OrderBy(x => x.RecordedAt)
+            .Select(x => x.Action)
+            .ToListAsync();
         Assert.Equal(["StationCreated", "StationUpdated", "StationArchived"], audit);
+    }
+
+    [Fact]
+    public async Task ManualRestrictionPersistsUntilOperatorClearsIt()
+    {
+        var (admin, _) = await Login("restriction-admin@example.test", UserRole.Superadmin);
+        var created = await admin.PostAsJsonAsync(
+            "/api/v1/admin/stations",
+            Input(status: "OutOfService")
+        );
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var station = await created.Content.ReadFromJsonAsync<JsonElement>();
+        var id = station.GetProperty("id").GetGuid();
+        Assert.Equal("OutOfService", station.GetProperty("manualRestriction").GetString());
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ChargingDbContext>();
+            var stored = await db.Stations.SingleAsync(point => point.Id == id);
+            Assert.Equal(ManualRestriction.OutOfService, stored.ManualRestriction);
+        }
+
+        var cleared = await admin.PatchAsJsonAsync(
+            $"/api/v1/admin/stations/{id}",
+            Input(status: "Available")
+        );
+        Assert.Equal(HttpStatusCode.OK, cleared.StatusCode);
+        var updated = await cleared.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(JsonValueKind.Null, updated.GetProperty("manualRestriction").ValueKind);
     }
 
     [Fact]
@@ -82,22 +161,51 @@ public sealed class StationManagementTests : IDisposable
     {
         var (operatorClient, _) = await Login("admin@example.test", UserRole.Admin);
         var (driver, _) = await Login("driver@example.test", UserRole.Driver);
-        Assert.Equal(HttpStatusCode.OK, (await operatorClient.GetAsync("/api/v1/admin/stations")).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await operatorClient.PostAsJsonAsync("/api/v1/admin/stations", Input())).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await driver.GetAsync("/api/v1/admin/stations")).StatusCode);
-        Assert.Equal(HttpStatusCode.Unauthorized, (await factory.CreateClient().GetAsync("/api/v1/admin/stations")).StatusCode);
+        Assert.Equal(
+            HttpStatusCode.OK,
+            (await operatorClient.GetAsync("/api/v1/admin/stations")).StatusCode
+        );
+        Assert.Equal(
+            HttpStatusCode.Forbidden,
+            (await operatorClient.PostAsJsonAsync("/api/v1/admin/stations", Input())).StatusCode
+        );
+        Assert.Equal(
+            HttpStatusCode.Forbidden,
+            (await driver.GetAsync("/api/v1/admin/stations")).StatusCode
+        );
+        Assert.Equal(
+            HttpStatusCode.Unauthorized,
+            (await factory.CreateClient().GetAsync("/api/v1/admin/stations")).StatusCode
+        );
     }
 
     [Fact]
     public async Task RejectsInvalidAndBusyStations()
     {
         var (admin, _) = await Login("super@example.test", UserRole.Superadmin);
-        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostAsJsonAsync("/api/v1/admin/stations", Input(code: "bad code"))).StatusCode);
-        var created = await admin.PostAsJsonAsync("/api/v1/admin/stations", Input(status: "Charging"));
+        Assert.Equal(
+            HttpStatusCode.BadRequest,
+            (
+                await admin.PostAsJsonAsync("/api/v1/admin/stations", Input(code: "bad code"))
+            ).StatusCode
+        );
+        var created = await admin.PostAsJsonAsync(
+            "/api/v1/admin/stations",
+            Input(status: "Charging")
+        );
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
-        var id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
-        Assert.Equal(HttpStatusCode.Conflict,
-            (await admin.PostAsJsonAsync($"/api/v1/admin/stations/{id}/archive", new { version = 0 })).StatusCode);
+        var id = (await created.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("id")
+            .GetGuid();
+        Assert.Equal(
+            HttpStatusCode.Conflict,
+            (
+                await admin.PostAsJsonAsync(
+                    $"/api/v1/admin/stations/{id}/archive",
+                    new { version = 0 }
+                )
+            ).StatusCode
+        );
     }
 
     [Fact]
@@ -105,8 +213,13 @@ public sealed class StationManagementTests : IDisposable
     {
         var (admin, _) = await Login("forecast-admin@example.test", UserRole.Superadmin);
         var (driver, _) = await Login("forecast-driver@example.test", UserRole.Driver);
-        var created = await admin.PostAsJsonAsync("/api/v1/admin/stations", Input(status: "Charging"));
-        var id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var created = await admin.PostAsJsonAsync(
+            "/api/v1/admin/stations",
+            Input(status: "Charging")
+        );
+        var id = (await created.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("id")
+            .GetGuid();
         var now = DateTimeOffset.UtcNow;
         using (var scope = factory.Services.CreateScope())
         {

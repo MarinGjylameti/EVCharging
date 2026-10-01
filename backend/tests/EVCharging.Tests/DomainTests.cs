@@ -1,3 +1,4 @@
+using EVCharging.Application.Common;
 using EVCharging.Application.Identity;
 using EVCharging.Domain.Charging;
 using EVCharging.Domain.Identity;
@@ -8,6 +9,7 @@ namespace EVCharging.Tests;
 public class DomainTests
 {
     private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-09-28T17:00:00Z");
+
     [Fact]
     public void MaintenanceSurvivesDeviceHeartbeatAndArchiveCannotClaimAvailability()
     {
@@ -46,7 +48,9 @@ public class DomainTests
         Assert.Equal(.35m, session.UnitPriceSnapshot);
         Assert.True(session.Complete("end", 20m, Now.AddMinutes(20)));
         Assert.False(session.Complete("end", 20m, Now.AddMinutes(20)));
-        Assert.Throws<InvalidOperationException>(() => session.Measure("late", 21m, null, Now.AddMinutes(21)));
+        Assert.Throws<InvalidOperationException>(() =>
+            session.Measure("late", 21m, null, Now.AddMinutes(21))
+        );
     }
 
     [Fact]
@@ -55,15 +59,20 @@ public class DomainTests
         var session = new ChargingSession(Guid.NewGuid(), .35m, "EUR", Now);
         session.Measure("m1", 10m, null, Now.AddMinutes(5));
         Assert.False(session.Measure("old", 8m, null, Now.AddMinutes(4)));
-        Assert.Throws<InvalidOperationException>(() => session.Measure("reset", 1m, null, Now.AddMinutes(6)));
+        Assert.Throws<InvalidOperationException>(() =>
+            session.Measure("reset", 1m, null, Now.AddMinutes(6))
+        );
         Assert.Null(session.PowerKW);
-        Assert.Throws<ArgumentOutOfRangeException>(() => session.Measure("bad", -1m, null, Now.AddMinutes(7)));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            session.Measure("bad", -1m, null, Now.AddMinutes(7))
+        );
     }
 
     [Theory]
     [InlineData("sq", AppLanguage.Sq)]
     [InlineData("en", AppLanguage.En)]
-    public void SupportedLanguagesAreExplicit(string code, AppLanguage language) => Assert.Equal(language, AccountRules.Language(code));
+    public void SupportedLanguagesAreExplicit(string code, AppLanguage language) =>
+        Assert.Equal(language, AccountRules.Language(code));
 
     [Fact]
     public void InvalidRegistrationInputCannotBecomeAnAccount()
@@ -82,9 +91,13 @@ public class DomainTests
         {
             var sq = NotificationTemplates.Get(kind, AppLanguage.Sq);
             var en = NotificationTemplates.Get(kind, AppLanguage.En);
-            Assert.NotEmpty(sq.Title); Assert.NotEmpty(en.Body);
+            Assert.NotEmpty(sq.Title);
+            Assert.NotEmpty(en.Body);
             Assert.NotEqual(sq.Title, en.Title);
         }
-        Assert.Equal("Karikimi filloi", NotificationTemplates.Get(NotificationKind.ChargingStarted, AppLanguage.Sq).Title);
+        Assert.Equal(
+            "Karikimi filloi",
+            NotificationTemplates.Get(NotificationKind.ChargingStarted, AppLanguage.Sq).Title
+        );
     }
 }

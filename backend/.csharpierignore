@@ -1,0 +1,5 @@
+src/EVCharging.Infrastructure/Persistence/Migrations/
+**/*.csproj
+**/*.props
+**/*.targets
+**/*.slnx

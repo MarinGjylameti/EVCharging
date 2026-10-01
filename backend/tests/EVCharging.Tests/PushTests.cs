@@ -10,20 +10,46 @@ namespace EVCharging.Tests;
 
 public sealed class PushTests : IDisposable
 {
-    private readonly ChargingDbContext db = new(new DbContextOptionsBuilder<ChargingDbContext>()
-        .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+    private readonly ChargingDbContext db = new(
+        new DbContextOptionsBuilder<ChargingDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options
+    );
     private readonly FixedClock clock = new();
     private readonly FakeTransport transport = new();
-    private PushDispatcher Dispatcher() => new(db, transport, Options.Create(new PushOptions { Enabled = true }), clock);
 
-    private async Task<(Account User, LoginSession Session, DeviceRegistration Device, PushDelivery Delivery)> Queue()
+    private PushDispatcher Dispatcher() =>
+        new(db, transport, Options.Create(new PushOptions { Enabled = true }), clock);
+
+    private async Task<(
+        Account User,
+        LoginSession Session,
+        DeviceRegistration Device,
+        PushDelivery Delivery
+    )> Queue()
     {
         var user = new Account { PushEnabled = true, Language = AppLanguage.Sq };
-        var session = new LoginSession { UserId = user.Id, User = user, ExpiresAt = clock.GetUtcNow().AddDays(1) };
-        var device = new DeviceRegistration { UserId = user.Id, SessionId = session.Id, Token = "ExpoPushToken[test-device]", Platform = "android" };
+        var session = new LoginSession
+        {
+            UserId = user.Id,
+            User = user,
+            ExpiresAt = clock.GetUtcNow().AddDays(1),
+        };
+        var device = new DeviceRegistration
+        {
+            UserId = user.Id,
+            SessionId = session.Id,
+            Token = "ExpoPushToken[test-device]",
+            Platform = "android",
+        };
         db.AddRange(user, session, device);
         await db.SaveChangesAsync();
-        await new NotificationService(db, clock).EnqueueAsync(user.Id, "event-1", NotificationKind.ChargingCompleted, default);
+        await new NotificationService(db, clock).EnqueueAsync(
+            user.Id,
+            "event-1",
+            NotificationKind.ChargingCompleted,
+            default
+        );
         await db.SaveChangesAsync();
         return (user, session, device, await db.PushDeliveries.SingleAsync());
     }
@@ -52,10 +78,14 @@ public sealed class PushTests : IDisposable
     public async Task PendingDeliveryRespectsCurrentRecipient(string change)
     {
         var state = await Queue();
-        if (change == "opt-out") state.User.PushEnabled = false;
-        if (change == "logout") state.Session.RevokedAt = clock.Now;
-        if (change == "account-switch") state.Device.UserId = Guid.NewGuid();
-        if (change == "deactivated") state.User.IsActive = false;
+        if (change == "opt-out")
+            state.User.PushEnabled = false;
+        if (change == "logout")
+            state.Session.RevokedAt = clock.Now;
+        if (change == "account-switch")
+            state.Device.UserId = Guid.NewGuid();
+        if (change == "deactivated")
+            state.User.IsActive = false;
         await db.SaveChangesAsync();
         await Dispatcher().DispatchAsync(default);
         Assert.Empty(transport.Messages);
@@ -81,28 +111,40 @@ public sealed class PushTests : IDisposable
     public async Task DuplicateCommittedEventDoesNotQueueTwice()
     {
         var state = await Queue();
-        await new NotificationService(db, clock).EnqueueAsync(state.User.Id, "event-1", NotificationKind.ChargingCompleted, default);
+        await new NotificationService(db, clock).EnqueueAsync(
+            state.User.Id,
+            "event-1",
+            NotificationKind.ChargingCompleted,
+            default
+        );
         await db.SaveChangesAsync();
         Assert.Single(await db.Notifications.ToListAsync());
         Assert.Single(await db.PushDeliveries.ToListAsync());
     }
 
     public void Dispose() => db.Dispose();
+
     private sealed class FixedClock : TimeProvider
     {
         public DateTimeOffset Now = DateTimeOffset.Parse("2026-09-28T17:00:00Z");
+
         public override DateTimeOffset GetUtcNow() => Now;
     }
+
     private sealed class FakeTransport : IPushTransport
     {
         public List<PushMessage> Messages { get; } = [];
         public bool FailReceipts { get; set; }
+
         public Task<PushResult> SendAsync(PushMessage message, CancellationToken ct)
         {
             Messages.Add(message);
             return Task.FromResult(new PushResult(true, false, "ticket", null));
         }
+
         public Task<PushReceipt> CheckReceiptAsync(string id, CancellationToken ct) =>
-            FailReceipts ? throw new HttpRequestException("offline test") : Task.FromResult(new PushReceipt(false, true, false, null));
+            FailReceipts
+                ? throw new HttpRequestException("offline test")
+                : Task.FromResult(new PushReceipt(false, true, false, null));
     }
 }

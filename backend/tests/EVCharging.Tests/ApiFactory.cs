@@ -12,16 +12,23 @@ namespace EVCharging.Tests;
 public sealed class ApiFactory : WebApplicationFactory<Program>
 {
     private readonly string database = Guid.NewGuid().ToString();
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
-        builder.UseContentRoot(Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../src/EVCharging.Api")));
+        builder.UseContentRoot(
+            Path.GetFullPath(
+                Path.Combine(AppContext.BaseDirectory, "../../../../../src/EVCharging.Api")
+            )
+        );
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<DbContextOptions<ChargingDbContext>>();
             services.RemoveAll<IDbContextOptionsConfiguration<ChargingDbContext>>();
             services.RemoveAll<ChargingDbContext>();
-            services.AddDbContext<ChargingDbContext>(options => options.UseInMemoryDatabase(database));
+            services.AddDbContext<ChargingDbContext>(options =>
+                options.UseInMemoryDatabase(database)
+            );
         });
     }
 }

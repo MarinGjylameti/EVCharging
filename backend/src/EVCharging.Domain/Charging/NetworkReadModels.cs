@@ -16,6 +16,16 @@ public sealed class ChargingStation
     public decimal PricePerKWh { get; set; }
     public string Currency { get; set; } = "EUR";
     public PointState Status { get; set; } = PointState.Available;
+
+    // A manual outage or maintenance decision overrides fresh device telemetry.
+    public ManualRestriction? ManualRestriction { get; set; }
+
+    // Null for legacy/demo records. Live projections record their source and
+    // both device and server times so readers can reject stale availability.
+    public string? StatusSource { get; set; }
+    public DateTimeOffset? StatusObservedAt { get; set; }
+    public DateTimeOffset? StatusReceivedAt { get; set; }
+
     // Supplied by a verified device adapter when supported. Never inferred from charging power alone.
     public int? ForecastConnectorId { get; set; }
     public DateTimeOffset? ForecastAvailableAt { get; set; }

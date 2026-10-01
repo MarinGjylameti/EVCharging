@@ -9,7 +9,8 @@ public class DatabaseConnectionTests
     public void RenderPostgresUrlBecomesNpgsqlConnectionString()
     {
         var normalized = DatabaseConnection.Normalize(
-            "postgresql://demo:p%40ss%3Bword@internal.example:5432/evcharging_demo?sslmode=require");
+            "postgresql://demo:p%40ss%3Bword@internal.example:5432/evcharging_demo?sslmode=require"
+        );
         var parsed = new NpgsqlConnectionStringBuilder(normalized);
 
         Assert.Equal("internal.example", parsed.Host);

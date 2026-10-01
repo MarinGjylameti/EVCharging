@@ -12,17 +12,34 @@ namespace EVCharging.Tests;
 public sealed class AccountApiTests : IDisposable
 {
     private readonly ApiFactory factory = new();
-    private HttpClient Client() => factory.CreateClient();
-    private static object Registration(string email = "driver@example.com", string language = "sq") =>
-        new { email, password = "a-long-driver-passphrase", firstName = "Arta", lastName = "Deda", language };
 
-    private async Task<(HttpClient Client, AuthResult Auth)> Register(string email = "driver@example.com")
+    private HttpClient Client() => factory.CreateClient();
+
+    private static object Registration(
+        string email = "driver@example.com",
+        string language = "sq"
+    ) =>
+        new
+        {
+            email,
+            password = "a-long-driver-passphrase",
+            firstName = "Arta",
+            lastName = "Deda",
+            language,
+        };
+
+    private async Task<(HttpClient Client, AuthResult Auth)> Register(
+        string email = "driver@example.com"
+    )
     {
         var client = Client();
         var response = await client.PostAsJsonAsync("/api/v1/auth/register", Registration(email));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var auth = (await response.Content.ReadFromJsonAsync<AuthResult>())!;
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.AccessToken);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            auth.AccessToken
+        );
         return (client, auth);
     }
 
@@ -38,41 +55,96 @@ public sealed class AccountApiTests : IDisposable
         Assert.NotEqual("a-long-driver-passphrase", user.PasswordHash);
         Assert.NotEqual(auth.AccessToken, (await db.Sessions.SingleAsync()).TokenHash);
         Assert.Equal("DriverRegistered", (await db.Audit.SingleAsync()).Action);
-        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/v1/admin/access")).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/v1/administrators")).StatusCode);
+        Assert.Equal(
+            HttpStatusCode.Forbidden,
+            (await client.GetAsync("/api/v1/admin/access")).StatusCode
+        );
+        Assert.Equal(
+            HttpStatusCode.Forbidden,
+            (await client.GetAsync("/api/v1/administrators")).StatusCode
+        );
     }
 
     [Fact]
     public async Task CraftedRoleAndOwnerFieldsAreRejected()
     {
         var client = Client();
-        var response = await client.PostAsJsonAsync("/api/v1/auth/register", new
-        {
-            email = "attacker@example.com", password = "a-long-driver-passphrase", firstName = "A", lastName = "B", language = "en", role = "SUPERADMIN"
-        });
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/auth/register",
+            new
+            {
+                email = "attacker@example.com",
+                password = "a-long-driver-passphrase",
+                firstName = "A",
+                lastName = "B",
+                language = "en",
+                role = "SUPERADMIN",
+            }
+        );
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         using var scope = factory.Services.CreateScope();
-        Assert.Empty(await scope.ServiceProvider.GetRequiredService<ChargingDbContext>().Accounts.ToListAsync());
+        Assert.Empty(
+            await scope
+                .ServiceProvider.GetRequiredService<ChargingDbContext>()
+                .Accounts.ToListAsync()
+        );
     }
 
     [Fact]
     public async Task DuplicateEmailAndInvalidPasswordAreRejected()
     {
         var (client, _) = await Register();
-        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync("/api/v1/auth/register", Registration("DRIVER@EXAMPLE.COM"))).StatusCode);
-        Assert.Equal(HttpStatusCode.Unauthorized, (await client.PostAsJsonAsync("/api/v1/auth/login", new { email = "driver@example.com", password = "wrong" })).StatusCode);
+        Assert.Equal(
+            HttpStatusCode.Conflict,
+            (
+                await client.PostAsJsonAsync(
+                    "/api/v1/auth/register",
+                    Registration("DRIVER@EXAMPLE.COM")
+                )
+            ).StatusCode
+        );
+        Assert.Equal(
+            HttpStatusCode.Unauthorized,
+            (
+                await client.PostAsJsonAsync(
+                    "/api/v1/auth/login",
+                    new { email = "driver@example.com", password = "wrong" }
+                )
+            ).StatusCode
+        );
     }
 
     [Fact]
     public async Task LanguagePersistsAndStaleVersionCannotOverwriteSettings()
     {
         var (client, auth) = await Register();
-        var response = await client.PatchAsJsonAsync("/api/v1/me/settings", new { language = "en", pushEnabled = true, version = auth.User.Version });
+        var response = await client.PatchAsJsonAsync(
+            "/api/v1/me/settings",
+            new
+            {
+                language = "en",
+                pushEnabled = true,
+                version = auth.User.Version,
+            }
+        );
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var user = (await response.Content.ReadFromJsonAsync<UserDto>())!;
         Assert.Equal("en", user.Language);
         Assert.True(user.PushEnabled);
-        Assert.Equal(HttpStatusCode.PreconditionFailed, (await client.PatchAsJsonAsync("/api/v1/me/settings", new { language = "sq", pushEnabled = false, version = auth.User.Version })).StatusCode);
+        Assert.Equal(
+            HttpStatusCode.PreconditionFailed,
+            (
+                await client.PatchAsJsonAsync(
+                    "/api/v1/me/settings",
+                    new
+                    {
+                        language = "sq",
+                        pushEnabled = false,
+                        version = auth.User.Version,
+                    }
+                )
+            ).StatusCode
+        );
         Assert.Equal("en", (await client.GetFromJsonAsync<UserDto>("/api/v1/me"))!.Language);
     }
 
@@ -80,7 +152,10 @@ public sealed class AccountApiTests : IDisposable
     public async Task LogoutRevokesBearerToken()
     {
         var (client, _) = await Register();
-        Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsync("/api/v1/auth/logout", null)).StatusCode);
+        Assert.Equal(
+            HttpStatusCode.NoContent,
+            (await client.PostAsync("/api/v1/auth/logout", null)).StatusCode
+        );
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/v1/me")).StatusCode);
     }
 
@@ -88,10 +163,28 @@ public sealed class AccountApiTests : IDisposable
     public async Task PasswordChangeRevokesOtherSessionsAndDisablesDevices()
     {
         var (client, _) = await Register();
-        await client.PostAsJsonAsync("/api/v1/me/devices", new { token = "ExpoPushToken[device123]", platform = "android" });
-        var other = await client.PostAsJsonAsync("/api/v1/auth/login", new { email = "driver@example.com", password = "a-long-driver-passphrase" });
+        await client.PostAsJsonAsync(
+            "/api/v1/me/devices",
+            new { token = "ExpoPushToken[device123]", platform = "android" }
+        );
+        var other = await client.PostAsJsonAsync(
+            "/api/v1/auth/login",
+            new { email = "driver@example.com", password = "a-long-driver-passphrase" }
+        );
         var otherAuth = (await other.Content.ReadFromJsonAsync<AuthResult>())!;
-        Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsJsonAsync("/api/v1/auth/password", new { currentPassword = "a-long-driver-passphrase", newPassword = "a-new-long-driver-passphrase" })).StatusCode);
+        Assert.Equal(
+            HttpStatusCode.NoContent,
+            (
+                await client.PostAsJsonAsync(
+                    "/api/v1/auth/password",
+                    new
+                    {
+                        currentPassword = "a-long-driver-passphrase",
+                        newPassword = "a-new-long-driver-passphrase",
+                    }
+                )
+            ).StatusCode
+        );
         client.DefaultRequestHeaders.Authorization = new("Bearer", otherAuth.AccessToken);
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/v1/me")).StatusCode);
         using var scope = factory.Services.CreateScope();
@@ -123,15 +216,39 @@ public sealed class AccountApiTests : IDisposable
             (await db.Accounts.SingleAsync(x => x.Id == auth.User.Id)).Role = UserRole.Superadmin;
             await db.SaveChangesAsync();
         }
-        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/v1/administrators")).StatusCode);
+        Assert.Equal(
+            HttpStatusCode.OK,
+            (await client.GetAsync("/api/v1/administrators")).StatusCode
+        );
     }
 
     [Fact]
     public async Task InvalidLanguageAndDeviceCannotBeRegistered()
     {
         var (client, auth) = await Register();
-        Assert.Equal(HttpStatusCode.BadRequest, (await client.PatchAsJsonAsync("/api/v1/me/settings", new { language = "de", pushEnabled = false, version = auth.User.Version })).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/v1/me/devices", new { token = "not-a-token", platform = "android" })).StatusCode);
+        Assert.Equal(
+            HttpStatusCode.BadRequest,
+            (
+                await client.PatchAsJsonAsync(
+                    "/api/v1/me/settings",
+                    new
+                    {
+                        language = "de",
+                        pushEnabled = false,
+                        version = auth.User.Version,
+                    }
+                )
+            ).StatusCode
+        );
+        Assert.Equal(
+            HttpStatusCode.BadRequest,
+            (
+                await client.PostAsJsonAsync(
+                    "/api/v1/me/devices",
+                    new { token = "not-a-token", platform = "android" }
+                )
+            ).StatusCode
+        );
     }
 
     public void Dispose() => factory.Dispose();

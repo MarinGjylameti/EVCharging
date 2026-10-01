@@ -2,6 +2,32 @@
 
 API me EF Core/PostgreSQL për identitetin, profilin, njoftimet dhe leximin e pikave/historikut të Driver-it. Domeni dhe parseri OCPP janë të testueshëm offline. [Gjendja e plotë](../docs/implementation-status.md).
 
+## Organizimi i kodit
+
+| Projekti | Përgjegjësia |
+|---|---|
+| `src/EVCharging.Domain` | Entitetet dhe rregullat e biznesit, pa EF ose HTTP. |
+| `src/EVCharging.Application` | Kontratat dhe validimi i rasteve të përdorimit. Interfacet e query/command për pikat dhe Driver-in janë këtu. |
+| `src/EVCharging.Infrastructure` | Implementimi me EF/PostgreSQL, shërbimet e ruajtjes, Expo dhe adapterët OCPP. Konfigurimet e entiteteve janë ndarë në `Persistence/Configurations`. |
+| `src/EVCharging.Api` | Autentikimi, konfigurimi i shërbimeve, endpoint-et HTTP dhe komandat e nisjes. Endpoint-et delegojnë te shërbimet; pyetjet EF nuk qëndrojnë në to. |
+
+Varësitë e projekteve shkojnë nga Domain → Application → Infrastructure → API;
+API është vendi ku lidhen implementimet me interfacet. Parseri OCPP është
+offline; endpoint-i WebSocket, procesuesi i eventeve dhe publikimi SignalR janë
+ende për t'u implementuar. [Skema OCPP dhe rrjedha realtime](../docs/ocpp-simulator-database.md).
+
+## Formatimi C#
+
+CSharpier përdor `.editorconfig` të projektit dhe `backend/.csharpierignore`
+për të lënë jashtë migrimet e gjeneruara. Nga folderi `backend`:
+
+```powershell
+csharpier format src tests tools
+csharpier check src tests tools
+```
+
+Formatimi nuk ndryshon sjelljen. Pas tij ekzekuto `dotnet test EVCharging.slnx --no-restore`.
+
 ## Kontrolli offline nga rrënja EVCharging
 
 ```powershell
@@ -20,7 +46,10 @@ $env:EVCHARGING_ConnectionStrings__Default = 'Host=127.0.0.1;Port=5440;Database=
 dotnet run --project src/EVCharging.Api --no-restore -- --migrate
 ```
 
-Migrimi bëhet vetëm me komandë të qëllimshme. SQL për review, me të katër migrimet: [initial-schema.sql](../docs/initial-schema.sql). Nuk është aplikuar në një PostgreSQL real gjatë këtij dorëzimi.
+Migrimi bëhet vetëm me komandë të qëllimshme. [initial-schema.sql](../docs/initial-schema.sql)
+është SQL-ja e skemës fillestare; [ocpp-telemetry-schema.sql](../docs/ocpp-telemetry-schema.sql)
+është migrimi shtues për OCPP dhe outbox. Ky migrim nuk është aplikuar ende në
+PostgreSQL-in e Render-it.
 
 Për Superadmin-in e parë vendos `EVCHARGING_Bootstrap__Email` dhe `EVCHARGING_Bootstrap__Password` dhe nis me `--bootstrap-superadmin`. Komanda refuzon kur ekziston tashmë një Superadmin. Pastaj hiqi këto dy variabla nga procesi. Mos përdor kredenciale HOUSS.
 

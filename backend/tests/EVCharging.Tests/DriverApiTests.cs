@@ -17,11 +17,23 @@ public sealed class DriverApiTests : IDisposable
     private async Task<(HttpClient Client, AuthResult Auth)> Register(string email)
     {
         var client = factory.CreateClient();
-        var response = await client.PostAsJsonAsync("/api/v1/auth/register",
-            new { email, password = "long-demo-passphrase", firstName = "Demo", lastName = "Driver", language = "sq" });
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/auth/register",
+            new
+            {
+                email,
+                password = "long-demo-passphrase",
+                firstName = "Demo",
+                lastName = "Driver",
+                language = "sq",
+            }
+        );
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var auth = (await response.Content.ReadFromJsonAsync<AuthResult>())!;
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.AccessToken);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            auth.AccessToken
+        );
         return (client, auth);
     }
 
@@ -36,26 +48,48 @@ public sealed class DriverApiTests : IDisposable
             var db = scope.ServiceProvider.GetRequiredService<ChargingDbContext>();
             var visible = new ChargingStation
             {
-                Code = "TEST-001", Name = "Test Station", City = "Tiranë",
-                Address = "Test address", Latitude = 41.32, Longitude = 19.82,
-                ConnectorType = "CCS2", ConnectorCount = 2, PowerKW = 120,
-                PricePerKWh = 0.35m, IsDemo = true
+                Code = "TEST-001",
+                Name = "Test Station",
+                City = "Tiranë",
+                Address = "Test address",
+                Latitude = 41.32,
+                Longitude = 19.82,
+                ConnectorType = "CCS2",
+                ConnectorCount = 2,
+                PowerKW = 120,
+                PricePerKWh = 0.35m,
+                IsDemo = true,
             };
             var archived = new ChargingStation
             {
-                Code = "TEST-002", Name = "Hidden", City = "Tiranë",
-                Address = "Test address", Latitude = 41.32, Longitude = 19.82,
-                ConnectorType = "CCS2", ConnectorCount = 1, PowerKW = 50,
-                PricePerKWh = 0.40m, IsArchived = true
+                Code = "TEST-002",
+                Name = "Hidden",
+                City = "Tiranë",
+                Address = "Test address",
+                Latitude = 41.32,
+                Longitude = 19.82,
+                ConnectorType = "CCS2",
+                ConnectorCount = 1,
+                PowerKW = 50,
+                PricePerKWh = 0.40m,
+                IsArchived = true,
             };
             stationId = visible.Id;
             db.Stations.AddRange(visible, archived);
-            db.ChargingHistory.Add(new ChargingHistory
-            {
-                DriverId = account.User.Id, StationId = stationId, Station = visible,
-                StartedAt = DateTimeOffset.UtcNow.AddHours(-1), EndedAt = DateTimeOffset.UtcNow,
-                EnergyKWh = 20, UnitPriceSnapshot = 0.35m, TotalCost = 7, IsDemo = true
-            });
+            db.ChargingHistory.Add(
+                new ChargingHistory
+                {
+                    DriverId = account.User.Id,
+                    StationId = stationId,
+                    Station = visible,
+                    StartedAt = DateTimeOffset.UtcNow.AddHours(-1),
+                    EndedAt = DateTimeOffset.UtcNow,
+                    EnergyKWh = 20,
+                    UnitPriceSnapshot = 0.35m,
+                    TotalCost = 7,
+                    IsDemo = true,
+                }
+            );
             await db.SaveChangesAsync();
         }
 
@@ -75,15 +109,25 @@ public sealed class DriverApiTests : IDisposable
     public async Task DriverEndpointsRequireLoginAndDriverRole()
     {
         using var anonymous = factory.CreateClient();
-        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/v1/driver/stations")).StatusCode);
+        Assert.Equal(
+            HttpStatusCode.Unauthorized,
+            (await anonymous.GetAsync("/api/v1/driver/stations")).StatusCode
+        );
         var (client, auth) = await Register("operator@example.test");
         using (var scope = factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<ChargingDbContext>();
-            (await db.Accounts.SingleAsync(x => x.Id == auth.User.Id)).Role = EVCharging.Domain.Identity.UserRole.Admin;
+            (await db.Accounts.SingleAsync(x => x.Id == auth.User.Id)).Role = EVCharging
+                .Domain
+                .Identity
+                .UserRole
+                .Admin;
             await db.SaveChangesAsync();
         }
-        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/v1/driver/history")).StatusCode);
+        Assert.Equal(
+            HttpStatusCode.Forbidden,
+            (await client.GetAsync("/api/v1/driver/history")).StatusCode
+        );
     }
 
     public void Dispose() => factory.Dispose();

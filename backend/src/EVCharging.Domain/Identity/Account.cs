@@ -1,7 +1,17 @@
 namespace EVCharging.Domain.Identity;
 
-public enum UserRole { Driver, Admin, Superadmin }
-public enum AppLanguage { Sq, En }
+public enum UserRole
+{
+    Driver,
+    Admin,
+    Superadmin,
+}
+
+public enum AppLanguage
+{
+    Sq,
+    En,
+}
 
 public sealed class Account
 {

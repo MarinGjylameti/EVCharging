@@ -14,13 +14,17 @@ public class DemoDataSeederTests
     {
         await using var factory = new ApiFactory();
         using var client = factory.CreateClient();
-        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
-        {
-            ["Demo:DriverEmail"] = "demo@example.test",
-            ["Demo:DriverPassword"] = "A-unique-demo-password-2026!",
-            ["Bootstrap:Email"] = "admin@example.test",
-            ["Bootstrap:Password"] = "A-unique-admin-password-2026!"
-        }).Build();
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["Demo:DriverEmail"] = "demo@example.test",
+                    ["Demo:DriverPassword"] = "A-unique-demo-password-2026!",
+                    ["Bootstrap:Email"] = "admin@example.test",
+                    ["Bootstrap:Password"] = "A-unique-admin-password-2026!",
+                }
+            )
+            .Build();
 
         await DemoDataSeeder.SeedAsync(factory.Services, config);
         await DemoDataSeeder.SeedAsync(factory.Services, config);
