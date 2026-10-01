@@ -3,6 +3,7 @@ import { cache } from "react";
 import type { User } from "../../../contracts/account";
 
 export const sessionCookie = "evcharging_session";
+export const apiTimeoutMs = 90_000;
 
 export function apiOrigin() {
   const configured = process.env.EVCHARGING_API_BASE_URL;
@@ -17,7 +18,7 @@ export async function backend(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);
   if (init.body) headers.set("Content-Type", "application/json");
-  return fetch(`${apiOrigin()}/api/v1${path}`, { ...init, headers, cache: "no-store", signal: AbortSignal.timeout(10000) });
+  return fetch(`${apiOrigin()}/api/v1${path}`, { ...init, headers, cache: "no-store", signal: AbortSignal.timeout(apiTimeoutMs) });
 }
 
 export const currentUser = cache(async (): Promise<User | null> => {

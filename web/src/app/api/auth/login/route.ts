@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { apiOrigin, sameOrigin, sessionCookie } from "@/lib/backend";
+import { apiOrigin, apiTimeoutMs, sameOrigin, sessionCookie } from "@/lib/backend";
 import type { AuthResult } from "../../../../../../contracts/account";
 import { boundedJson } from "@/lib/request-body";
 
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     const response = await fetch(`${apiOrigin()}/api/v1/auth/login`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: payload.email, password: payload.password }),
-      cache: "no-store", signal: AbortSignal.timeout(10000)
+      cache: "no-store", signal: AbortSignal.timeout(apiTimeoutMs)
     });
     if (!response.ok) return NextResponse.json(await response.json().catch(() => ({ code: "login_failed" })), { status: response.status });
     const auth = await response.json() as AuthResult;
