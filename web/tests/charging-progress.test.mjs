@@ -18,6 +18,7 @@ function compile(path, dependencies = {}) {
 const { ChargingProgress } = compile("../src/features/driver/charging-progress.tsx");
 const session = {
   id: "session-1", status: "Charging", energyKWh: 2.75, powerKW: null,
+  isDemo: true, deviceClockSkewed: true,
   stateOfCharge: null, temperatureCelsius: null, cost: 0.96, currency: "EUR",
   startedAt: "2026-10-01T12:00:00Z", startReceivedAt: "2026-10-01T13:00:00Z",
   stoppedAt: null, lastMeasurementReceivedAt: "2026-10-01T13:01:00Z",
@@ -47,7 +48,7 @@ test("reported state of charge drives the accessible progress bar", () => {
 });
 
 test("pause preserves energy and cost and hides stale power and remaining time", () => {
-  const html = render({ status: "SuspendedEV", powerKW: 22 });
+  const html = render({ status: "PausedByVehicle", powerKW: 22 });
   assert.match(html, /Paused by vehicle/);
   assert.match(html, /2.75/);
   assert.match(html, /0.96/);
@@ -57,7 +58,7 @@ test("pause preserves energy and cost and hides stale power and remaining time",
 });
 
 test("completion uses receipt duration and only confirms history with valid totals", () => {
-  const changes = { status: "Stopped", stoppedAt: "2026-10-01T12:40:00Z", stopReceivedAt: "2026-10-01T13:03:00Z" };
+  const changes = { status: "Completed", stoppedAt: "2026-10-01T12:40:00Z", stopReceivedAt: "2026-10-01T13:03:00Z" };
   const html = render(changes);
   assert.match(html, /3:00/);
   assert.match(html, /Saved in history/);
@@ -73,6 +74,7 @@ test("single charger page shows its live process and excludes the old multi-poin
     "next/link": { default: ({ href, children }) => createElement("a", { href }, children) },
     "./use-live-snapshot": { useLiveSnapshot: () => ({ snapshot: live, setSnapshot: () => {}, connected: true, unavailable: false }) },
     "./charging-progress": { ChargingProgress },
+    "./live-update-policy": compile("../src/features/driver/live-update-policy.ts"),
   });
   const html = renderToStaticMarkup(createElement(StationChargingView, { initial: live, language: "en" }));
   assert.match(html, /Station One/);
@@ -81,3 +83,22 @@ test("single charger page shows its live process and excludes the old multi-poin
   assert.match(html, /Back to map/);
   assert.doesNotMatch(html, /SIM-002|<select|<input|Connect for testing/);
 });
+
+test("faults, disconnections and expired measurements never display old charging power", () => {
+  for (const status of ["Faulted", "Unavailable", "ConnectionLost", "Connecting"]) {
+    const html = render({ status, powerKW: 22, powerSource: "Reported" });
+    assert.doesNotMatch(html, />22</);
+    assert.match(html, /Waiting for readings/);
+  }
+  const expired = render({ powerKW: 22, powerSource: "Reported", powerValidUntil: "2026-10-01T13:01:00Z" });
+  assert.doesNotMatch(expired, />22</);
+  assert.match(expired, /Waiting for fresh readings/);
+});
+
+test("100 percent reports battery level without inventing a stop or completion time", () => {
+  const html = render({ stateOfCharge: 100 });
+  assert.match(html, /aria-valuenow="100"/);
+  assert.match(html, /Charging/);
+  assert.doesNotMatch(html, /Charge completed|Saved in history|remaining/i);
+});
+

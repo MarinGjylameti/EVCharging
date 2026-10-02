@@ -19,7 +19,8 @@ public sealed class StationEventBus : IStationEventStream
                 change.RecipientAccountId is null
                 || change.RecipientAccountId == listener.AccountId
             )
-                listener.Channel.Writer.TryWrite(change);
+                if (!listener.Channel.Writer.TryWrite(change))
+                    listener.Channel.Writer.TryComplete(); // Reconnect + snapshot on overflow.
     }
 
     public async IAsyncEnumerable<StationChanged> Subscribe(
@@ -29,7 +30,7 @@ public sealed class StationEventBus : IStationEventStream
     {
         var id = Guid.NewGuid();
         var channel = Channel.CreateBounded<StationChanged>(
-            new BoundedChannelOptions(64) { FullMode = BoundedChannelFullMode.DropOldest }
+            new BoundedChannelOptions(256) { FullMode = BoundedChannelFullMode.Wait }
         );
         listeners[id] = (accountId, channel);
         try

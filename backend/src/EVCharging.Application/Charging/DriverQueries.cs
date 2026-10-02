@@ -78,5 +78,8 @@ public sealed record DriverChargingSession(
     bool DeviceClockSkewed,
     string? EnergyScope,
     string? PowerScope,
-    decimal? UnitPricePerKWh
+    decimal? UnitPricePerKWh,
+    string? PowerSource = null,
+    DateTimeOffset? PowerValidUntil = null,
+    long Version = 0
 );

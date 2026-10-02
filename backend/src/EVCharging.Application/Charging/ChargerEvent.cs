@@ -1,3 +1,5 @@
+using EVCharging.Domain.Charging;
+
 namespace EVCharging.Application.Charging;
 
 public enum ChargerEventKind
@@ -21,7 +23,15 @@ public sealed record ChargerEvent(
     DateTimeOffset ObservedAt,
     decimal? SessionEnergyKWh,
     decimal? PowerKW,
-    string? VerifiedDriverCorrelation
+    string? VerifiedDriverCorrelation,
+    Guid? SessionId = null,
+    Guid? ConnectorId = null,
+    DateTimeOffset? ReceivedAt = null,
+    ChargingState? Status = null,
+    decimal? StateOfCharge = null,
+    decimal? TemperatureCelsius = null,
+    string? EnergyScope = null,
+    string? PowerScope = null
 );
 
 // Adapters authenticate and normalize their own protocol. UI clients cannot implement this port.

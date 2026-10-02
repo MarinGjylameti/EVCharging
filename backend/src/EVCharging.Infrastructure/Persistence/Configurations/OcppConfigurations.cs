@@ -49,6 +49,8 @@ internal sealed class OcppConnectorConfiguration : IEntityTypeConfiguration<Ocpp
             .OnDelete(DeleteBehavior.Restrict);
         e.HasIndex(x => new { x.ChargePointId, x.ConnectorNumber }).IsUnique();
         e.HasIndex(x => x.StationId);
+        e.HasOne<ChargingConnector>().WithMany().HasForeignKey(x => x.BusinessConnectorId).OnDelete(DeleteBehavior.Restrict);
+        e.HasIndex(x => x.BusinessConnectorId).IsUnique();
     }
 }
 
@@ -145,15 +147,11 @@ internal sealed class OcppChargingTransactionConfiguration
             {
                 table.HasCheckConstraint(
                     "ck_ocpp_transaction_meter",
-                    "meter_start_wh >= 0 AND (meter_stop_wh IS NULL OR meter_stop_wh >= 0) AND (energy_kwh IS NULL OR energy_kwh >= 0)"
+                    "meter_start_wh >= 0 AND (meter_stop_wh IS NULL OR meter_stop_wh >= 0)"
                 );
                 table.HasCheckConstraint(
                     "ck_ocpp_transaction_time",
                     "stopped_at IS NULL OR stopped_at >= started_at"
-                );
-                table.HasCheckConstraint(
-                    "ck_ocpp_transaction_price",
-                    "(unit_price_snapshot IS NULL OR unit_price_snapshot >= 0) AND (calculated_cost IS NULL OR calculated_cost >= 0)"
                 );
             }
         );
@@ -162,11 +160,6 @@ internal sealed class OcppChargingTransactionConfiguration
         e.Property(x => x.ExternalTransactionId).HasMaxLength(100);
         e.Property(x => x.State).HasMaxLength(32);
         e.Property(x => x.StopReason).HasMaxLength(40);
-        e.Property(x => x.EnergyKWh).HasPrecision(18, 6);
-        e.Property(x => x.CurrentPowerKW).HasPrecision(12, 3);
-        e.Property(x => x.UnitPriceSnapshot).HasPrecision(18, 6);
-        e.Property(x => x.Currency).HasMaxLength(3);
-        e.Property(x => x.CalculatedCost).HasPrecision(20, 2);
         e.HasOne<OcppChargePoint>()
             .WithMany()
             .HasForeignKey(x => x.ChargePointId)
@@ -175,9 +168,9 @@ internal sealed class OcppChargingTransactionConfiguration
             .WithMany()
             .HasForeignKey(x => x.StationId)
             .OnDelete(DeleteBehavior.Restrict);
-        e.HasOne<Account>()
+        e.HasOne<ChargingSession>()
             .WithMany()
-            .HasForeignKey(x => x.DriverId)
+            .HasForeignKey(x => x.SessionId)
             .OnDelete(DeleteBehavior.Restrict);
         e.HasOne<OcppInboundMessage>()
             .WithMany()
@@ -197,7 +190,7 @@ internal sealed class OcppChargingTransactionConfiguration
             .IsUnique()
             .HasFilter("physical_closed_at IS NULL");
         e.HasIndex(x => new { x.StationId, x.StartedAt });
-        e.HasIndex(x => new { x.DriverId, x.StartedAt });
+        e.HasIndex(x => x.SessionId).IsUnique();
     }
 }
 

@@ -1,198 +1,94 @@
-using System.Text.Json;
 using EVCharging.Application.Charging;
 using EVCharging.Application.Common;
 using EVCharging.Domain.Charging;
-using EVCharging.Infrastructure.Charging.Ocpp;
 using EVCharging.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
-
+using Npgsql;
 namespace EVCharging.Infrastructure.Charging;
 
-public sealed class DriverChargingService(
-    ChargingDbContext db,
-    IDriverQueries queries,
-    TimeProvider clock,
-    IOptions<OcppOptions> options
-) : IDriverCharging
+public sealed class DriverChargingService(ChargingDbContext db, IDriverQueries queries,
+    TimeProvider clock, StationEventSignal events, IChargingClaimVerification verification) : IDriverCharging
 {
-    public async Task<DriverStationCharging> GetAsync(
-        Guid driverId,
-        Guid stationId,
-        CancellationToken ct
-    )
+    public async Task<DriverStationCharging> GetAsync(Guid driverId, Guid stationId, CancellationToken ct)
     {
-        var station =
-            (await queries.GetStationsAsync(ct)).SingleOrDefault(x => x.Id == stationId)
+        var station = await db.Stations.AsNoTracking().SingleOrDefaultAsync(x => x.Id == stationId && !x.IsArchived, ct)
             ?? throw new RequestFailure(404, "station_not_found", "Station not found.");
-        var connector = await db
-            .OcppConnectors.AsNoTracking()
-            .SingleOrDefaultAsync(x => x.StationId == stationId && x.ConnectorNumber == 1, ct);
-        var cutoff = clock.GetUtcNow().AddSeconds(-options.Value.OfflineSeconds);
-        var connected =
-            connector is not null
-            && await db.OcppChargePoints.AnyAsync(
-                x => x.Id == connector.ChargePointId && x.IsEnabled && x.LastSeenAt >= cutoff,
-                ct
-            );
+        var connector = await db.ChargingConnectors.AsNoTracking().SingleOrDefaultAsync(x => x.StationId == stationId && x.Number == 1, ct);
         var now = clock.GetUtcNow();
-        var waiting = await db
-            .ChargingConnectionRequests.AsNoTracking()
-            .SingleOrDefaultAsync(
-                x =>
-                    x.StationId == stationId
-                    && x.ConnectorNumber == 1
-                    && x.State == "Waiting"
-                    && x.ExpiresAt > now,
-                ct
-            );
-        var inUse =
-            (waiting is not null && waiting.DriverId != driverId)
-            || await db.OcppChargingTransactions.AnyAsync(
-                x => x.StationId == stationId && x.StoppedAt == null && x.DriverId != driverId,
-                ct
-            );
-        var own = (
-            await queries.GetChargingStateAsync(driverId, ct, stationId)
-        ).Sessions.FirstOrDefault();
-        return new(
-            station,
-            options.Value.SimulatorEnabled && station.IsDemo && connector is not null,
-            connected,
-            inUse,
-            waiting?.DriverId == driverId
-                ? new(waiting.Id, waiting.State, waiting.ExpiresAt)
-                : null,
-            own
-        );
+        var claim = await db.ChargingConnectionRequests.AsNoTracking().SingleOrDefaultAsync(x =>
+            x.StationId == stationId && x.ConnectorNumber == 1 && (x.State == "Linked" || x.State == "Waiting" && x.ExpiresAt > now), ct);
+        var own = (await queries.GetChargingStateAsync(driverId, ct, stationId)).Sessions.FirstOrDefault();
+        return new(ChargingRealtime.StationDto(station, now), verification.DemoBypassEnabled && station.IsDemo && connector is not null,
+            connector?.IsOnline == true, claim is not null && claim.DriverId != driverId,
+            claim?.DriverId == driverId && claim.State == "Waiting" ? new(claim.Id, claim.State, claim.ExpiresAt) : null, own);
     }
 
-    public async Task<DriverStationCharging> ConnectAsync(
-        Guid driverId,
-        Guid stationId,
-        CancellationToken ct
-    )
+    public async Task<DriverStationCharging> ConnectAsync(Guid driverId, Guid stationId, CancellationToken ct)
     {
-        var connector = await RequireDemoConnectorAsync(stationId, ct);
-        // Use the same device lock as StartTransaction so two drivers cannot claim
-        // one connector, or change the owner of a transaction already in progress.
-        await using var transaction = await OcppDeviceUpdate.BeginAsync(
-            db,
-            connector.ChargePointId,
-            ct
-        );
-        var now = clock.GetUtcNow();
-        var active = await db.OcppChargingTransactions.SingleOrDefaultAsync(
-            x =>
-                x.ChargePointId == connector.ChargePointId
-                && x.ConnectorNumber == 1
-                && x.StoppedAt == null,
-            ct
-        );
-        if (active is not null)
+        var connector = await verification.VerifyDemoAsync(stationId, ct);
+        try
         {
-            if (active.DriverId != driverId)
-                throw new RequestFailure(
-                    409,
-                    "charger_in_use",
-                    "This connector is already in use."
-                );
-            return await GetAsync(driverId, stationId, ct);
-        }
-        var waiting = await db.ChargingConnectionRequests.SingleOrDefaultAsync(
-            x => x.StationId == stationId && x.ConnectorNumber == 1 && x.State == "Waiting",
-            ct
-        );
-        if (waiting is not null && waiting.ExpiresAt <= now)
-        {
-            waiting.State = "Expired";
+            await using var transaction = await ConnectorMutationLock.BeginAsync(db, connector.Id, driverId, ct);
+            var now = clock.GetUtcNow();
+            var expired = await db.ChargingConnectionRequests.Where(x => x.State == "Waiting"
+                && x.ExpiresAt <= now && (x.DriverId == driverId || x.StationId == stationId && x.ConnectorNumber == connector.Number)).ToListAsync(ct);
+            foreach (var claim in expired) claim.State = "Expired";
+            if (expired.Count > 0) await db.SaveChangesAsync(ct);
+            var own = await db.ChargingConnectionRequests.SingleOrDefaultAsync(x =>
+                x.DriverId == driverId && (x.State == "Waiting" || x.State == "Linked"), ct);
+            if (own is not null && (own.StationId != stationId || own.ConnectorNumber != connector.Number))
+                throw new RequestFailure(409, "driver_already_connected", "This Driver already has an active charger association.");
+            var occupied = await db.ChargingConnectionRequests.SingleOrDefaultAsync(x =>
+                x.StationId == stationId && x.ConnectorNumber == connector.Number && (x.State == "Waiting" || x.State == "Linked"), ct);
+            if (occupied is not null && occupied.DriverId != driverId)
+                throw new RequestFailure(409, "charger_in_use", "Another Driver owns this connector.");
+            var active = await db.ChargingSessions.SingleOrDefaultAsync(x => x.ConnectorId == connector.Id && x.EndedAt == null, ct);
+            var current = own ?? new ChargingConnectionRequest
+            {
+                DriverId = driverId, StationId = stationId, ConnectorNumber = connector.Number,
+                CreatedAt = now, ExpiresAt = now.AddMinutes(30),
+            };
+            if (own is null) db.ChargingConnectionRequests.Add(current);
+            if (active is not null && current.State != "Linked")
+            {
+                current.State = "Linked"; current.SessionId = active.Id; current.LinkedAt = now;
+                // Physical start, energy, tariff and timestamps remain untouched.
+            }
+            if (own is null || active is not null)
+            {
+                ChargingRealtime.Stage(db, stationId, "OwnershipChanged", "ChargingClaim", current.Id, 0, now, driverId);
+                ChargingRealtime.Stage(db, stationId, "ConnectorChanged", "ChargingConnector", connector.Id, connector.Version, now);
+            }
             await db.SaveChangesAsync(ct);
-            waiting = null;
+            if (transaction is not null) await transaction.CommitAsync(ct);
+            events.Notify();
         }
-        if (waiting is not null && waiting.DriverId != driverId)
-            throw new RequestFailure(
-                409,
-                "charger_in_use",
-                "Another driver is waiting for this connector."
-            );
-        if (waiting is null)
-            db.ChargingConnectionRequests.Add(
-                new()
-                {
-                    DriverId = driverId,
-                    StationId = stationId,
-                    CreatedAt = now,
-                    ExpiresAt = now.AddMinutes(30),
-                }
-            );
-        StageRequestChange(stationId, driverId, now);
-        await db.SaveChangesAsync(ct);
-        if (transaction is not null)
-            await transaction.CommitAsync(ct);
+        catch (DbUpdateException error) when (error.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } pg
+            && pg.ConstraintName is "ux_claim_active_driver" or "ux_claim_active_connector")
+        {
+            var code = ((PostgresException)error.InnerException!).ConstraintName == "ux_claim_active_driver"
+                ? "driver_already_connected" : "charger_in_use";
+            throw new RequestFailure(409, code, "The charging association is already in use.");
+        }
         return await GetAsync(driverId, stationId, ct);
     }
 
-    public async Task<DriverStationCharging> CancelAsync(
-        Guid driverId,
-        Guid stationId,
-        CancellationToken ct
-    )
+    public async Task<DriverStationCharging> CancelAsync(Guid driverId, Guid stationId, CancellationToken ct)
     {
-        var connector = await RequireDemoConnectorAsync(stationId, ct);
-        await using var transaction = await OcppDeviceUpdate.BeginAsync(
-            db,
-            connector.ChargePointId,
-            ct
-        );
-        var waiting = await db.ChargingConnectionRequests.SingleOrDefaultAsync(
-            x => x.StationId == stationId && x.DriverId == driverId && x.State == "Waiting",
-            ct
-        );
+        var connector = await verification.VerifyDemoAsync(stationId, ct);
+        await using var transaction = await ConnectorMutationLock.BeginAsync(db, connector.Id, driverId, ct);
+        var waiting = await db.ChargingConnectionRequests.SingleOrDefaultAsync(x =>
+            x.StationId == stationId && x.DriverId == driverId && x.State == "Waiting", ct);
         if (waiting is not null)
         {
             waiting.State = "Cancelled";
-            StageRequestChange(stationId, driverId, clock.GetUtcNow());
+            ChargingRealtime.Stage(db, stationId, "OwnershipChanged", "ChargingClaim", waiting.Id, 0, clock.GetUtcNow(), driverId);
+            ChargingRealtime.Stage(db, stationId, "ConnectorChanged", "ChargingConnector", connector.Id, connector.Version, clock.GetUtcNow());
             await db.SaveChangesAsync(ct);
         }
-        if (transaction is not null)
-            await transaction.CommitAsync(ct);
+        if (transaction is not null) await transaction.CommitAsync(ct);
+        events.Notify();
         return await GetAsync(driverId, stationId, ct);
     }
-
-    private async Task<OcppConnector> RequireDemoConnectorAsync(
-        Guid stationId,
-        CancellationToken ct
-    )
-    {
-        if (
-            !options.Value.SimulatorEnabled
-            || !await db.Stations.AnyAsync(x => x.Id == stationId && x.IsDemo && !x.IsArchived, ct)
-        )
-            throw new RequestFailure(
-                403,
-                "test_connection_unavailable",
-                "Test connection is unavailable for this station."
-            );
-        return await db.OcppConnectors.SingleOrDefaultAsync(
-                x => x.StationId == stationId && x.ConnectorNumber == 1,
-                ct
-            ) ?? throw new RequestFailure(404, "connector_not_found", "Connector not found.");
-    }
-
-    private void StageRequestChange(Guid stationId, Guid driverId, DateTimeOffset now)
-    {
-        db.RealtimeOutbox.Add(
-            new()
-            {
-                EventType = "ConnectionRequested",
-                EntityType = "ChargingStation",
-                EntityId = stationId,
-                Audience = "Driver",
-                RecipientAccountId = driverId,
-                PayloadJson = JsonSerializer.Serialize(new StationChanged(stationId, 0, "Waiting")),
-                CreatedAt = now,
-                AvailableAt = now,
-            }
-        );
-    }
 }
+

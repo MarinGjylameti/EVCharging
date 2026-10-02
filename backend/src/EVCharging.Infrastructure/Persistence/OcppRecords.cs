@@ -30,6 +30,7 @@ public sealed class OcppConnector
 
     // A physical connector can be provisioned before its public station is known.
     public Guid? StationId { get; set; }
+    public Guid? BusinessConnectorId { get; set; }
     public string? ReportedStatus { get; set; }
     public string? ErrorCode { get; set; }
     public DateTimeOffset? StatusObservedAt { get; set; }
@@ -91,8 +92,7 @@ public sealed class OcppChargingTransaction
     public int ConnectorNumber { get; set; }
     public Guid? StationId { get; set; }
 
-    // Remains null until the physical authorization is linked to a Driver.
-    public Guid? DriverId { get; set; }
+    public Guid? SessionId { get; set; }
     public int Ocpp16TransactionId { get; set; }
     public string? ExternalTransactionId { get; set; }
     public Guid StartMessageId { get; set; }
@@ -108,12 +108,6 @@ public sealed class OcppChargingTransaction
     // OCPP 1.6 meterStart/meterStop are integral Wh. Keep their source precision.
     public long MeterStartWh { get; set; }
     public long? MeterStopWh { get; set; }
-    public decimal? EnergyKWh { get; set; }
-    public decimal? CurrentPowerKW { get; set; }
-    public DateTimeOffset? LastMeasurementAt { get; set; }
-    public decimal? UnitPriceSnapshot { get; set; }
-    public string? Currency { get; set; }
-    public decimal? CalculatedCost { get; set; }
 }
 
 public sealed class OcppMeterSample

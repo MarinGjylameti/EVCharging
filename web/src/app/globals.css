@@ -201,6 +201,7 @@
 .charge-status i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .is-charging .charge-status { color: #16835d; border-color: #c5e3d2; background: #f0f9f1; }
 .is-paused .charge-status { color: #916a1d; border-color: #efe0b6; background: #fbf7e9; }
+.is-faulted .charge-status { color: #a3372b; border-color: #efcdc7; background: #fff4f1; }
 .charge-energy-display { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; padding: 34px 0 28px; }
 .charge-energy-display > div:not(.charge-bolt) { display: grid; gap: 8px; }
 .charge-energy-display span { font-size: 12px; color: #7a8d7e; }

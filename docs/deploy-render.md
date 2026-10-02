@@ -84,6 +84,23 @@ Pas nisjes provo hyrjen me llogarinë demonstrative të Driver-it dhe kontrollo 
 
 Shërbimet Free flenë pas 15 minutash pa trafik; kërkesa e parë mund të vonojë. Për një CSMS/OCPP që duhet të mbajë lidhje të qëndrueshme me karikuesit, kalimi në plan që qëndron aktiv do të jetë i nevojshëm. Ende nuk ka lidhje OCPP me pajisje reale, ndaj statuset demo nuk janë të dhëna operative.
 
+### Nëse hyrja dështon pas pasivitetit
+
+Free duhet të zgjohet nga një kërkesë HTTP ose lidhje e re WebSocket, pa Manual
+Deploy. Hyrja e web-it tani kontrollon `/health/ready` përmes BFF-së me kërkesa
+të shkurtra për deri në dy minuta. Faqja HTML e ndezjes së Render nuk trajtohet
+si API gati. Vetëm pasi verifikohet API-ja dhe databaza dërgohet një login;
+fjalëkalimi nuk dërgohet në çdo retry. Nuk ka polling të vazhdueshëm për ta
+mbajtur shërbimin zgjuar.
+
+Nëse pas dy minutash API-ja ende nuk përgjigjet, kontrollo runtime logs për
+exception, dalje të procesit ose mungesën e `Now listening`. Gjumi, crash-i,
+problemet e databazës dhe kufizimet e workspace-it janë shkaqe të ndryshme;
+një mesazh 503 te hyrja nuk i dallon vetë. Mbaj `/health/ready` si Health Check
+Path. Pas krijimit fillestar të llogarive, çaktivizo seed-in e nisjes; DB ruan
+llogaritë dhe historikun pa e ekzekutuar seed-in në çdo zgjim. Mbaj migrimet
+kur publikohet një version që i kërkon.
+
 Render nuk transferon aktualisht shërbime nga një workspace në tjetrin. Kur klienti të marrë përgjegjësinë, krijohen shërbime të reja në workspace-in e tij dhe, nëse ka të dhëna që duhen ruajtur, bëhet eksport/import i databazës. Planifiko këtë përpara përdorimit me të dhëna reale.
 
 Burime: [Render Free](https://render.com/docs/free), [monorepo](https://render.com/docs/monorepo-support), [Postgres](https://render.com/docs/postgresql-creating-connecting), [transferimi i shërbimeve](https://render.com/docs/faq).

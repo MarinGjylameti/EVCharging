@@ -38,13 +38,17 @@ internal sealed class ChargingConnectionConfiguration
             .WithMany()
             .HasForeignKey(x => x.StationId)
             .OnDelete(DeleteBehavior.Restrict);
-        e.HasOne<OcppChargingTransaction>()
+        e.HasOne<ChargingSession>()
             .WithMany()
-            .HasForeignKey(x => x.SessionId)
+            .HasForeignKey(x => new { x.SessionId, x.StationId, x.ConnectorNumber })
+            .HasPrincipalKey(x => new { x.Id, x.PointId, x.ConnectorNumber })
             .OnDelete(DeleteBehavior.Restrict);
         e.HasIndex(x => new { x.StationId, x.ConnectorNumber })
             .IsUnique()
-            .HasFilter("state = 'Waiting'");
+            .HasDatabaseName("ux_claim_active_connector")
+            .HasFilter("state IN ('Waiting', 'Linked')");
+        e.HasIndex(x => x.DriverId).IsUnique().HasDatabaseName("ux_claim_active_driver")
+            .HasFilter("state IN ('Waiting', 'Linked')");
         e.HasIndex(x => x.SessionId).IsUnique().HasFilter("session_id IS NOT NULL");
         e.HasIndex(x => new { x.DriverId, x.CreatedAt });
     }

@@ -15,11 +15,9 @@ public sealed class OcppSimulatorProvisioner(
     public async Task InitializeAsync(CancellationToken ct = default)
     {
         var settings = options.Value;
-        if (!settings.SimulatorEnabled)
-            return;
-
-        foreach (var identity in settings.SimulatorIdentities)
-            await EnsureSimulatorAsync(identity, ct);
+        if (settings.SimulatorEnabled)
+            foreach (var identity in settings.SimulatorIdentities)
+                await EnsureSimulatorAsync(identity, ct);
         // A restarted single-instance API no longer owns any previously open sockets.
         var connections = await db
             .OcppConnections.Where(x => x.DisconnectedAt == null)
@@ -66,7 +64,7 @@ public sealed class OcppSimulatorProvisioner(
                 PowerKW = 22,
                 PricePerKWh = 0.35m,
                 Status = PointState.Unknown,
-                StatusSource = "OCPP",
+                StatusSource = "Device",
                 IsDemo = true,
             };
             db.Stations.Add(station);
@@ -90,20 +88,23 @@ public sealed class OcppSimulatorProvisioner(
             ct
         );
         if (connector is null)
-            db.OcppConnectors.Add(
-                new OcppConnector
-                {
-                    ChargePointId = device.Id,
-                    ConnectorNumber = 1,
-                    StationId = station.Id,
-                }
-            );
+        {
+            connector = new OcppConnector { ChargePointId = device.Id, ConnectorNumber = 1, StationId = station.Id };
+            db.OcppConnectors.Add(connector);
+        }
         else if (connector.StationId != station.Id)
             throw new InvalidOperationException(
                 "The simulator connector is mapped to a different station."
             );
 
+        if (connector.BusinessConnectorId is null)
+        {
+            var business = new ChargingConnector { Id = connector.Id, StationId = station.Id, Number = 1 };
+            db.ChargingConnectors.Add(business);
+            connector.BusinessConnectorId = business.Id;
+        }
         await db.SaveChangesAsync(ct);
         return device;
     }
 }
+

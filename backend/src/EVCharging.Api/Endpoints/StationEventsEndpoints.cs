@@ -1,6 +1,8 @@
+using System.Text.Json;
 using EVCharging.Api.Security;
 using EVCharging.Application.Charging;
 using EVCharging.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
 
 namespace EVCharging.Api.Endpoints;
@@ -25,6 +27,7 @@ public static class StationEventsEndpoints
         context.Response.ContentType = "text/event-stream";
         context.Response.Headers.CacheControl = "no-store, no-transform";
         context.Response.Headers["X-Accel-Buffering"] = "no";
+        context.Features.Get<IHttpResponseBodyFeature>()?.DisableBuffering();
         await using var events = stream.Subscribe(context.User.UserId(), ct).GetAsyncEnumerator(ct);
         var next = events.MoveNextAsync().AsTask();
         try
@@ -57,11 +60,28 @@ public static class StationEventsEndpoints
                 {
                     if (!await next)
                         break;
-                    await context.Response.WriteAsync("event: changed\ndata: {}\n\n", ct);
+                    // Send only the routing hint. The snapshot endpoint still checks
+                    // ownership before returning any session or measurement data.
+                    var data = JsonSerializer.Serialize(
+                        new
+                        {
+                            stationId = events.Current.StationId,
+                            version = events.Current.Version,
+                            eventId = events.Current.EventId,
+                            eventType = events.Current.EventType,
+                            entityType = events.Current.EntityType,
+                            entityId = events.Current.EntityId,
+                            entityVersion = events.Current.EntityVersion,
+                            occurredAt = events.Current.OccurredAt,
+                            station = events.Current.Station,
+                            session = events.Current.Session,
+                        }, new JsonSerializerOptions(JsonSerializerDefaults.Web)
+                    );
+                    await context.Response.WriteAsync($"event: changed\ndata: {data}\n\n", ct);
                     next = events.MoveNextAsync().AsTask();
                 }
                 else
-                    await context.Response.WriteAsync(": heartbeat\n\n", ct);
+                    await context.Response.WriteAsync("event: heartbeat\ndata: {}\n\n", ct);
                 await context.Response.Body.FlushAsync(ct);
             }
         }

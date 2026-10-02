@@ -1,249 +1,94 @@
 using System.Text.Json;
 using EVCharging.Application.Charging;
-using EVCharging.Domain.Charging;
-using EVCharging.Domain.Identity;
 using EVCharging.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 
 namespace EVCharging.Infrastructure.Charging.Ocpp;
 
-public sealed class OcppTransactionHandler(
-    ChargingDbContext db,
-    OcppStationProjection projection,
-    OcppMeterHandler meters,
-    TimeProvider clock,
-    IOptions<OcppOptions> options,
-    IConfiguration configuration
-)
+public sealed class OcppTransactionHandler(ChargingDbContext db, OcppStationProjection projection,
+    OcppMeterHandler meters, TimeProvider clock, IOptions<OcppOptions> options, IChargerEventReceiver receiver)
 {
-    public async Task<object> StartAsync(
-        OcppChargePoint device,
-        OcppInboundMessage message,
-        JsonElement payload,
-        CancellationToken ct
-    )
+    public async Task<object> StartAsync(OcppChargePoint device, OcppInboundMessage message,
+        JsonElement payload, CancellationToken ct)
     {
         var number = OcppPayload.Integer(payload, "connectorId", 1);
         var idTag = OcppPayload.Text(payload, "idTag", 20);
         var meter = OcppPayload.Integer(payload, "meterStart");
         var started = OcppPayload.Timestamp(payload);
         if (idTag != options.Value.SimulatorTagId)
-            throw new OcppFault(
-                "SecurityError",
-                "The authorization tag is not registered for this simulator."
-            );
-        var connector =
-            await db.OcppConnectors.SingleOrDefaultAsync(
-                x => x.ChargePointId == device.Id && x.ConnectorNumber == number,
-                ct
-            )
+            throw new OcppFault("SecurityError", "The authorization tag is not registered for this simulator.");
+        var connector = await db.OcppConnectors.SingleOrDefaultAsync(
+            x => x.ChargePointId == device.Id && x.ConnectorNumber == number, ct)
             ?? throw new OcppFault("PropertyConstraintViolation", "Connector is not provisioned.");
+        if (connector.BusinessConnectorId is null)
+            throw new OcppFault("PropertyConstraintViolation", "Connector has no business mapping.");
         var active = await db.OcppChargingTransactions.SingleOrDefaultAsync(
-            x =>
-                x.ChargePointId == device.Id
-                && x.ConnectorNumber == number
-                && x.PhysicalClosedAt == null,
-            ct
-        );
+            x => x.ChargePointId == device.Id && x.ConnectorNumber == number && x.PhysicalClosedAt == null, ct);
         if (active is not null)
         {
             if (active.StoppedAt is null)
-                throw new OcppFault(
-                    "OccurrenceConstraintViolation",
-                    "The connector already has an active transaction."
-                );
+                throw new OcppFault("OccurrenceConstraintViolation", "The connector already has an active transaction.");
             active.PhysicalClosedAt = clock.GetUtcNow();
             await db.SaveChangesAsync(ct);
         }
-        var station = await db.Stations.SingleOrDefaultAsync(x => x.Id == connector.StationId, ct);
-        var email = configuration["Demo:DriverEmail"]?.Trim().ToUpperInvariant();
         var now = clock.GetUtcNow();
-        var waiting = await db.ChargingConnectionRequests.SingleOrDefaultAsync(
-            x =>
-                x.StationId == connector.StationId
-                && x.ConnectorNumber == number
-                && x.State == "Waiting"
-                && x.ExpiresAt > now,
-            ct
-        );
-        Guid? driverId = waiting?.DriverId;
-        if (
-            driverId is not null
-            && !await db.Accounts.AnyAsync(
-                x =>
-                    x.Id == driverId
-                    && x.IsActive
-                    && x.ArchivedAt == null
-                    && x.Role == UserRole.Driver,
-                ct
-            )
-        )
-            throw new OcppFault("SecurityError", "The driver authorization is no longer active.");
-        driverId ??= email is null
-            ? null
-            : await db
-                .Accounts.Where(x =>
-                    x.NormalizedEmail == email
-                    && x.Role == UserRole.Driver
-                    && x.IsActive
-                    && x.ArchivedAt == null
-                )
-                .Select(x => (Guid?)x.Id)
-                .SingleOrDefaultAsync(ct);
+        var lastStop = await db.OcppChargingTransactions
+            .Where(x => x.ChargePointId == device.Id && x.ConnectorNumber == number && x.StoppedAt != null)
+            .MaxAsync(x => x.StopReceivedAt, ct);
+        var startStatus = await db.OcppStatusEvents.Where(x => x.ChargePointId == device.Id
+            && x.ConnectorNumber == number && x.ReceivedAt >= now.AddSeconds(-10)
+            && (lastStop == null || x.ReceivedAt > lastStop)
+            && x.ObservedAt >= started && x.ObservedAt <= started.AddSeconds(5))
+            .OrderByDescending(x => x.ReceivedAt).FirstOrDefaultAsync(ct);
+        if (options.Value.SimulatorEnabled && connector.StatusObservedAt > started
+            && await db.Stations.AnyAsync(x => x.Id == connector.StationId && x.IsDemo, ct))
+            connector.StatusObservedAt = null;
+        await projection.SetConnectorAsync(device.Id, number, startStatus?.Status ?? "Preparing",
+            startStatus?.ObservedAt ?? started, ct);
         var transaction = new OcppChargingTransaction
         {
-            ChargePointId = device.Id,
-            ConnectorNumber = number,
-            StationId = connector.StationId,
-            DriverId = driverId,
-            StartMessageId = message.Id,
-            StartedAt = started,
-            StartReceivedAt = clock.GetUtcNow(),
-            MeterStartWh = meter,
-            EnergyKWh = 0,
-            UnitPriceSnapshot = station?.PricePerKWh,
-            Currency = station?.Currency,
+            ChargePointId = device.Id, ConnectorNumber = number, StationId = connector.StationId,
+            StartMessageId = message.Id, StartedAt = started, StartReceivedAt = now, MeterStartWh = meter,
         };
+        // Stable normalized session identity; protocol records link to it explicitly.
+        transaction.SessionId = transaction.Id;
+        await receiver.ReceiveAsync(new("OCPP", message.Id.ToString(), device.Id.ToString(),
+            number.ToString(), null, ChargerEventKind.Started, started, 0, null, null,
+            transaction.SessionId, connector.BusinessConnectorId, now), ct);
         db.OcppChargingTransactions.Add(transaction);
-        if (waiting is not null)
-        {
-            waiting.State = "Linked";
-            waiting.SessionId = transaction.Id;
-            waiting.LinkedAt = now;
-        }
-        // A new accelerated simulation starts with a fresh device clock. Its
-        // previous completed run must not block status updates in this run.
-        if (
-            options.Value.SimulatorEnabled
-            && station?.IsDemo == true
-            && (started - now).Duration() <= TimeSpan.FromMinutes(5)
-            && connector.StatusObservedAt > started
-        )
-            connector.StatusObservedAt = null;
-        await projection.SetConnectorAsync(device.Id, number, "Preparing", started, ct);
         await db.SaveChangesAsync(ct);
-        StageSessionChange(db, transaction, clock.GetUtcNow());
-        return new
-        {
-            transactionId = transaction.Ocpp16TransactionId,
-            idTagInfo = new { status = "Accepted" },
-        };
+        return new { transactionId = transaction.Ocpp16TransactionId, idTagInfo = new { status = "Accepted" } };
     }
 
-    public async Task<object> StopAsync(
-        OcppChargePoint device,
-        OcppInboundMessage message,
-        JsonElement payload,
-        CancellationToken ct
-    )
+    public async Task<object> StopAsync(OcppChargePoint device, OcppInboundMessage message,
+        JsonElement payload, CancellationToken ct)
     {
         var transactionId = OcppPayload.Integer(payload, "transactionId", 1);
         var meterStop = OcppPayload.Integer(payload, "meterStop");
         var stopped = OcppPayload.Timestamp(payload);
         var reason = OcppPayload.OptionalText(payload, "reason", 40);
         var samples = OcppPayload.Samples(payload, "transactionData");
-        var transaction =
-            await db.OcppChargingTransactions.SingleOrDefaultAsync(
-                x => x.ChargePointId == device.Id && x.Ocpp16TransactionId == transactionId,
-                ct
-            ) ?? throw new OcppFault("PropertyConstraintViolation", "Unknown transaction.");
+        var transaction = await db.OcppChargingTransactions.SingleOrDefaultAsync(
+            x => x.ChargePointId == device.Id && x.Ocpp16TransactionId == transactionId, ct)
+            ?? throw new OcppFault("PropertyConstraintViolation", "Unknown transaction.");
         if (stopped < transaction.StartedAt)
-            throw new OcppFault(
-                "PropertyConstraintViolation",
-                "Stop time precedes transaction start."
-            );
-        if (transaction.StopMessageId is not null)
-            return new { };
-        var simulationClock =
-            options.Value.SimulatorEnabled
-            && await db.Stations.AnyAsync(x => x.Id == transaction.StationId && x.IsDemo, ct);
-        meters.AddSamples(
-            device.Id,
-            message.Id,
-            transaction.ConnectorNumber,
-            transaction,
-            samples,
-            simulationClock
-        );
-        transaction.StopMessageId = message.Id;
-        transaction.StoppedAt = stopped;
-        transaction.StopReceivedAt = clock.GetUtcNow();
-        transaction.State = "Stopped";
-        var connectionRequest = await db.ChargingConnectionRequests.SingleOrDefaultAsync(
-            x => x.SessionId == transaction.Id,
-            ct
-        );
-        if (connectionRequest is not null)
-            connectionRequest.State = "Completed";
-        transaction.StopReason = reason;
-        transaction.MeterStopWh = meterStop;
-        transaction.CurrentPowerKW = 0;
-        transaction.EnergyKWh =
-            meterStop >= transaction.MeterStartWh
-                ? (meterStop - transaction.MeterStartWh) / 1000m
-                : null;
-        if (transaction.EnergyKWh is { } energy && transaction.UnitPriceSnapshot is { } price)
-            transaction.CalculatedCost = decimal.Round(
-                energy * price,
-                2,
-                MidpointRounding.AwayFromZero
-            );
-        if (
-            transaction.DriverId is { } driver
-            && transaction.StationId is { } station
-            && transaction.EnergyKWh is { } total
-            && transaction.UnitPriceSnapshot is { } tariff
-            && transaction.CalculatedCost is { } cost
-        )
-            db.ChargingHistory.Add(
-                new ChargingHistory
-                {
-                    DriverId = driver,
-                    StationId = station,
-                    StartedAt = transaction.StartedAt,
-                    EndedAt = stopped,
-                    EnergyKWh = total,
-                    UnitPriceSnapshot = tariff,
-                    TotalCost = cost,
-                    Currency = transaction.Currency ?? "EUR",
-                    IsDemo = true,
-                }
-            );
-        await projection.SetConnectorAsync(
-            device.Id,
-            transaction.ConnectorNumber,
-            "Finishing",
-            stopped,
-            ct
-        );
-        StageSessionChange(db, transaction, clock.GetUtcNow());
+            throw new OcppFault("PropertyConstraintViolation", "Stop time precedes transaction start.");
+        if (transaction.StopMessageId is not null) return new { };
+        var simulation = options.Value.SimulatorEnabled && await db.Stations.AnyAsync(
+            x => x.Id == transaction.StationId && x.IsDemo, ct);
+        await meters.AddSamplesAsync(device.Id, message.Id, transaction.ConnectorNumber, transaction, samples, simulation, ct);
+        transaction.StopMessageId = message.Id; transaction.StoppedAt = stopped;
+        transaction.StopReceivedAt = clock.GetUtcNow(); transaction.State = "Stopped";
+        transaction.StopReason = reason; transaction.MeterStopWh = meterStop;
+        var connector = await db.OcppConnectors.SingleAsync(
+            x => x.ChargePointId == device.Id && x.ConnectorNumber == transaction.ConnectorNumber, ct);
+        await receiver.ReceiveAsync(new("OCPP", message.Id.ToString(), device.Id.ToString(),
+            transaction.ConnectorNumber.ToString(), transactionId.ToString(), ChargerEventKind.Stopped,
+            stopped, meterStop >= transaction.MeterStartWh ? (meterStop - transaction.MeterStartWh) / 1000m : null,
+            null, null, transaction.SessionId, connector.BusinessConnectorId, clock.GetUtcNow()), ct);
+        await projection.SetConnectorAsync(device.Id, transaction.ConnectorNumber, "Finishing", stopped, ct);
         return new { };
     }
-
-    internal static void StageSessionChange(
-        ChargingDbContext db,
-        OcppChargingTransaction transaction,
-        DateTimeOffset now
-    )
-    {
-        if (transaction.DriverId is not { } driver || transaction.StationId is not { } station)
-            return;
-        db.RealtimeOutbox.Add(
-            new RealtimeOutboxEvent
-            {
-                EventType = "SessionChanged",
-                EntityType = "OcppTransaction",
-                EntityId = transaction.Id,
-                Audience = "Driver",
-                RecipientAccountId = driver,
-                PayloadJson = JsonSerializer.Serialize(
-                    new StationChanged(station, 0, transaction.State)
-                ),
-                CreatedAt = now,
-                AvailableAt = now,
-            }
-        );
-    }
 }
+

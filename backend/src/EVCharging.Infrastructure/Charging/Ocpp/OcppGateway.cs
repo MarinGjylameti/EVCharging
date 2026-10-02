@@ -12,68 +12,26 @@ namespace EVCharging.Infrastructure.Charging.Ocpp;
 public sealed class OcppGateway(
     ChargingDbContext db,
     OcppActionHandler actions,
-    OcppSimulatorProvisioner provisioner,
+    OcppDeviceAuthentication authentication,
     OcppStationProjection projection,
+    StationEventSignal events,
     TimeProvider clock,
     IOptions<OcppOptions> options
 ) : IOcppGateway
 {
-    public async Task<Guid?> AuthenticateAsync(
-        string identity,
-        string username,
-        string password,
-        CancellationToken ct
-    )
-    {
-        var settings = options.Value;
-        if (
-            !settings.SimulatorEnabled
-            || !System.Text.RegularExpressions.Regex.IsMatch(identity, "^[A-Za-z0-9_-]{1,40}$")
-        )
-            return null;
-        var anonymousDemo =
-            username.Length == 0
-            && password.Length == 0
-            && settings.AllowAnonymousSimulators
-            && settings.SimulatorIdentities.Contains(identity, StringComparer.Ordinal);
-        var authenticatedDemo =
-            username == identity
-            && settings.SimulatorPassword.Length >= 12
-            && CryptographicOperations.FixedTimeEquals(
-                SHA256.HashData(Encoding.UTF8.GetBytes(password)),
-                SHA256.HashData(Encoding.UTF8.GetBytes(settings.SimulatorPassword))
-            );
-        if (!anonymousDemo && !authenticatedDemo)
-            return null;
-        var device = await db.OcppChargePoints.SingleOrDefaultAsync(
-            x => x.Identity == identity,
-            ct
-        );
-        if (device is not null)
-        {
-            var mapped = await db
-                .OcppConnectors.Where(x => x.ChargePointId == device.Id)
-                .ToListAsync(ct);
-            var stationIds = mapped.Select(x => x.StationId).ToArray();
-            var demoStations = await db.Stations.CountAsync(
-                x => stationIds.Contains(x.Id) && x.IsDemo && !x.IsArchived,
-                ct
-            );
-            return
-                device.IsEnabled
-                && mapped.Count > 0
-                && demoStations == stationIds.Distinct().Count()
-                ? device.Id
-                : null;
-        }
-        return (await provisioner.EnsureSimulatorAsync(identity, ct)).Id;
-    }
-
+    public Task<Guid?> AuthenticateAsync(string identity, string username, string password, CancellationToken ct) =>
+        authentication.AuthenticateAsync(identity, username, password, ct);
     public async Task<Guid> OpenAsync(Guid chargePointId, CancellationToken ct)
     {
         await using var transaction = await OcppDeviceUpdate.BeginAsync(db, chargePointId, ct);
         var device = await db.OcppChargePoints.SingleAsync(x => x.Id == chargePointId, ct);
         device.LastSeenAt = clock.GetUtcNow();
+        var abandoned = await db.OcppConnections.Where(x => x.ChargePointId == chargePointId && x.DisconnectedAt == null).ToListAsync(ct);
+        foreach (var old in abandoned)
+        {
+            old.DisconnectedAt = clock.GetUtcNow();
+            old.CloseReason = "Superseded by a new device connection";
+        }
         var connection = new OcppConnection
         {
             ChargePointId = chargePointId,
@@ -81,10 +39,11 @@ public sealed class OcppGateway(
         };
         db.OcppConnections.Add(connection);
         await projection.InvalidateDeviceAsync(chargePointId, ct);
-        await StageConnectionChangeAsync(chargePointId, "Connected", ct);
+        await projection.ConnectedAsync(chargePointId, ct);
         await db.SaveChangesAsync(ct);
         if (transaction is not null)
             await transaction.CommitAsync(ct);
+        events.Notify();
         return connection.Id;
     }
 
@@ -97,15 +56,16 @@ public sealed class OcppGateway(
     {
         await using var transaction = await OcppDeviceUpdate.BeginAsync(db, chargePointId, ct);
         var connection = await db.OcppConnections.SingleAsync(x => x.Id == connectionId, ct);
+        if (connection.DisconnectedAt is not null) return;
         connection.DisconnectedAt = clock.GetUtcNow();
         connection.CloseCode = closeCode;
         var device = await db.OcppChargePoints.SingleAsync(x => x.Id == chargePointId, ct);
         device.LastSeenAt = null;
         await projection.InvalidateDeviceAsync(chargePointId, ct);
-        await StageConnectionChangeAsync(chargePointId, "Disconnected", ct);
         await db.SaveChangesAsync(ct);
         if (transaction is not null)
             await transaction.CommitAsync(ct);
+        events.Notify();
     }
 
     public async Task<string> ProcessAsync(
@@ -161,12 +121,16 @@ public sealed class OcppGateway(
                     )
                     .OrderByDescending(x => x.ReceivedAt)
                     .FirstOrDefaultAsync(ct);
+            var wasOffline = device.LastSeenAt is null || device.LastSeenAt < clock.GetUtcNow().AddSeconds(-options.Value.OfflineSeconds);
             device.LastSeenAt = clock.GetUtcNow();
             var connection = await db.OcppConnections.SingleAsync(
                 x => x.Id == connectionId && x.ChargePointId == chargePointId,
                 ct
             );
             connection.LastFrameAt = clock.GetUtcNow();
+            if (connection.DisconnectedAt is not null)
+                throw new OcppFault("SecurityError", "The connection was superseded.");
+            if (wasOffline) await projection.ConnectedAsync(chargePointId, ct);
             if (previous is not null)
             {
                 var cached =
@@ -193,6 +157,15 @@ public sealed class OcppGateway(
             await db.SaveChangesAsync(ct);
             if (transaction is not null)
                 await transaction.CommitAsync(ct);
+            if (
+                action
+                is "BootNotification"
+                    or "StatusNotification"
+                    or "StartTransaction"
+                    or "StopTransaction"
+                    or "MeterValues"
+            )
+                events.Notify();
             return response;
         }
         catch (OcppFault fault)
@@ -221,27 +194,6 @@ public sealed class OcppGateway(
         }
     }
 
-    private async Task StageConnectionChangeAsync(Guid deviceId, string state, CancellationToken ct)
-    {
-        var stationIds = await db
-            .OcppConnectors.Where(x => x.ChargePointId == deviceId && x.StationId != null)
-            .Select(x => x.StationId!.Value)
-            .Distinct()
-            .ToListAsync(ct);
-        foreach (var stationId in stationIds)
-            db.RealtimeOutbox.Add(
-                new()
-                {
-                    EventType = "DeviceConnectionChanged",
-                    EntityType = "ChargingStation",
-                    EntityId = stationId,
-                    PayloadJson = JsonSerializer.Serialize(new StationChanged(stationId, 0, state)),
-                    CreatedAt = clock.GetUtcNow(),
-                    AvailableAt = clock.GetUtcNow(),
-                }
-            );
-    }
-
     private OcppInboundMessage Message(
         Guid deviceId,
         Guid connectionId,
@@ -264,3 +216,4 @@ public sealed class OcppGateway(
     private static string Error(string id, string code, string description) =>
         JsonSerializer.Serialize(new object[] { 4, id, code, description, new { } });
 }
+

@@ -13,23 +13,19 @@ namespace EVCharging.Infrastructure.Charging;
 public sealed class StationEventWorker(
     IServiceScopeFactory scopes,
     StationEventBus bus,
+    StationEventSignal signal,
     TimeProvider clock,
-    IOptions<OcppOptions> options,
     ILogger<StationEventWorker> logger
 ) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!options.Value.SimulatorEnabled)
-            return;
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
-        while (await timer.WaitForNextTickAsync(stoppingToken))
+        while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
                 await using var scope = scopes.CreateAsyncScope();
                 var db = scope.ServiceProvider.GetRequiredService<ChargingDbContext>();
-                await InvalidateStaleDevicesAsync(stoppingToken);
                 var events = await db
                     .RealtimeOutbox.Where(x =>
                         x.PublishedAt == null
@@ -44,10 +40,14 @@ public sealed class StationEventWorker(
                     var change =
                         JsonSerializer.Deserialize<StationChanged>(entry.PayloadJson)
                         ?? throw new JsonException("Invalid station event.");
-                    bus.Publish(change with { RecipientAccountId = entry.RecipientAccountId });
+                    bus.Publish(change with { RecipientAccountId = entry.RecipientAccountId,
+                        EventId = entry.Id, EventType = entry.EventType, EntityType = entry.EntityType,
+                        EntityId = entry.EntityId, EntityVersion = entry.EntityVersion, OccurredAt = entry.CreatedAt });
                     entry.PublishedAt = clock.GetUtcNow();
                 }
                 await db.SaveChangesAsync(stoppingToken);
+                if (events.Count == 100)
+                    continue;
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -57,38 +57,10 @@ public sealed class StationEventWorker(
             {
                 logger.LogError(error, "Station events will be retried.");
             }
+            await signal.WaitAsync(stoppingToken);
         }
     }
 
-    private async Task InvalidateStaleDevicesAsync(CancellationToken ct)
-    {
-        await using var scope = scopes.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<ChargingDbContext>();
-        var cutoff = clock.GetUtcNow().AddSeconds(-options.Value.OfflineSeconds);
-        var ids = await db
-            .OcppChargePoints.AsNoTracking()
-            .Where(x =>
-                x.LastSeenAt < cutoff
-                && db.OcppConnectors.Any(c => c.ChargePointId == x.Id && c.ReportedStatus != null)
-            )
-            .Select(x => x.Id)
-            .ToListAsync(ct);
-        foreach (var id in ids)
-        {
-            // Lock the same row as message processing, then recheck the heartbeat.
-            await using var deviceScope = scopes.CreateAsyncScope();
-            var deviceDb = deviceScope.ServiceProvider.GetRequiredService<ChargingDbContext>();
-            await using var transaction = await OcppDeviceUpdate.BeginAsync(deviceDb, id, ct);
-            var device = await deviceDb.OcppChargePoints.SingleAsync(x => x.Id == id, ct);
-            if (device.LastSeenAt < cutoff)
-            {
-                await deviceScope
-                    .ServiceProvider.GetRequiredService<OcppStationProjection>()
-                    .InvalidateDeviceAsync(id, ct);
-                await deviceDb.SaveChangesAsync(ct);
-            }
-            if (transaction is not null)
-                await transaction.CommitAsync(ct);
-        }
-    }
 }
+
+

@@ -5,12 +5,13 @@ import Link from "next/link";
 import type { Language, StationCharging } from "../../../../contracts/account";
 import { useLiveSnapshot } from "./use-live-snapshot";
 import { ChargingProgress } from "./charging-progress";
+import { chargingLivePolicy } from "./live-update-policy";
 
 export function StationChargingView({ initial, language }: { initial: StationCharging; language: Language }) {
   const sq = language === "sq";
   const stationId = initial.station.id;
   const url = `/api/driver/stations/${stationId}/charging`;
-  const { snapshot, setSnapshot, connected, unavailable } = useLiveSnapshot(initial, url, stationId);
+  const { snapshot, setSnapshot, connected, unavailable } = useLiveSnapshot(initial, url, stationId, chargingLivePolicy);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [now, setNow] = useState(0);
@@ -38,6 +39,8 @@ export function StationChargingView({ initial, language }: { initial: StationCha
         const data = await response.json().catch(() => ({}));
         throw new Error(data.code === "charger_in_use"
           ? (sq ? "Kjo pikë po përdoret nga një drejtues tjetër." : "This charger is in use by another driver.")
+          : data.code === "driver_already_connected"
+            ? (sq ? "Ke tashmë një karikim ose pritje në një pikë tjetër." : "You already have a charging session or waiting request at another charger.")
           : (sq ? "Lidhja nuk u konfirmua. Provo përsëri." : "Connection was not confirmed. Please retry."));
       }
       const data: StationCharging = await response.json();

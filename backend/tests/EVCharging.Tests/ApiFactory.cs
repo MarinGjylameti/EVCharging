@@ -11,7 +11,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 namespace EVCharging.Tests;
 
 // Test-only storage verifies HTTP/auth behavior, not PostgreSQL constraints or transaction isolation.
-public sealed class ApiFactory(bool simulator = false, bool anonymousSimulators = false)
+public sealed class ApiFactory(bool simulator = false, bool anonymousSimulators = false, string? postgresConnection = null)
     : WebApplicationFactory<Program>
 {
     private readonly string database = Guid.NewGuid().ToString();
@@ -39,8 +39,10 @@ public sealed class ApiFactory(bool simulator = false, bool anonymousSimulators 
             services.RemoveAll<IDbContextOptionsConfiguration<ChargingDbContext>>();
             services.RemoveAll<ChargingDbContext>();
             services.AddDbContext<ChargingDbContext>(options =>
-                options.UseInMemoryDatabase(database).AddInterceptors(new TestTransactionIds())
-            );
+            {
+                if (postgresConnection is not null) options.UseNpgsql(postgresConnection);
+                else options.UseInMemoryDatabase(database).AddInterceptors(new TestTransactionIds());
+            });
         });
     }
 

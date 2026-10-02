@@ -18,6 +18,8 @@ public sealed class ChargingDbContext(DbContextOptions<ChargingDbContext> option
     public DbSet<AuditEntry> Audit => Set<AuditEntry>();
     public DbSet<ChargingStation> Stations => Set<ChargingStation>();
     public DbSet<ChargingHistory> ChargingHistory => Set<ChargingHistory>();
+    public DbSet<ChargingSession> ChargingSessions => Set<ChargingSession>();
+    public DbSet<ChargingConnector> ChargingConnectors => Set<ChargingConnector>();
     public DbSet<ChargingConnectionRequest> ChargingConnectionRequests =>
         Set<ChargingConnectionRequest>();
     public DbSet<OcppChargePoint> OcppChargePoints => Set<OcppChargePoint>();
@@ -40,6 +42,8 @@ public sealed class ChargingDbContext(DbContextOptions<ChargingDbContext> option
         model.ApplyConfiguration(new AuditEntryConfiguration());
         model.ApplyConfiguration(new ChargingStationConfiguration());
         model.ApplyConfiguration(new ChargingHistoryConfiguration());
+        model.ApplyConfiguration(new ChargingSessionConfiguration());
+        model.ApplyConfiguration(new ChargingConnectorConfiguration());
         model.ApplyConfiguration(new ChargingConnectionConfiguration());
         model.ApplyConfiguration(new OcppChargePointConfiguration());
         model.ApplyConfiguration(new OcppConnectorConfiguration());

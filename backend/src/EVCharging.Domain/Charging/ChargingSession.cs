@@ -3,17 +3,35 @@ namespace EVCharging.Domain.Charging;
 public sealed class ChargingSession
 {
     private readonly HashSet<string> processed = new(StringComparer.Ordinal);
-    public Guid Id { get; } = Guid.NewGuid();
-    public Guid PointId { get; }
-    public decimal UnitPriceSnapshot { get; }
-    public string Currency { get; }
-    public DateTimeOffset StartedAt { get; }
-    public DateTimeOffset? EndedAt { get; private set; }
-    public decimal EnergyKWh { get; private set; }
-    public decimal? PowerKW { get; private set; }
-    public DateTimeOffset LastMeasurementAt { get; private set; }
-    public decimal CalculatedCost =>
-        decimal.Round(EnergyKWh * UnitPriceSnapshot, 2, MidpointRounding.AwayFromZero);
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid PointId { get; set; }
+    public Guid ConnectorId { get; set; }
+    public int ConnectorNumber { get; set; } = 1;
+    public decimal UnitPriceSnapshot { get; set; }
+    public string Currency { get; set; } = "EUR";
+    public DateTimeOffset StartedAt { get; set; }
+    public DateTimeOffset StartReceivedAt { get; set; }
+    public DateTimeOffset? EndedAt { get; set; }
+    public DateTimeOffset? StopReceivedAt { get; set; }
+    public decimal? EnergyKWh { get; set; } = 0;
+    public decimal? PowerKW { get; set; }
+    public decimal? StateOfCharge { get; set; }
+    public decimal? TemperatureCelsius { get; set; }
+    public DateTimeOffset LastMeasurementAt { get; set; }
+    public DateTimeOffset? LastMeasurementReceivedAt { get; set; }
+    public DateTimeOffset? PowerObservedAt { get; set; }
+    public DateTimeOffset? PowerReceivedAt { get; set; }
+    public DateTimeOffset? SocObservedAt { get; set; }
+    public DateTimeOffset? TemperatureObservedAt { get; set; }
+    public string? EnergyScope { get; set; }
+    public string? PowerScope { get; set; }
+    public ChargingState Status { get; set; } = ChargingState.Connecting;
+    public long Version { get; set; }
+    public bool IsDemo { get; set; }
+    public decimal? CalculatedCost => EnergyKWh is { } energy
+        ? decimal.Round(energy * UnitPriceSnapshot, 2, MidpointRounding.AwayFromZero) : null;
+
+    public ChargingSession() { }
 
     public ChargingSession(
         Guid pointId,

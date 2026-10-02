@@ -14,6 +14,7 @@ export async function GET(request: Request) {
     return new Response(upstream.body, { headers: {
       "Content-Type": "text/event-stream", "Cache-Control": "no-store, no-transform",
       "X-Accel-Buffering": "no",
+      "Content-Encoding": "identity",
     } });
   } catch {
     return new Response(null, { status: 503 });

@@ -32,6 +32,9 @@ public static class DependencyInjection
         services.AddScoped<IStationManagement, StationManagementService>();
         services.AddScoped<IDriverQueries, DriverQueries>();
         services.AddScoped<IDriverCharging, DriverChargingService>();
+        services.AddScoped<IChargerEventReceiver, ChargerEventReceiver>();
+        services.AddScoped<StationProjection>();
+        services.AddScoped<IChargingClaimVerification, DemoClaimVerification>();
         services
             .AddOptions<OcppOptions>()
             .BindConfiguration("Ocpp")
@@ -60,16 +63,19 @@ public static class DependencyInjection
             )
             .ValidateOnStart();
         services.AddScoped<OcppSimulatorProvisioner>();
+        services.AddScoped<OcppDeviceAuthentication>();
         services.AddScoped<OcppStationProjection>();
         services.AddScoped<OcppMeterHandler>();
         services.AddScoped<OcppTransactionHandler>();
         services.AddScoped<OcppActionHandler>();
         services.AddScoped<IOcppGateway, OcppGateway>();
         services.AddSingleton<StationEventBus>();
+        services.AddSingleton<StationEventSignal>();
         services.AddSingleton<IStationEventStream>(provider =>
             provider.GetRequiredService<StationEventBus>()
         );
         services.AddHostedService<StationEventWorker>();
+        services.AddHostedService<ChargerLivenessWorker>();
 
         return services;
     }

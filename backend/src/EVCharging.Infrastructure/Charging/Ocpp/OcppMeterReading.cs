@@ -19,6 +19,45 @@ internal sealed record OcppMeterReading(
             ? decimal.Round((Value - meterStartWh) / 1000m, 6)
             : null;
 
+    public static decimal? StateOfCharge(IEnumerable<OcppMeterSample> samples, bool simulator)
+    {
+        foreach (
+            var group in samples
+                .Where(x =>
+                    x.Measurand == "SoC"
+                    && x.NumericValue is >= 0 and <= 100
+                    && x.Unit is (null or "Percent")
+                    && x.Format != "SignedData"
+                )
+                .OrderByDescending(x => x.ObservedAt)
+                .ThenByDescending(x => x.ReceivedAt)
+                .GroupBy(x => x.ObservedAt)
+        )
+        {
+            var aggregate = group
+                .Where(x => x.Phase == null)
+                .Select(x => x.NumericValue)
+                .Distinct()
+                .ToArray();
+            if (aggregate.Length > 0)
+                return aggregate.Length == 1 ? aggregate[0] : null;
+            // This simulator leaves the energy form's L1 default on SoC too.
+            // Battery percentages are never added across phases. Restrict this
+            // compatibility rule to demo devices and reject conflicting values.
+            if (simulator)
+            {
+                var phased = group
+                    .Where(x => x.Phase is "L1" or "L2" or "L3")
+                    .Select(x => x.NumericValue)
+                    .Distinct()
+                    .ToArray();
+                if (phased.Length > 0)
+                    return phased.Length == 1 ? phased[0] : null;
+            }
+        }
+        return null;
+    }
+
     public static IReadOnlyList<OcppMeterReading> FromSamples(
         IEnumerable<OcppMeterSample> samples,
         DateTimeOffset startedAt,
@@ -104,3 +143,4 @@ internal sealed record OcppMeterReading(
             _ => null,
         };
 }
+

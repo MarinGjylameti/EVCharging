@@ -12,7 +12,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace EVCharging.Tests;
 
-public sealed class OcppWebSocketTests : IDisposable
+public sealed partial class OcppWebSocketTests : IDisposable
 {
     private readonly ApiFactory factory = new(simulator: true);
     private readonly CancellationTokenSource timeout = new(TimeSpan.FromSeconds(30));
@@ -85,6 +85,12 @@ public sealed class OcppWebSocketTests : IDisposable
         return document.RootElement.Clone();
     }
 
+    private async Task ClaimAsync(HttpClient driver, string identity = "SIM-001")
+    {
+        var station = Assert.Single((await driver.GetFromJsonAsync<DriverStationDto[]>(
+            "/api/v1/driver/stations", timeout.Token))!, x => x.Code == identity);
+        (await driver.PostAsync($"/api/v1/driver/stations/{station.Id}/connect", null, timeout.Token)).EnsureSuccessStatusCode();
+    }
     private Task<JsonElement> StatusAsync(
         WebSocket socket,
         string status,
@@ -109,6 +115,7 @@ public sealed class OcppWebSocketTests : IDisposable
         using var driver = await DriverAsync();
         using var otherDriver = await DriverAsync("other@test.com");
         using var socket = await ConnectAsync();
+        await ClaimAsync(driver);
         var boot = await CallAsync(
             socket,
             "BootNotification",
@@ -240,6 +247,7 @@ public sealed class OcppWebSocketTests : IDisposable
     public async Task MultipleSimulatorsKeepIndependentStatesAndIgnoreOldStatus()
     {
         using var driver = await DriverAsync();
+        await ClaimAsync(driver);
         using var first = await ConnectAsync();
         using var second = await ConnectAsync("SIM-002");
         using var third = await ConnectAsync("SIM-003");
@@ -259,8 +267,7 @@ public sealed class OcppWebSocketTests : IDisposable
         Assert.Equal("Charging", await StationStatusAsync(driver, "SIM-001"));
         Assert.Equal("Occupied", await StationStatusAsync(driver, "SIM-002"));
         Assert.Equal("OutOfService", await StationStatusAsync(driver, "SIM-003"));
-        Assert.Equal(
-            2,
+        Assert.Single(
             (
                 await driver.GetFromJsonAsync<DriverChargingState>(
                     "/api/v1/driver/charging-sessions",
@@ -268,7 +275,6 @@ public sealed class OcppWebSocketTests : IDisposable
                 )
             )!
                 .Sessions
-                .Count
         );
         await first.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);
         await second.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);
@@ -280,6 +286,7 @@ public sealed class OcppWebSocketTests : IDisposable
     {
         using var driver = await DriverAsync();
         using var socket = await ConnectAsync();
+        await ClaimAsync(driver);
         var serverStart = DateTimeOffset.UtcNow;
         var deviceStart = serverStart.AddMinutes(-68);
         var start = await CallAsync(
@@ -339,23 +346,22 @@ public sealed class OcppWebSocketTests : IDisposable
         Assert.Equal(6.906m, session.EnergyKWh);
         Assert.Equal("L1", session.EnergyScope);
         Assert.Null(session.PowerKW); // This simulator trace never reports power.
-        Assert.Equal("AwaitingStatus", session.Status);
+        Assert.Equal("Charging", session.Status);
         Assert.True(session.DeviceClockSkewed);
         Assert.InRange(session.StartReceivedAt, serverStart, DateTimeOffset.UtcNow);
         Assert.True(session.LastMeasurementReceivedAt >= serverStart);
-        Assert.Equal("Unknown", await StationStatusAsync(driver, "SIM-001"));
+        Assert.Equal("Charging", await StationStatusAsync(driver, "SIM-001"));
         using (var scope = factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<ChargingDbContext>();
-            var transaction = await db.OcppChargingTransactions.SingleAsync(timeout.Token);
+            var transaction = await db.ChargingSessions.SingleAsync(timeout.Token);
             Assert.Equal(6.906m, transaction.EnergyKWh);
             Assert.All(
                 await db.OcppMeterSamples.ToListAsync(timeout.Token),
                 sample => Assert.Equal("L1", sample.Phase)
             );
-            // Older deployments already stored these frames but left the summary at zero.
-            transaction.EnergyKWh = 0;
-            transaction.LastMeasurementAt = null;
+            // The live projection remains authoritative even without raw samples.
+            db.OcppMeterSamples.RemoveRange(await db.OcppMeterSamples.ToListAsync(timeout.Token));
             await db.SaveChangesAsync(timeout.Token);
         }
         session = Assert.Single(
@@ -377,7 +383,7 @@ public sealed class OcppWebSocketTests : IDisposable
                 )
             )!.Sessions
         );
-        Assert.Equal("Disconnected", session.Status);
+        Assert.Equal("ConnectionLost", session.Status);
         Assert.Equal(6.906m, session.EnergyKWh);
     }
 
@@ -386,6 +392,7 @@ public sealed class OcppWebSocketTests : IDisposable
     {
         using var driver = await DriverAsync();
         using var socket = await ConnectAsync();
+        await ClaimAsync(driver);
         var started = DateTimeOffset.UtcNow;
         var start = await CallAsync(
             socket,
@@ -399,6 +406,7 @@ public sealed class OcppWebSocketTests : IDisposable
             }
         );
         var transactionId = start[2].GetProperty("transactionId").GetInt32();
+        await StatusAsync(socket, "Charging", started);
         async Task<DriverChargingSession> MeterAsync(object[] samples, int seconds)
         {
             Assert.Equal(3, (
@@ -548,6 +556,20 @@ public sealed class OcppWebSocketTests : IDisposable
         {
             line = await reader.ReadLineAsync(timeout.Token);
         } while (line != "event: changed");
+        var data = await reader.ReadLineAsync(timeout.Token);
+        Assert.StartsWith("data: ", data);
+        using var hint = JsonDocument.Parse(data![6..]);
+        var stations = (
+            await driver.GetFromJsonAsync<DriverStationDto[]>(
+                "/api/v1/driver/stations",
+                timeout.Token
+            )
+        )!;
+        Assert.Equal(
+            Assert.Single(stations, x => x.Code == "SIM-001").Id,
+            hint.RootElement.GetProperty("stationId").GetGuid()
+        );
+        Assert.False(hint.RootElement.TryGetProperty("recipientAccountId", out _));
         Assert.Equal("Available", await StationStatusAsync(driver, "SIM-001"));
         await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);
     }
@@ -706,7 +728,7 @@ public sealed class OcppWebSocketTests : IDisposable
             await driver.GetFromJsonAsync<DriverStationCharging>(path + "/charging", timeout.Token)
         )!;
         Assert.Null(paused.ConnectionRequest);
-        Assert.Equal("SuspendedEV", paused.Session!.Status);
+        Assert.Equal("PausedByVehicle", paused.Session!.Status);
         Assert.Equal(2.75m, paused.Session.EnergyKWh);
         Assert.Equal(45m, paused.Session.StateOfCharge);
         Assert.Equal(
@@ -752,7 +774,7 @@ public sealed class OcppWebSocketTests : IDisposable
         var finished = (
             await driver.GetFromJsonAsync<DriverStationCharging>(path + "/charging", timeout.Token)
         )!;
-        Assert.Equal("Stopped", finished.Session!.Status);
+        Assert.Equal("Completed", finished.Session!.Status);
         Assert.Equal(4m, finished.Session.EnergyKWh);
         var history = Assert.Single(
             (
@@ -778,6 +800,7 @@ public sealed class OcppWebSocketTests : IDisposable
         Assert.Equal("Completed", request.State);
         Assert.Equal(finished.Session.Id, request.SessionId);
         Assert.Single(await db.OcppChargingTransactions.ToListAsync(timeout.Token));
+        await ClaimAsync(defaultDriver);
         var nextStart = DateTimeOffset.UtcNow;
         await CallAsync(
             socket,
@@ -837,6 +860,7 @@ public sealed class OcppWebSocketTests : IDisposable
             )!.ConnectionRequest
         );
         (await driver.PostAsync(one + "/cancel", null, timeout.Token)).EnsureSuccessStatusCode();
+        (await other.PostAsync(two + "/cancel", null, timeout.Token)).EnsureSuccessStatusCode();
         (await other.PostAsync(one + "/connect", null, timeout.Token)).EnsureSuccessStatusCode();
         using (var scope = factory.Services.CreateScope())
         {
@@ -863,7 +887,7 @@ public sealed class OcppWebSocketTests : IDisposable
             var db = scope.ServiceProvider.GetRequiredService<ChargingDbContext>();
             Assert.Empty(await db.OcppChargingTransactions.ToListAsync(timeout.Token));
             Assert.Equal(
-                2,
+                1,
                 await db.ChargingConnectionRequests.CountAsync(
                     x => x.State == "Waiting",
                     timeout.Token
@@ -1020,3 +1044,4 @@ public sealed class OcppWebSocketTests : IDisposable
         factory.Dispose();
     }
 }
+

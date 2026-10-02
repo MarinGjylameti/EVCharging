@@ -22,7 +22,15 @@ public sealed record StationChanged(
     Guid StationId,
     long Version,
     string Status,
-    Guid? RecipientAccountId = null
+    Guid? RecipientAccountId = null,
+    Guid EventId = default,
+    string EventType = "StationChanged",
+    string EntityType = "ChargingStation",
+    Guid EntityId = default,
+    long EntityVersion = 0,
+    DateTimeOffset OccurredAt = default,
+    DriverStationDto? Station = null,
+    DriverChargingSession? Session = null
 );
 
 public interface IStationEventStream

@@ -36,6 +36,7 @@ export type DriverChargingSession = {
   startReceivedAt?: string; stopReceivedAt?: string | null; lastMeasurementReceivedAt?: string | null;
   deviceClockSkewed?: boolean; energyScope?: string | null; powerScope?: string | null;
   unitPricePerKWh?: number | null;
+  powerSource?: "Reported" | null; powerValidUntil?: string | null; version?: number;
 };
 export type StationCharging = {
   station: Station; canConnect: boolean; deviceConnected: boolean; inUse: boolean;
@@ -44,5 +45,10 @@ export type StationCharging = {
 };
 export type DriverChargingState = { canTestSimulator: boolean; sessions: DriverChargingSession[] };
 export type DriverLiveSnapshot = {
-  stations: Station[]; history: ChargingHistory[]; chargingState: DriverChargingState;
+  stations: Station[]; history: ChargingHistory[];
+};
+export type ChargingRealtimeEvent = {
+  eventId: string; eventType: string; entityType: string; entityId: string;
+  entityVersion: number; occurredAt: string; stationId: string; version: number;
+  station?: Station | null; session?: DriverChargingSession | null;
 };

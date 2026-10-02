@@ -53,7 +53,7 @@ function AvailabilityCard({station,language,nowMs}: {
 export function DriverMap({stations: initialStations, history: initialHistory, language, firstName}: Props) {
   const sq = language === "sq";
   const router = useRouter();
-  const { stations, history } = useDriverLiveData(initialStations, initialHistory);
+  const { stations, history, connected, unavailable } = useDriverLiveData(initialStations, initialHistory);
   const stationCities = useMemo(() => [...new Set(stations.map(x => x.city))].sort((a,b)=>a.localeCompare(b,"sq")), [stations]);
   const cityOptions = useMemo(() => [...new Set([...albanianCities,...stationCities])].sort((a,b)=>a.localeCompare(b,"sq")), [stationCities]);
   const [city, setCity] = useState<string|null>(null);
@@ -256,7 +256,7 @@ export function DriverMap({stations: initialStations, history: initialHistory, l
             const remaining=nowMs===null?null:remainingChargingMinutes(station.availabilityForecast,nowMs);
             return <Fragment key={station.id}><button type="button" className={`map-pin status-${station.status.toLowerCase()}${selected?" selected":""}`}
               style={{left:at.left,top:at.top}} onClick={()=>{
-                if (station.statusSource === "OCPP") router.push(`/driver/stations/${station.id}`);
+                if (station.statusSource === "Device") router.push(`/driver/stations/${station.id}`);
                 else setSelectedId(station.id);
               }}
               aria-label={`${station.name}, ${(sq?statusSq:statusEn)[station.status]}${remaining!==null?`, ${remaining} ${sq?"min të mbetura":"min remaining"}`:""}`}
@@ -304,7 +304,7 @@ export function DriverMap({stations: initialStations, history: initialHistory, l
               <div><span>{sq ? "ÇMIMI" : "PRICE"}</span><strong>€{euro(active.pricePerKWh)} / kWh</strong></div>
               <div><span>ID</span><strong>{active.code}</strong></div>
             </div>
-            {active.statusSource === "OCPP" && <Link href={`/driver/stations/${active.id}`} className="driver-history-link">
+            {active.statusSource === "Device" && <Link href={`/driver/stations/${active.id}`} className="driver-history-link">
               {sq ? "Hap pikën e karikimit" : "Open charge point"} ↗
             </Link>}
             {active.isDemo&&<div className="station-footnote">{sq ? "Vendndodhja dhe gjendja janë të dhëna demo. Mos udhëto drejt kësaj pike pa e verifikuar." : "Location and status are demo data. Verify before travelling."}</div>}
@@ -313,7 +313,7 @@ export function DriverMap({stations: initialStations, history: initialHistory, l
             (sq ? "Nuk ka pika që përputhen me filtrin." : "No stations match this filter.")}</p>}
           <div className="station-list" aria-label={sq ? "Lista e pikave" : "Station list"}>
             {shown.map(station=><button type="button" key={station.id} onClick={()=>{
-              if (station.statusSource === "OCPP") { router.push(`/driver/stations/${station.id}`); return; }
+              if (station.statusSource === "Device") { router.push(`/driver/stations/${station.id}`); return; }
               setSelectedId(station.id);
               setView(previous=>({...previous,center:{latitude:station.latitude,longitude:station.longitude},zoom:Math.max(previous.zoom,13)}));
             }} aria-pressed={active?.id===station.id}>
@@ -328,3 +328,4 @@ export function DriverMap({stations: initialStations, history: initialHistory, l
     </section>
   </div>;
 }
+
