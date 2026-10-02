@@ -87,10 +87,24 @@ public sealed partial class OcppWebSocketTests : IDisposable
 
     private async Task ClaimAsync(HttpClient driver, string identity = "SIM-001")
     {
-        var station = Assert.Single((await driver.GetFromJsonAsync<DriverStationDto[]>(
-            "/api/v1/driver/stations", timeout.Token))!, x => x.Code == identity);
-        (await driver.PostAsync($"/api/v1/driver/stations/{station.Id}/connect", null, timeout.Token)).EnsureSuccessStatusCode();
+        var station = Assert.Single(
+            (
+                await driver.GetFromJsonAsync<DriverStationDto[]>(
+                    "/api/v1/driver/stations",
+                    timeout.Token
+                )
+            )!,
+            x => x.Code == identity
+        );
+        (
+            await driver.PostAsync(
+                $"/api/v1/driver/stations/{station.Id}/connect",
+                null,
+                timeout.Token
+            )
+        ).EnsureSuccessStatusCode();
     }
+
     private Task<JsonElement> StatusAsync(
         WebSocket socket,
         string status,
@@ -273,8 +287,7 @@ public sealed partial class OcppWebSocketTests : IDisposable
                     "/api/v1/driver/charging-sessions",
                     timeout.Token
                 )
-            )!
-                .Sessions
+            )!.Sessions
         );
         await first.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);
         await second.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);
@@ -1044,4 +1057,3 @@ public sealed partial class OcppWebSocketTests : IDisposable
         factory.Dispose();
     }
 }
-

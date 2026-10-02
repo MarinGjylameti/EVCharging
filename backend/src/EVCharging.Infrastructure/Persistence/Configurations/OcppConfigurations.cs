@@ -49,7 +49,10 @@ internal sealed class OcppConnectorConfiguration : IEntityTypeConfiguration<Ocpp
             .OnDelete(DeleteBehavior.Restrict);
         e.HasIndex(x => new { x.ChargePointId, x.ConnectorNumber }).IsUnique();
         e.HasIndex(x => x.StationId);
-        e.HasOne<ChargingConnector>().WithMany().HasForeignKey(x => x.BusinessConnectorId).OnDelete(DeleteBehavior.Restrict);
+        e.HasOne<ChargingConnector>()
+            .WithMany()
+            .HasForeignKey(x => x.BusinessConnectorId)
+            .OnDelete(DeleteBehavior.Restrict);
         e.HasIndex(x => x.BusinessConnectorId).IsUnique();
     }
 }

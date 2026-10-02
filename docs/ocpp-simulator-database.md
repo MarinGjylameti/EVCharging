@@ -35,15 +35,13 @@ ekzistuese me status `OutOfService` ose `Maintenance`.
 | `ocpp_connections` | Një rresht për çdo lidhje WebSocket dhe kohët e lidhjes/shkëputjes. |
 | `ocpp_inbound_messages` | Korniza origjinale JSONB, `call_id`, hash, gjendja e përpunimit dhe përgjigjja. Unik brenda një lidhjeje; `call_id` nuk supozohet unik përgjithmonë. |
 | `ocpp_status_events` | Historia e StatusNotification, përfshirë error/info/vendor fields. |
-| `ocpp_charging_transactions` | Sesioni fizik, ID numerike e OCPP 1.6, matësi fillestar/fundor në Wh, kohët, arsyeja e ndalimit dhe snapshot opsional i çmimit. Driver lidhet vetëm pas autorizimit të verifikuar. |
+| `ocpp_charging_transactions` | Rekordi i protokollit: ID numerike OCPP 1.6, matësi fillestar/fundor Wh, kohët, mesazhet, arsyeja e ndalimit dhe lidhja me sesionin e biznesit. |
+| `charging_sessions` / `charging_connectors` | Burimi i pavarur nga protokolli për sesionin fizik, tarifën, matjet e fundit, gjendjen dhe versionin. |
 | `ocpp_meter_samples` | Çdo `sampledValue` veçmas: vlerë origjinale, vlerë numerike opsionale, measurand, unit, phase, location, context dhe format. |
 | `realtime_outbox` | Njoftimi për UI ruhet në të njëjtin transaksion me statusin e pikës. Mban llojin, ID/versionin e entitetit, audiencën, payload-in e kufizuar, kohën dhe gjendjen e publikimit. |
 | `charging_connection_requests` | Përdoruesi që pret te një pikë/lidhës, skadimi dhe lidhja me sesionin fizik. Pritja nuk krijon histori apo faturim. |
 
-Migrimi shtues `DriverChargingConnections` krijon tabelën e pritjes pa ndryshuar
-të dhënat ekzistuese. Ka foreign keys për Driver, pikën dhe sesionin; vetëm një
-pritje aktive për lidhës dhe vetëm një kërkesë të lidhur me një sesion. POST-i
-i lidhjes dhe StartTransaction përdorin të njëjtin lock të pajisjes.
+Migrimi `ChargingBusinessSessions` transferon të dhënat ekzistuese në sesionet e biznesit dhe i bën claim-et autoritative si në Waiting ashtu edhe në Linked. PostgreSQL kufizon në një claim aktiv për Driver dhe një për pikë/lidhës. Claim dhe start/stop serializohen nën bllokimin e pajisjes. Shiko [migrimin dhe provat e veçuara PostgreSQL](charging-session-realtime.md).
 
 Përveç kolonave të zakonshme, korniza origjinale e mesazhit ruhet në JSONB. Kjo
 lejon fushat opsionale ose të prodhuesit pa migrim për çdo fushë të re. JSONB
@@ -72,17 +70,8 @@ duhen përpara se një transaksion të shfaqet si histori personale ose kosto.
    por nuk e kthejnë gjendjen publike pas në kohë. Kufizimet manuale kanë
    përparësi; një pikë me disa lidhës është e disponueshme nëse të paktën një
    lidhës i verifikuar është i lirë dhe i freskët.
-4. Pas commit-it, procesuesi i outbox-it publikon invalidime përmes SSE.
-   Eventet private filtrohen sipas Driver-it. Shfletuesit i dërgohet vetëm
-   sinjali `changed`; ai merr snapshot-in përmes endpoint-eve të autorizuara.
-   Payload-i origjinal OCPP dhe idTag nuk dalin në stream.
-5. Shfletuesi merr fillimisht snapshot-in REST të pikave dhe ndjek kanalin.
-   Bashkon invalidimet brenda 250 ms dhe nuk bën kërkesa të mbivendosura.
-   Pas rilidhjes ose rikthimit te tab-i merr snapshot të ri. Polling çdo
-   30 sekonda në background shërben për rikuperim. Zoom, pan, filtri dhe pika
-   e zgjedhur ruhen; nuk përdoret `router.refresh()`. Pajisja offline shfaqet
-   `Unknown`, pa u paraqitur si e lirë.
-
+4. Pas commit-it, dispatcher-i dërgon envelope me identitet/version dhe projeksion publik ose delta private të sesionit. Bus-i filtron marrësin; SSE nuk nxjerr Driver ID, idTag ose payload bruto OCPP.
+5. Harta përditëson pikën lokalisht; faqja personale përditëson matjet nga delta. Historiku kërkohet vetëm pas përfundimit. Snapshot-et REST përdoren në hyrje/rilidhje/rikthim. Gjatë humbjes së stream-it ka polling rikuperimi çdo 5 sekonda. Zoom/pan dhe filtrat ruhen. Pajisja offline nuk paraqitet e lirë dhe humbja e rrjetit nuk mbyll sesionin fizik.
 `PublishedAt` në outbox do të thotë dorëzim te transporti i eventeve, jo që çdo
 shfletues e ka parë. Versioni dhe snapshot-i e bëjnë klientin tolerant ndaj
 eventeve të dubluara ose të humbura. Për më shumë se një instancë API,
@@ -167,13 +156,7 @@ njëjtën ID për dy lidhje njëkohësisht: lidhja e dytë refuzohet.
    shfletuesi: secili hap pikën e vet përpara Start charging. Sesioni i tjetrit
    dhe matjet e tij nuk shfaqen në llogarinë tënde.
 
-Pritja e ruajtur është bypass i QR vetëm për simulatorët e konfiguruar. UI nuk
-hap një socket OCPP te pajisja: simulatori lidhet me backend-in përmes WebSocket,
-ndërsa UI ndjek SSE dhe merr snapshot-e të autorizuara në background. Kur nuk
-ka pritje aktive, mbahet sjellja e testit të mëparshëm: TAG-001 përdor Driver-in
-e `Demo:DriverEmail`. Kjo nuk është autorizim i përdoruesit për pajisje reale;
-integrimi real kërkon lidhjen e verifikuar të tag-ut/QR me Driver-in.
-
+Pritja është bypass QR vetëm për testin demo të aktivizuar. Një Driver mund të presë/karikojë vetëm në një pikë në një kohë; profile të ndryshme të të njëjtit Driver shohin të njëjtin sesion. Nëse pajisja nis e para, sesioni mbetet pa pronar derisa Driver-i ta marrë përmes claim-it demo. Nuk përdoret më Demo:DriverEmail për caktimin automatik. Claim-i i mëvonshëm ruan të gjitha matjet, kohën e nisjes dhe tarifën fillestare.
 StartTransaction → StopTransaction përbën një sesion. SuspendedEV/SuspendedEVSE
 tregon ndërprerje të transferimit nga makina/pika dhe ruan të njëjtin sesion,
 energjinë dhe pronarin. Pauza nuk shton hyrje në historik. Komandat Pause/Resume
@@ -224,3 +207,14 @@ automatikisht vetëm sepse socket-i humbi lidhjen.
 Veprimet e implementuara janë shtatë mesazhet e përmendura më sipër.
 OCPP 2.0.1, RemoteStart/RemoteStop, QR reale, autorizimi i hardware real dhe
 shpërndarja e stream-it në disa instanca mbeten punë të veçanta.
+
+### Provë manuale për SoC dhe fuqi
+
+Gjatë një sesioni aktiv në lidhësin 1, përdor formularin MeterValues:
+
+- Bateria: Measurand `SoC`, Unit `Percent`, vlerë p.sh. `45`.
+- Fuqia: Measurand `Power.Active.Import`, Unit `kW`, vlerë p.sh. `22`.
+- Përdor ID-në aktive të transaksionit dhe timestamp brenda sesionit. Phase bosh është zgjedhja për totalin. Nëse formulari e lë ID-në jashtë mesazhit, backend-i e lidh vetëm me sesionin aktiv të atij lidhësi; lidhësi 0 nuk e hamendëson pronarin.
+- Vetëm në demo tolerohet SoC me Phase L1/L2/L3 të lënë nga formulari; vlera konfliktuese nuk mblidhen dhe nuk paraqiten si përqindje baterie.
+
+Pas Send MeterValues, faqja e atij Driver-i duhet të ndryshojë pa refresh. Vendosja manuale e 100% provon shfaqjen e të dhënës; nuk provon që Greencharge e lexon përqindjen nga makina. Për këtë nevojitet një mesazh real i pajisjes. Fuqia nominale 22 kW nuk zëvendëson matjen e fuqisë aktuale.

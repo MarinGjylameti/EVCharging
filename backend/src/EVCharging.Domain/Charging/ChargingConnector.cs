@@ -2,8 +2,17 @@ namespace EVCharging.Domain.Charging;
 
 public enum ChargingState
 {
-    Unknown, Available, Connecting, Charging, PausedByVehicle, PausedByCharger,
-    Finishing, Reserved, Faulted, Unavailable, Completed,
+    Unknown,
+    Available,
+    Connecting,
+    Charging,
+    PausedByVehicle,
+    PausedByCharger,
+    Finishing,
+    Reserved,
+    Faulted,
+    Unavailable,
+    Completed,
 }
 
 // Business connector identity and latest projection, independent of transport.

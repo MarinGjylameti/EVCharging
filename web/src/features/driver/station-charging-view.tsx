@@ -81,6 +81,8 @@ export function StationChargingView({ initial, language }: { initial: StationCha
         <span className="driver-eyebrow">{sq ? "LIDHJA ME PIKËN" : "CONNECTING TO THE CHARGER"}</span>
         <h2 id="charge-wait-title">{busy ? (sq ? "Po përgatis lidhjen…" : "Preparing connection…")
           : requestExpired ? (sq ? "Koha e pritjes përfundoi" : "Waiting time expired")
+          : station.status === "OutOfService" ? (sq ? "Pika është jashtë shërbimit" : "Charger unavailable")
+          : station.status === "Maintenance" ? (sq ? "Pika është në mirëmbajtje" : "Charger under maintenance")
           : waiting && snapshot.deviceConnected ? (sq ? "Gati për të nisur" : "Ready to start")
           : waiting ? (sq ? "Në pritje të pajisjes" : "Waiting for the charger")
           : (sq ? "Pika e karikimit u zgjodh" : "Charge point selected")}</h2>

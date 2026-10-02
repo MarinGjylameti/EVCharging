@@ -4,7 +4,7 @@ Hardware/protokolli real do të dërgohet më vonë nga përdoruesi. Kjo nuk bll
 
 ## Kufiri i adapterit
 
-`IChargerEventAdapter` është kontratë e propozuar që verifikon identitetin e burimit dhe kthen evente të normalizuara. `IChargerEventProcessor` i përpunon përmes rregullave Application/Domain. SDK, OCPP payload, endpoint dhe kredencialet e prodhuesit qëndrojnë në Infrastructure.
+Adapteri OCPP verifikon dhe normalizon mesazhet në `ChargerEvent`. `IChargerEventReceiver` përditëson sesionin e pavarur nga protokolli brenda transaksionit të adapterit. SDK, OCPP payload, endpoint dhe kredencialet e prodhuesit qëndrojnë në Infrastructure.
 
 Kodi i kolegut konfirmon që prototipi i tij synon OCPP 1.6J mbi WebSocket. U shtua parseri C# për telemetri dhe replay offline; [analiza e burimit](ocpp-reference-review.md) dokumenton kufijtë. Përputhshmëria e pajisjes reale ende nuk është provuar. Versioni i protokollit, push/poll, heartbeat, TLS/auth dhe mënyra e identifikimit të drejtuesit duhen marrë nga pajisja/provider-i. Nuk hapet port publik ose lidhje prodhimi në këtë fazë.
 
@@ -63,30 +63,11 @@ Nuk shtohen RemoteStart/RemoteStop/rezervim/pagesë nga ky propozim. Nëse prodh
 
 ## Realtime
 
-**Implementimi aktual i demo-s:** pajisjet përdorin `/ws/cs/{identity}` me
-OCPP 1.6; web-i përdor SSE të autentikuar për invalidim dhe REST në background
-për snapshot-in. Nuk instalohet klient SignalR. Përshkrimi SignalR më poshtë
-mbetet projektimi për kanalet e ardhshme mobile/admin. Për testin funksional,
-konfigurimin dhe kufijtë aktualë, shiko
-[lidhjen e simulatorit](ocpp-simulator-database.md).
+Implementimi aktual përdor outbox persistent, dispatcher në proces dhe SSE të autentikuar, edhe kur simulatori është i çaktivizuar. Harta merr projeksione publike; Driver merr vetëm deltat e sesionit të vet. Matjet nuk ringarkojnë listën e pikave ose historikun. Snapshot-et REST shërbejnë për hyrjen dhe rikuperimin pas rilidhjes.
 
-SignalR dërgon evente vetëm pas commit-it: `PointChanged`, `SessionChanged`, `PriceChanged`, `NotificationCreated` dhe invalidim të përmbledhjes kur duhet. Envelope përmban eventId, entityId, entityVersion, occurredAt dhe DTO të kufizuar.
+Burimi autoritativ është `ChargingSession` në databazë. OCPP ruan protokollin/inbox-in dhe normalizon eventet për `IChargerEventReceiver`. Claim-i i përdoruesit, sesioni fizik dhe lidhja SSE kanë cikle të ndara.
 
-Për pajisjet OCPP, ndryshimi i statusit dhe rreshti `realtime_outbox` ruhen në
-të njëjtin transaksion. Dispatcher-i e publikon rreshtin pas commit-it dhe
-retry nuk ndryshon statusin në databazë. [Skema e simulatorit](ocpp-simulator-database.md)
-ndan WebSocket-in e pajisjes nga SSE i shfletuesit. Endpoint-i OCPP dhe
-dispatcher-i janë implementuar për një instancë API; hub SignalR nuk është implementuar.
-
-- Hartës i dërgohen vetëm gjendje/disponueshmëri/çmim/koordinata të publikueshme. Asnjë driverId ose telemetri personale në grupin e përgjithshëm.
-- Driver merr vetëm sesionet me pronësi të verifikuar. Admin merr evente vetëm për scope aktual; Superadmin globale. Subscribe nuk i beson grupit ose pikës që kërkon klienti.
-- Autentikimi bëhet gjatë handshake dhe rivlerësohet për subscribe/dispatch. Revokimi i llogarisë/caktimit pas commit-it heq subscriptions, ndalon dërgimet private dhe mbyll lidhjen kur nevojitet; dispatcher koordinon versionin e aksesit me revokimin. Një socket i hapur nuk ruan leje përgjithmonë.
-- Web merr credential jetëshkurtër vetëm për hub-in, pa ekspozuar refresh token. Audience/claims e credential-it nuk lejojnë shkrime REST. URL-të/log-et nuk regjistrojnë bearer token.
-- Sinjalet e matjeve mund të bashkohen për UI që të shmanget render i panevojshëm; matjet autoritative ruhen në backend. Fillimi/fundi/defekti nuk humben nga ky bashkim.
-
-Rikthimi: autentiko → subscribe dhe buffer eventet → merr snapshot REST → apliko vetëm eventet me entityVersion më të lartë → ndiq stream. Për ndryshime gjatë snapshot-it përdoret versioni për të shmangur mbishkrimin me gjendje të vjetër. Listat përdorin invalidim dhe refetch të scope-it. EventId bën klientin tolerant ndaj outbox at-least-once; nuk pretendohet exactly-once në rrjet.
-
-Në disconnect klienti tregon “Të dhënat mund të jenë të vjetruara” dhe kohën e fundit. Backoff me jitter, refresh token kur duhet dhe snapshot pas reconnect/resume. REST polling i kufizuar shërben si rikuperim kur hub nuk lidhet. Intervalet/freshness dalin nga heartbeat real dhe matjet e sistemit; nuk premtohet një afat arbitrar si SLA.
+[Dokumentimi i implementimit, migrimit, invariantet dhe provat](charging-session-realtime.md) përshkruan kontratën e eventeve, kufijtë e freskisë dhe rikuperimin. SignalR, koordinimi i shumë instancave dhe kanalet mobile/admin nuk janë implementuar në këtë hap.
 
 ## Hartat
 

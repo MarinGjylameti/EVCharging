@@ -8,11 +8,22 @@ internal sealed class ChargingConnectorConfiguration : IEntityTypeConfiguration<
 {
     public void Configure(EntityTypeBuilder<ChargingConnector> e)
     {
-        e.ToTable("charging_connectors", t => t.HasCheckConstraint("ck_charging_connector_number", "number > 0"));
+        e.ToTable(
+            "charging_connectors",
+            t => t.HasCheckConstraint("ck_charging_connector_number", "number > 0")
+        );
         e.HasKey(x => x.Id);
         e.HasIndex(x => new { x.StationId, x.Number }).IsUnique();
-        e.HasAlternateKey(x => new { x.Id, x.StationId, x.Number });
-        e.HasOne<ChargingStation>().WithMany().HasForeignKey(x => x.StationId).OnDelete(DeleteBehavior.Restrict);
+        e.HasAlternateKey(x => new
+        {
+            x.Id,
+            x.StationId,
+            x.Number,
+        });
+        e.HasOne<ChargingStation>()
+            .WithMany()
+            .HasForeignKey(x => x.StationId)
+            .OnDelete(DeleteBehavior.Restrict);
         e.Property(x => x.Status).HasConversion<string>().HasMaxLength(24);
         e.Property(x => x.Version).IsConcurrencyToken();
     }
@@ -22,16 +33,42 @@ internal sealed class ChargingSessionConfiguration : IEntityTypeConfiguration<Ch
 {
     public void Configure(EntityTypeBuilder<ChargingSession> e)
     {
-        e.ToTable("charging_sessions", t =>
-        {
-            t.HasCheckConstraint("ck_session_time", "ended_at IS NULL OR ended_at >= started_at");
-            t.HasCheckConstraint("ck_session_values", "(energy_kwh IS NULL OR energy_kwh >= 0) AND unit_price_snapshot >= 0 AND (state_of_charge IS NULL OR state_of_charge BETWEEN 0 AND 100)");
-        });
+        e.ToTable(
+            "charging_sessions",
+            t =>
+            {
+                t.HasCheckConstraint(
+                    "ck_session_time",
+                    "ended_at IS NULL OR ended_at >= started_at"
+                );
+                t.HasCheckConstraint(
+                    "ck_session_values",
+                    "(energy_kwh IS NULL OR energy_kwh >= 0) AND unit_price_snapshot >= 0 AND (state_of_charge IS NULL OR state_of_charge BETWEEN 0 AND 100)"
+                );
+            }
+        );
         e.HasKey(x => x.Id);
-        e.HasAlternateKey(x => new { x.Id, x.PointId, x.ConnectorNumber });
-        e.HasOne<ChargingConnector>().WithMany()
-            .HasForeignKey(x => new { x.ConnectorId, x.PointId, x.ConnectorNumber })
-            .HasPrincipalKey(x => new { x.Id, x.StationId, x.Number }).OnDelete(DeleteBehavior.Restrict);
+        e.HasAlternateKey(x => new
+        {
+            x.Id,
+            x.PointId,
+            x.ConnectorNumber,
+        });
+        e.HasOne<ChargingConnector>()
+            .WithMany()
+            .HasForeignKey(x => new
+            {
+                x.ConnectorId,
+                x.PointId,
+                x.ConnectorNumber,
+            })
+            .HasPrincipalKey(x => new
+            {
+                x.Id,
+                x.StationId,
+                x.Number,
+            })
+            .OnDelete(DeleteBehavior.Restrict);
         e.HasIndex(x => x.ConnectorId).IsUnique().HasFilter("ended_at IS NULL");
         e.HasIndex(x => new { x.PointId, x.StartReceivedAt });
         e.Property(x => x.Status).HasConversion<string>().HasMaxLength(24);

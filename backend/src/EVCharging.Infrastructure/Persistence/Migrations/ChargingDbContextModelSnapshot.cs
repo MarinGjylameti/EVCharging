@@ -274,6 +274,10 @@ namespace EVCharging.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(18,6)")
                         .HasColumnName("energy_kwh");
 
+                    b.Property<DateTimeOffset?>("EnergyObservedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("energy_observed_at");
+
                     b.Property<string>("EnergyScope")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")

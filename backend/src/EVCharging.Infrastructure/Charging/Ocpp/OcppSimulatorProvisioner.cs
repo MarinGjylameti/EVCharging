@@ -89,7 +89,12 @@ public sealed class OcppSimulatorProvisioner(
         );
         if (connector is null)
         {
-            connector = new OcppConnector { ChargePointId = device.Id, ConnectorNumber = 1, StationId = station.Id };
+            connector = new OcppConnector
+            {
+                ChargePointId = device.Id,
+                ConnectorNumber = 1,
+                StationId = station.Id,
+            };
             db.OcppConnectors.Add(connector);
         }
         else if (connector.StationId != station.Id)
@@ -99,7 +104,12 @@ public sealed class OcppSimulatorProvisioner(
 
         if (connector.BusinessConnectorId is null)
         {
-            var business = new ChargingConnector { Id = connector.Id, StationId = station.Id, Number = 1 };
+            var business = new ChargingConnector
+            {
+                Id = connector.Id,
+                StationId = station.Id,
+                Number = 1,
+            };
             db.ChargingConnectors.Add(business);
             connector.BusinessConnectorId = business.Id;
         }
@@ -107,4 +117,3 @@ public sealed class OcppSimulatorProvisioner(
         return device;
     }
 }
-

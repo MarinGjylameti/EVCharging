@@ -7,8 +7,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EVCharging.Infrastructure.Charging;
 
-public sealed class StationManagementService(ChargingDbContext db, TimeProvider clock, StationEventSignal events)
-    : IStationManagement
+public sealed class StationManagementService(
+    ChargingDbContext db,
+    TimeProvider clock,
+    StationEventSignal events,
+    StationProjection projection
+) : IStationManagement
 {
     public async Task<IReadOnlyList<StationDto>> ListAsync(CancellationToken ct)
     {
@@ -65,7 +69,11 @@ public sealed class StationManagementService(ChargingDbContext db, TimeProvider 
         Apply(station, data);
         station.Version++;
         AddAudit(actorId, station.Id, "StationUpdated");
-        StageChange(station);
+        // Keep device availability and manual restrictions in the same projection.
+        if (await db.ChargingConnectors.AnyAsync(x => x.StationId == station.Id, ct))
+            await projection.RefreshAsync(station.Id, ct);
+        else
+            StageChange(station);
         await db.SaveChangesAsync(ct);
         events.Notify();
 
@@ -136,9 +144,19 @@ public sealed class StationManagementService(ChargingDbContext db, TimeProvider 
         AvailabilityForecastRules.Clear(station);
     }
 
-    private void StageChange(ChargingStation station) => ChargingRealtime.Stage(db, station.Id,
-        station.IsArchived ? "StationRemoved" : "StationChanged", "ChargingStation", station.Id,
-        station.Version, clock.GetUtcNow(), station: station.IsArchived ? null : ChargingRealtime.StationDto(station, clock.GetUtcNow()));
+    private void StageChange(ChargingStation station) =>
+        ChargingRealtime.Stage(
+            db,
+            station.Id,
+            station.IsArchived ? "StationRemoved" : "StationChanged",
+            "ChargingStation",
+            station.Id,
+            station.Version,
+            clock.GetUtcNow(),
+            station: station.IsArchived
+                ? null
+                : ChargingRealtime.StationDto(station, clock.GetUtcNow())
+        );
 
     private void AddAudit(Guid actorId, Guid stationId, string action) =>
         db.Audit.Add(

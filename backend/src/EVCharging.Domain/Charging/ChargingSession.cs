@@ -19,6 +19,7 @@ public sealed class ChargingSession
     public decimal? TemperatureCelsius { get; set; }
     public DateTimeOffset LastMeasurementAt { get; set; }
     public DateTimeOffset? LastMeasurementReceivedAt { get; set; }
+    public DateTimeOffset? EnergyObservedAt { get; set; }
     public DateTimeOffset? PowerObservedAt { get; set; }
     public DateTimeOffset? PowerReceivedAt { get; set; }
     public DateTimeOffset? SocObservedAt { get; set; }
@@ -28,8 +29,10 @@ public sealed class ChargingSession
     public ChargingState Status { get; set; } = ChargingState.Connecting;
     public long Version { get; set; }
     public bool IsDemo { get; set; }
-    public decimal? CalculatedCost => EnergyKWh is { } energy
-        ? decimal.Round(energy * UnitPriceSnapshot, 2, MidpointRounding.AwayFromZero) : null;
+    public decimal? CalculatedCost =>
+        EnergyKWh is { } energy
+            ? decimal.Round(energy * UnitPriceSnapshot, 2, MidpointRounding.AwayFromZero)
+            : null;
 
     public ChargingSession() { }
 

@@ -40,9 +40,18 @@ public sealed class StationEventWorker(
                     var change =
                         JsonSerializer.Deserialize<StationChanged>(entry.PayloadJson)
                         ?? throw new JsonException("Invalid station event.");
-                    bus.Publish(change with { RecipientAccountId = entry.RecipientAccountId,
-                        EventId = entry.Id, EventType = entry.EventType, EntityType = entry.EntityType,
-                        EntityId = entry.EntityId, EntityVersion = entry.EntityVersion, OccurredAt = entry.CreatedAt });
+                    bus.Publish(
+                        change with
+                        {
+                            RecipientAccountId = entry.RecipientAccountId,
+                            EventId = entry.Id,
+                            EventType = entry.EventType,
+                            EntityType = entry.EntityType,
+                            EntityId = entry.EntityId,
+                            EntityVersion = entry.EntityVersion,
+                            OccurredAt = entry.CreatedAt,
+                        }
+                    );
                     entry.PublishedAt = clock.GetUtcNow();
                 }
                 await db.SaveChangesAsync(stoppingToken);
@@ -60,7 +69,4 @@ public sealed class StationEventWorker(
             await signal.WaitAsync(stoppingToken);
         }
     }
-
 }
-
-

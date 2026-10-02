@@ -5,21 +5,37 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+
 namespace EVCharging.Infrastructure.Charging;
 
-public sealed class ChargerLivenessWorker(IServiceScopeFactory scopes, TimeProvider clock,
-    IOptions<OcppOptions> options, StationEventSignal signal, ILogger<ChargerLivenessWorker> logger) : BackgroundService
+public sealed class ChargerLivenessWorker(
+    IServiceScopeFactory scopes,
+    TimeProvider clock,
+    IOptions<OcppOptions> options,
+    StationEventSignal signal,
+    ILogger<ChargerLivenessWorker> logger
+) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
         while (await timer.WaitForNextTickAsync(ct))
         {
-            try { await InvalidateStaleDevicesAsync(ct); }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
-            catch (Exception error) { logger.LogError(error, "Charger liveness will be retried."); }
+            try
+            {
+                await InvalidateStaleDevicesAsync(ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception error)
+            {
+                logger.LogError(error, "Charger liveness will be retried.");
+            }
         }
     }
+
     private async Task InvalidateStaleDevicesAsync(CancellationToken ct)
     {
         await using var scope = scopes.CreateAsyncScope();
@@ -29,7 +45,10 @@ public sealed class ChargerLivenessWorker(IServiceScopeFactory scopes, TimeProvi
             .OcppChargePoints.AsNoTracking()
             .Where(x =>
                 x.LastSeenAt < cutoff
-                && db.OcppConnectors.Any(c => c.ChargePointId == x.Id && db.ChargingConnectors.Any(b => b.Id == c.BusinessConnectorId && b.IsOnline))
+                && db.OcppConnectors.Any(c =>
+                    c.ChargePointId == x.Id
+                    && db.ChargingConnectors.Any(b => b.Id == c.BusinessConnectorId && b.IsOnline)
+                )
             )
             .Select(x => x.Id)
             .ToListAsync(ct);
@@ -53,4 +72,3 @@ public sealed class ChargerLivenessWorker(IServiceScopeFactory scopes, TimeProvi
         }
     }
 }
-

@@ -11,6 +11,7 @@ export const chargingLabels: Record<string, [string, string]> = {
   Unknown: ["Në pritje të statusit", "Awaiting charger status"],
   Faulted: ["Pika ka raportuar defekt", "Charger reported a fault"],
   Unavailable: ["Pika është jashtë shërbimit", "Charger unavailable"],
+  Available: ["Pika është e lirë", "Charger available"], Reserved: ["Pika është e rezervuar", "Charger reserved"],
 };
 
 export function ChargingProgress({ session, language, now, stale }: {
@@ -75,7 +76,9 @@ export function ChargingProgress({ session, language, now, stale }: {
     {(session.energyScope && session.energyScope !== "Total" || session.deviceClockSkewed || session.temperatureCelsius !== null) && <details className="charge-reading-details">
       <summary>{sq ? "Rreth matjeve" : "About the readings"}</summary>
       {session.energyScope && session.energyScope !== "Total" && <p>{sq ? `Energjia dhe kostoja gjatë karikimit bazohen në matjen e raportuar për ${session.energyScope}. Totali final merret nga pajisja kur sesioni përfundon.` : `Live energy and cost use the reported ${session.energyScope} reading. Final totals come from the charger when the session ends.`}</p>}
-      {session.deviceClockSkewed && <p>{sq ? "Ora e pajisjes ndryshon nga ora reale. Kohëzgjatja këtu përdor kohën e marrjes së mesazheve." : "Device time differs from real time. Duration here uses message receipt times."}</p>}
+      {session.deviceClockSkewed && <p>{simulatedClock
+        ? (sq ? "Ora e simulatorit ndryshon nga ora reale. Kohëzgjatja këtu përdor kohën e marrjes së mesazheve." : "Simulator time differs from real time. Duration here uses message receipt times.")
+        : (sq ? "Ora e pajisjes ndryshon nga ora reale. Kohëzgjatja bazohet në nisjen e raportuar nga pajisja." : "Device time differs from real time. Duration uses the start reported by the charger.")}</p>}
       {session.temperatureCelsius !== null && <p>{sq ? "Temperatura e raportuar" : "Reported temperature"}: {number(session.temperatureCelsius, 1)} °C</p>}
     </details>}
     {ended && <p className="charge-session-end">{saved ? (sq ? "Ky karikim përfundoi. Përmbledhja e tij është ruajtur në historikun tënd." : "This charge is complete. Its summary has been saved in your history.") : (sq ? "Sesioni u mbyll. Përmbledhja financiare kërkon një matje finale dhe tarifë të vlefshme." : "The session is closed. A financial summary requires a valid final reading and tariff.")}</p>}

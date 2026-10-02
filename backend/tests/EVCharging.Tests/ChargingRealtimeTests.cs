@@ -20,15 +20,102 @@ public sealed partial class OcppWebSocketTests
         await ClaimAsync(driver, "SIM-003");
         var started = DateTimeOffset.UtcNow.AddMinutes(-68);
         await StatusAsync(socket, "Charging", started.AddSeconds(2));
-        var start = await CallAsync(socket, "StartTransaction", new { connectorId=1, idTag="TAG-001", meterStart=0, timestamp=started });
+        var start = await CallAsync(
+            socket,
+            "StartTransaction",
+            new
+            {
+                connectorId = 1,
+                idTag = "TAG-001",
+                meterStart = 0,
+                timestamp = started,
+            }
+        );
         var transactionId = start[2].GetProperty("transactionId").GetInt32();
-        async Task<DriverChargingSession> SnapshotAsync() => Assert.Single((await driver.GetFromJsonAsync<DriverChargingState>("/api/v1/driver/charging-sessions", timeout.Token))!.Sessions);
-        async Task MeterAsync(int seconds, object[] sampledValue) => await CallAsync(socket, "MeterValues", new
-        { connectorId=1, transactionId, meterValue=new[] { new { timestamp=started.AddSeconds(seconds), sampledValue } } });
-        await MeterAsync(30, [new { value="183", measurand="Energy.Active.Import.Register", unit="Wh" }]);
-        await MeterAsync(60, [new { value="367", measurand="Energy.Active.Import.Register", unit="Wh" }]);
+        async Task<DriverChargingSession> SnapshotAsync() =>
+            Assert.Single(
+                (
+                    await driver.GetFromJsonAsync<DriverChargingState>(
+                        "/api/v1/driver/charging-sessions",
+                        timeout.Token
+                    )
+                )!.Sessions
+            );
+        async Task MeterAsync(int seconds, object[] sampledValue) =>
+            await CallAsync(
+                socket,
+                "MeterValues",
+                new
+                {
+                    connectorId = 1,
+                    transactionId,
+                    meterValue = new[]
+                    {
+                        new { timestamp = started.AddSeconds(seconds), sampledValue },
+                    },
+                }
+            );
+        await MeterAsync(
+            30,
+            [
+                new
+                {
+                    value = "183",
+                    measurand = "Energy.Active.Import.Register",
+                    unit = "Wh",
+                },
+            ]
+        );
+        await MeterAsync(
+            60,
+            [
+                new
+                {
+                    value = "367",
+                    measurand = "Energy.Active.Import.Register",
+                    unit = "Wh",
+                },
+            ]
+        );
         Assert.Null((await SnapshotAsync()).PowerKW);
-        await MeterAsync(90, [new { value="21500", measurand="Power.Active.Import", unit="W" }]);
+        // Metrics have independent clocks: a newer SoC must not suppress a
+        // delayed energy observation that is newer than the previous energy.
+        await MeterAsync(
+            180,
+            [
+                new
+                {
+                    value = "45",
+                    measurand = "SoC",
+                    unit = "Percent",
+                },
+            ]
+        );
+        await MeterAsync(
+            75,
+            [
+                new
+                {
+                    value = "500",
+                    measurand = "Energy.Active.Import.Register",
+                    unit = "Wh",
+                },
+            ]
+        );
+        var independent = await SnapshotAsync();
+        Assert.Equal(.5m, independent.EnergyKWh);
+        Assert.Equal(45m, independent.StateOfCharge);
+        await MeterAsync(
+            90,
+            [
+                new
+                {
+                    value = "21500",
+                    measurand = "Power.Active.Import",
+                    unit = "W",
+                },
+            ]
+        );
         var reported = await SnapshotAsync();
         Assert.Equal("Charging", reported.Status);
         Assert.Equal(21.5m, reported.PowerKW);
@@ -37,17 +124,41 @@ public sealed partial class OcppWebSocketTests
         Assert.Null((await SnapshotAsync()).PowerKW);
         await StatusAsync(socket, "Charging", started.AddSeconds(92));
         Assert.Null((await SnapshotAsync()).PowerKW);
-        await MeterAsync(120, [new { value="22", measurand="Power.Active.Import", unit="kW" }]);
+        await MeterAsync(
+            91,
+            [
+                new
+                {
+                    value = "21800",
+                    measurand = "Power.Active.Import",
+                    unit = "W",
+                },
+            ]
+        );
+        Assert.Null((await SnapshotAsync()).PowerKW); // A pre-resume sample is not current power.
+        await MeterAsync(
+            120,
+            [
+                new
+                {
+                    value = "22",
+                    measurand = "Power.Active.Import",
+                    unit = "kW",
+                },
+            ]
+        );
         Assert.Equal(22m, (await SnapshotAsync()).PowerKW);
         using (var scope = factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<ChargingDbContext>();
-            (await db.ChargingSessions.SingleAsync()).PowerReceivedAt=DateTimeOffset.UtcNow.AddMinutes(-3);
+            (await db.ChargingSessions.SingleAsync()).PowerReceivedAt =
+                DateTimeOffset.UtcNow.AddMinutes(-3);
             await db.SaveChangesAsync();
         }
         Assert.Null((await SnapshotAsync()).PowerKW);
         await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);
     }
+
     [Fact]
     public async Task ManualSimulatorSocWithDefaultPhaseBindsOnlyTheActiveConnectorSession()
     {
@@ -153,8 +264,8 @@ public sealed partial class OcppWebSocketTests
         );
         while (await reader.ReadLineAsync(timeout.Token) != "event: ready") { }
 
-        // Just like the page, request the authorized snapshot only when an event
-        // names this station. There is no timer, manual refresh or navigation.
+        // Assert the private SSE payload itself, without a compensating GET.
+        // The web policy applies these same session deltas directly.
         async Task<DriverChargingSession> OnChangeAsync(Func<DriverChargingSession, bool> expected)
         {
             while (true)
@@ -167,13 +278,14 @@ public sealed partial class OcppWebSocketTests
                 Assert.False(json.RootElement.TryGetProperty("recipientAccountId", out _));
                 if (json.RootElement.GetProperty("stationId").GetGuid() != station.Id)
                     continue;
-                var snapshot = (
-                    await driver.GetFromJsonAsync<DriverStationCharging>(
-                        $"/api/v1/driver/stations/{station.Id}/charging",
-                        timeout.Token
-                    )
-                )!;
-                if (snapshot.Session is { } session && expected(session))
+                if (json.RootElement.GetProperty("session").ValueKind != JsonValueKind.Object)
+                    continue;
+                var session = json
+                    .RootElement.GetProperty("session")
+                    .Deserialize<DriverChargingSession>(
+                        new JsonSerializerOptions(JsonSerializerDefaults.Web)
+                    )!;
+                if (expected(session))
                     return session;
             }
         }
@@ -233,7 +345,9 @@ public sealed partial class OcppWebSocketTests
         )
         {
             await StatusAsync(socket, status, started.AddMinutes(minute++));
-            var session = await OnChangeAsync(x => x.Status == OcppStationProjection.Map(status).ToString());
+            var session = await OnChangeAsync(x =>
+                x.Status == OcppStationProjection.Map(status).ToString()
+            );
             Assert.Equal(first.Id, session.Id);
             Assert.Equal(1.5m, session.EnergyKWh);
         }
@@ -362,4 +476,3 @@ public sealed class StationEventSignalTests
         await next;
     }
 }
-

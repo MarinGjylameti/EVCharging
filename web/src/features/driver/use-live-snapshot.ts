@@ -11,18 +11,25 @@ export function useLiveSnapshot<T>(initial: T, url: string, stationId?: string, 
   const [connected, setConnected] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
   const revision = useRef(0);
+  const mutationRevision = useRef(0);
   const current = useRef(initial);
   const replaceSnapshot = useCallback((value: T) => {
     revision.current++;
-    current.current = value;
-    setSnapshot(value);
-  }, []);
+    mutationRevision.current++;
+    const next = policy ? policy.merge(current.current, value, url) : value;
+    current.current = next;
+    setSnapshot(next);
+  }, [policy, url]);
 
   useEffect(() => {
     let stopped = false;
     let busy = false;
     let pending = false;
     const pendingUrls = new Set<string>();
+    const seenEvents = new Set<string>();
+    const stationVersions = new Map<string, number>();
+    let duringRequest: ChargingRealtimeEvent[] = [];
+    let overflow = false;
     let streamLive = false;
     let lastEventAt = Date.now();
     let lastRefreshAt = 0;
@@ -34,7 +41,10 @@ export function useLiveSnapshot<T>(initial: T, url: string, stationId?: string, 
       if (stopped || document.hidden) return;
       if (busy) { pendingUrls.add(requestUrl); return; }
       busy = true;
+      duringRequest = [];
+      overflow = false;
       const requestedRevision = revision.current;
+      const requestedMutation = mutationRevision.current;
       const requestAbort = new AbortController();
       const expired = setTimeout(() => requestAbort.abort(), 10_000);
       try {
@@ -46,8 +56,14 @@ export function useLiveSnapshot<T>(initial: T, url: string, stationId?: string, 
         }
         if (!response.ok) throw new Error("Snapshot unavailable");
         const data: T = await response.json();
-        if (!stopped && (policy || requestedRevision === revision.current)) {
-          const next = policy ? policy.merge(current.current, data, requestUrl) : data;
+        if (!stopped && !overflow && (policy ? requestedMutation === mutationRevision.current : requestedRevision === revision.current)) {
+          let next = policy ? policy.merge(current.current, data, requestUrl) : data;
+          // Replay deltas received during recovery so an older list cannot undo
+          // a station removal/addition or a just-started physical session.
+          if (policy) for (const event of duringRequest) {
+            const update = policy.event(next, event);
+            if (update && "snapshot" in update) next = update.snapshot;
+          }
           current.current = next; setSnapshot(next); setUnavailable(false); lastRefreshAt = Date.now();
         }
         else if (!stopped) pending = true;
@@ -55,6 +71,7 @@ export function useLiveSnapshot<T>(initial: T, url: string, stationId?: string, 
       finally {
         clearTimeout(expired);
         busy = false;
+        duringRequest = [];
         if (pending && !stopped) { pending = false; schedule(); }
         else if (pendingUrls.size && !stopped) schedule();
       }
@@ -93,11 +110,31 @@ export function useLiveSnapshot<T>(initial: T, url: string, stationId?: string, 
               && hint.stationId.toLowerCase() !== stationId.toLowerCase()) return;
           } catch { /* Malformed hints still trigger an authorized snapshot. */ }
         }
-        if (policy && hint && typeof hint === "object" && "eventType" in hint) {
-          const update = policy.event(current.current, hint as ChargingRealtimeEvent);
-          if (update && "snapshot" in update) { replaceSnapshot(update.snapshot); setUnavailable(false); }
-          else if (update) schedule(update.refreshUrl);
-        } else schedule(url);
+        try {
+          if (policy && hint && typeof hint === "object" && "eventType" in hint) {
+            const change = hint as ChargingRealtimeEvent;
+            if (typeof change.eventId !== "string" || typeof change.stationId !== "string"
+              || typeof change.eventType !== "string") { schedule(url); return; }
+            if (seenEvents.has(change.eventId)) return;
+            if (change.entityType === "ChargingStation" && Number.isFinite(change.entityVersion)) {
+              if ((stationVersions.get(change.entityId) ?? -1) >= change.entityVersion) return;
+              stationVersions.set(change.entityId, change.entityVersion);
+              if (stationVersions.size > 1024) stationVersions.delete(stationVersions.keys().next().value!);
+            }
+            const update = policy.event(current.current, change);
+            seenEvents.add(change.eventId);
+            if (seenEvents.size > 512) seenEvents.delete(seenEvents.values().next().value!);
+            if (update && "snapshot" in update) {
+              revision.current++;
+              current.current = update.snapshot; setSnapshot(update.snapshot); setUnavailable(false);
+              if (busy && !overflow) {
+                duringRequest.push(change);
+                if (duringRequest.length > 256) { overflow = true; duringRequest = []; }
+              }
+            }
+            else if (update) schedule(update.refreshUrl);
+          } else schedule(url);
+        } catch { schedule(url); }
       });
       events.onerror = () => {
         if (stopped) return;

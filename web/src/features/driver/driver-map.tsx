@@ -165,6 +165,7 @@ export function DriverMap({stations: initialStations, history: initialHistory, l
       <article><span>{sq ? "KARIKIMET E MIA" : "MY CHARGES"}</span><strong>{sessionCount}</strong><small>{totalEnergy.toFixed(1)} kWh {sq ? "gjithsej" : "total"}</small></article>
     </div>
     <section className="driver-map-section" aria-labelledby="map-title">
+      <span className={`charging-live ${connected && !unavailable ? "is-live" : ""}`} role="status"><i aria-hidden="true" />{connected && !unavailable ? (sq ? "Përditësime aktive" : "Live updates") : (sq ? "Po rilidhet…" : "Reconnecting…")}</span>
       <div className="driver-section-heading"><div><span className="driver-eyebrow">{sq ? "EKSPLORO RRJETIN" : "EXPLORE THE NETWORK"}</span>
         <h2 id="map-title">{sq ? "Pikat e karikimit" : "Charging stations"}</h2></div>
         <span className="driver-map-counter">{inMyArea ?

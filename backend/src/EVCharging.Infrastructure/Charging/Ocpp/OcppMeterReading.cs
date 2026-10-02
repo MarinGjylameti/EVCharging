@@ -143,4 +143,3 @@ internal sealed record OcppMeterReading(
             _ => null,
         };
 }
-

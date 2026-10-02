@@ -24,6 +24,7 @@ Komandat e kontrollit janë te [scripts/verify-local.ps1](scripts/verify-local.p
 
 ## Burimet dhe dokumentacioni
 
+- [Sesionet, pronësia dhe përditësimet live](docs/charging-session-realtime.md)
 - [Analiza e serverit OCPP të kolegut](docs/ocpp-reference-review.md)
 - [Matrica e kërkesave](docs/requirements-matrix.md)
 - [Arkitektura](docs/architecture.md), [modeli i domenit](docs/domain.md), [databaza](docs/database.md)

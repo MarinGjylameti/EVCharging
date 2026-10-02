@@ -19,14 +19,23 @@ public sealed class OcppGateway(
     IOptions<OcppOptions> options
 ) : IOcppGateway
 {
-    public Task<Guid?> AuthenticateAsync(string identity, string username, string password, CancellationToken ct) =>
-        authentication.AuthenticateAsync(identity, username, password, ct);
+    public Task<Guid?> AuthenticateAsync(
+        string identity,
+        string username,
+        string password,
+        CancellationToken ct
+    ) => authentication.AuthenticateAsync(identity, username, password, ct);
+
     public async Task<Guid> OpenAsync(Guid chargePointId, CancellationToken ct)
     {
         await using var transaction = await OcppDeviceUpdate.BeginAsync(db, chargePointId, ct);
         var device = await db.OcppChargePoints.SingleAsync(x => x.Id == chargePointId, ct);
         device.LastSeenAt = clock.GetUtcNow();
-        var abandoned = await db.OcppConnections.Where(x => x.ChargePointId == chargePointId && x.DisconnectedAt == null).ToListAsync(ct);
+        var abandoned = await db
+            .OcppConnections.Where(x =>
+                x.ChargePointId == chargePointId && x.DisconnectedAt == null
+            )
+            .ToListAsync(ct);
         foreach (var old in abandoned)
         {
             old.DisconnectedAt = clock.GetUtcNow();
@@ -56,7 +65,8 @@ public sealed class OcppGateway(
     {
         await using var transaction = await OcppDeviceUpdate.BeginAsync(db, chargePointId, ct);
         var connection = await db.OcppConnections.SingleAsync(x => x.Id == connectionId, ct);
-        if (connection.DisconnectedAt is not null) return;
+        if (connection.DisconnectedAt is not null)
+            return;
         connection.DisconnectedAt = clock.GetUtcNow();
         connection.CloseCode = closeCode;
         var device = await db.OcppChargePoints.SingleAsync(x => x.Id == chargePointId, ct);
@@ -121,7 +131,9 @@ public sealed class OcppGateway(
                     )
                     .OrderByDescending(x => x.ReceivedAt)
                     .FirstOrDefaultAsync(ct);
-            var wasOffline = device.LastSeenAt is null || device.LastSeenAt < clock.GetUtcNow().AddSeconds(-options.Value.OfflineSeconds);
+            var wasOffline =
+                device.LastSeenAt is null
+                || device.LastSeenAt < clock.GetUtcNow().AddSeconds(-options.Value.OfflineSeconds);
             device.LastSeenAt = clock.GetUtcNow();
             var connection = await db.OcppConnections.SingleAsync(
                 x => x.Id == connectionId && x.ChargePointId == chargePointId,
@@ -130,7 +142,8 @@ public sealed class OcppGateway(
             connection.LastFrameAt = clock.GetUtcNow();
             if (connection.DisconnectedAt is not null)
                 throw new OcppFault("SecurityError", "The connection was superseded.");
-            if (wasOffline) await projection.ConnectedAsync(chargePointId, ct);
+            if (wasOffline)
+                await projection.ConnectedAsync(chargePointId, ct);
             if (previous is not null)
             {
                 var cached =
@@ -144,6 +157,7 @@ public sealed class OcppGateway(
                 await db.SaveChangesAsync(ct);
                 if (transaction is not null)
                     await transaction.CommitAsync(ct);
+                events.Notify();
                 return cached;
             }
 
@@ -216,4 +230,3 @@ public sealed class OcppGateway(
     private static string Error(string id, string code, string description) =>
         JsonSerializer.Serialize(new object[] { 4, id, code, description, new { } });
 }
-

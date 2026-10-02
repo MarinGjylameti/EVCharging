@@ -67,6 +67,13 @@ test("completion uses receipt duration and only confirms history with valid tota
   assert.match(missing, /valid final reading and tariff/);
 });
 
+test("real charger duration uses the physical start even when app association or receipt is later", () => {
+  const html = render({ isDemo: false });
+  assert.match(html, /62:00/);
+  assert.match(html, /Duration uses the start reported by the charger/);
+  assert.doesNotMatch(html, /Duration here uses message receipt times/);
+});
+
 test("single charger page shows its live process and excludes the old multi-point testing form", () => {
   const live = { station: { id: "station-1", code: "SIM-001", name: "Station One", address: "Address", city: "Tirana", connectorType: "CCS2", powerKW: 22, pricePerKWh: .35, currency: "EUR" },
     canConnect: true, inUse: false, deviceConnected: true, connectionRequest: null, session };

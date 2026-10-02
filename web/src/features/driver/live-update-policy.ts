@@ -8,7 +8,7 @@ export type LivePolicy<T> = {
 
 function newerSession(current: StationCharging["session"], incoming: StationCharging["session"]) {
   if (!current) return incoming;
-  if (!incoming) return current;
+  if (!incoming) return null;
   if (current.id === incoming.id) return (current.version ?? 0) > (incoming.version ?? 0) ? current : incoming;
   return Date.parse(current.startReceivedAt ?? current.startedAt) > Date.parse(incoming.startReceivedAt ?? incoming.startedAt)
     ? current : incoming;
@@ -17,9 +17,12 @@ function newerSession(current: StationCharging["session"], incoming: StationChar
 export const chargingLivePolicy: LivePolicy<StationCharging> = {
   event(current, event) {
     if (event.session) {
+      if (current.session?.id === event.session.id
+        && (current.session.version ?? 0) >= (event.session.version ?? 0)) return null;
       const session = newerSession(current.session, event.session);
+      if (session === current.session && event.session.id !== current.session?.id) return null;
       return { snapshot: { ...current, session, connectionRequest: null,
-        deviceConnected: session?.status !== "ConnectionLost" } };
+        inUse: false, deviceConnected: session?.status !== "ConnectionLost" } };
     }
     if (event.station) return { snapshot: { ...current, station: event.station.version >= current.station.version ? event.station : current.station } };
     return { refreshUrl: `/api/driver/stations/${current.station.id}/charging` };

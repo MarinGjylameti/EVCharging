@@ -60,8 +60,8 @@ public static class StationEventsEndpoints
                 {
                     if (!await next)
                         break;
-                    // Send only the routing hint. The snapshot endpoint still checks
-                    // ownership before returning any session or measurement data.
+                    // The bus filters private deltas by owner. Transport omits
+                    // recipient identities and raw protocol fields entirely.
                     var data = JsonSerializer.Serialize(
                         new
                         {
@@ -75,7 +75,8 @@ public static class StationEventsEndpoints
                             occurredAt = events.Current.OccurredAt,
                             station = events.Current.Station,
                             session = events.Current.Session,
-                        }, new JsonSerializerOptions(JsonSerializerDefaults.Web)
+                        },
+                        new JsonSerializerOptions(JsonSerializerDefaults.Web)
                     );
                     await context.Response.WriteAsync($"event: changed\ndata: {data}\n\n", ct);
                     next = events.MoveNextAsync().AsTask();

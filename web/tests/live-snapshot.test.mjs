@@ -7,7 +7,12 @@ const compiled = ts.transpileModule(readFileSync(new URL("../src/features/driver
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText;
 
-function mount(t, stationId = "station-1") {
+const policyExports = {};
+new Function("exports", ts.transpileModule(readFileSync(new URL("../src/features/driver/live-update-policy.ts", import.meta.url), "utf8"), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+}).outputText)(policyExports);
+
+function mount(t, stationId = "station-1", initial = { value: "initial" }, policy) {
   const names = ["document", "window", "EventSource", "fetch", "setTimeout", "clearTimeout", "setInterval", "clearInterval"];
   const originals = Object.fromEntries(names.map(name => [name, globalThis[name]]));
   const realNow = Date.now;
@@ -50,7 +55,7 @@ function mount(t, stationId = "station-1") {
   };
   const exports = {};
   new Function("require", "exports", compiled)(name => { assert.equal(name, "react"); return react; }, exports);
-  const view = exports.useLiveSnapshot({ value: "initial" }, "/snapshot", stationId);
+  const view = exports.useLiveSnapshot(initial, "/snapshot", stationId, policy);
   t.after(async () => {
     cleanup(); await flush(); Date.now = realNow;
     for (const name of names) {
@@ -67,6 +72,9 @@ function mount(t, stationId = "station-1") {
     resolve: async (value, status = 200) => {
       requests.at(-1).resolve({ ok: status === 200, status, json: async () => ({ value }) });
       await flush();
+    },
+    resolveData: async data => {
+      requests.at(-1).resolve({ ok: true, status: 200, json: async () => data }); await flush();
     },
   };
 }
@@ -163,4 +171,88 @@ test("expired authentication stops the stream and any further refresh", async t 
   assert.equal(h.streams[0].closed, true);
   await h.tick(30_000);
   assert.equal(h.requests.length, 1);
+});
+
+function event(eventType, extra = {}) {
+  return { eventId: `${eventType}-${extra.entityVersion ?? 1}`, eventType, stationId: "station-1",
+    entityType: "ChargingSession", entityId: "session-1", entityVersion: 1, occurredAt: "2026-10-02T12:00:00Z", version: 1, ...extra };
+}
+const station = { id: "station-1", version: 1, status: "Available" };
+const session = { id: "session-1", version: 1, startedAt: "2026-10-02T12:00:00Z", startReceivedAt: "2026-10-02T12:00:01Z",
+  status: "Charging", stoppedAt: null, energyKWh: 0 };
+const charging = { station, session: null, connectionRequest: { id: "claim", state: "Waiting" }, deviceConnected: true, inUse: false };
+
+test("1000 private meter deltas cause no map/history requests; completion only fetches history once", async t => {
+  const initial = { stations: [station], history: [] };
+  const h = mount(t, null, initial, policyExports.driverLivePolicy);
+  await h.resolveData(initial);
+  for (let i = 0; i < 1000; i++) h.changed(event("SessionMeasured", { entityVersion: i, session: { ...session, version: i } }));
+  await h.advance(0);
+  assert.equal(h.requests.length, 1);
+  h.changed(event("StationChanged", { station: { ...station, version: 2, status: "Charging" } }));
+  assert.equal(h.state[0].stations[0].status, "Charging");
+  h.changed(event("SessionCompleted")); h.changed(event("SessionCompleted"));
+  await h.advance(0);
+  assert.equal(h.requests.length, 2);
+  assert.equal(h.requests[1].url, "/api/driver/history");
+  await h.resolveData([{ id: "history-1" }]);
+  assert.equal(h.state[0].history[0].id, "history-1");
+  assert.equal(h.state[0].stations[0].version, 2);
+});
+
+test("the detail view patches start, meter, pause, error and completion without fetching", async t => {
+  const h = mount(t, "station-1", charging, policyExports.chargingLivePolicy);
+  await h.resolveData(charging);
+  for (const [i, status] of ["Charging", "Charging", "PausedByVehicle", "Faulted", "Completed"].entries()) {
+    h.changed(event(i === 4 ? "SessionCompleted" : "SessionMeasured", {
+      entityVersion: i + 2, session: { ...session, version: i + 2, status, energyKWh: i,
+        stoppedAt: i === 4 ? "2026-10-02T12:05:00Z" : null },
+    }));
+    assert.equal(h.state[0].session.status, status);
+    assert.equal(h.state[0].connectionRequest, null);
+  }
+  await h.advance(0);
+  assert.equal(h.requests.length, 1);
+  h.changed(event("SessionMeasured", { entityVersion: 1, session }));
+  assert.equal(h.state[0].session.status, "Completed", "An old packet cannot resurrect completed charging");
+});
+
+test("recovery responses cannot resurrect an archived station or erase a new station delta", async t => {
+  const initial = { stations: [station], history: [] };
+  const h = mount(t, null, initial, policyExports.driverLivePolicy);
+  h.changed(event("StationRemoved", { entityVersion: 3 }));
+  h.changed(event("StationChanged", { eventId: "new-station", stationId: "station-2", station: { id: "station-2", version: 1 } }));
+  await h.resolveData(initial);
+  assert.deepEqual(h.state[0].stations.map(x => x.id), ["station-2"]);
+});
+
+test("a start delta beats an in-flight empty snapshot; mutation responses retain newer measurements", async t => {
+  const h = mount(t, "station-1", charging, policyExports.chargingLivePolicy);
+  h.changed(event("SessionStarted", { session: { ...session, version: 4, energyKWh: 3 } }));
+  await h.resolveData(charging);
+  assert.equal(h.state[0].session.energyKWh, 3);
+  h.view.setSnapshot({ ...charging, connectionRequest: null, session });
+  assert.equal(h.state[0].session.energyKWh, 3);
+});
+
+test("malformed envelopes recover from an authorized snapshot and do not break the listener", async t => {
+  const h = mount(t, "station-1", charging, policyExports.chargingLivePolicy);
+  await h.resolveData(charging);
+  h.changed({ eventType: "SessionMeasured" }); await h.advance(0);
+  assert.equal(h.requests.length, 2);
+  await h.resolveData(charging);
+  h.changed(event("SessionStarted", { session }));
+  assert.equal(h.state[0].session.id, session.id);
+});
+
+test("a late completion cannot cancel waiting for the next charge and old station deltas cannot undo removal", async t => {
+  const completed = { ...session, version: 8, status: "Completed", stoppedAt: "2026-10-02T12:05:00Z" };
+  const waiting = { ...charging, session: completed };
+  assert.equal(policyExports.chargingLivePolicy.event(waiting, event("SessionCompleted", { session: completed })), null);
+  const initial = { stations: [station], history: [] };
+  const h = mount(t, null, initial, policyExports.driverLivePolicy);
+  await h.resolveData(initial);
+  h.changed(event("StationRemoved", { entityType: "ChargingStation", entityId: station.id, entityVersion: 3 }));
+  h.changed(event("StationChanged", { entityType: "ChargingStation", entityId: station.id, entityVersion: 2, station: { ...station, version: 2 } }));
+  assert.deepEqual(h.state[0].stations, []);
 });

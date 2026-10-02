@@ -1,4 +1,5 @@
 using EVCharging.Domain.Charging;
+
 namespace EVCharging.Application.Charging;
 
 // Future QR/provider verification resolves evidence here before calling the same
@@ -6,6 +7,5 @@ namespace EVCharging.Application.Charging;
 public interface IChargingClaimVerification
 {
     bool DemoBypassEnabled { get; }
-    Task<ChargingConnector> VerifyDemoAsync(Guid stationId, CancellationToken ct);
+    Task<ChargingConnector> VerifyAsync(Guid stationId, CancellationToken ct);
 }
-

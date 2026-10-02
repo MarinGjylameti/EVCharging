@@ -1,6 +1,6 @@
 # Modeli i propozuar i databazës
 
-Një PostgreSQL i dedikuar për EVCharging. Ky dokument është modeli i synuar për platformën e plotë. Katër migrimet e implementuara gjenden në backend/src/EVCharging.Infrastructure/Persistence/Migrations: identiteti/njoftimet/audit, charging_stations dhe charging_history për pamjen e Driver-it, versioni i pikës për konfliktet e redaktimit dhe fushat opsionale të vlerësimit të disponueshmërisë. [SQL për review](initial-schema.sql) është gjeneruar, por nuk është provuar në PostgreSQL. Tabelat e tjera më poshtë mbeten plan; refresh_tokens është zëvendësuar për këtë hap nga login_sessions me skadim absolut. Historia aktuale ruan një lidhje me pikën, energjinë dhe çmimin snapshot; nuk është ende sesion OCPP real.
+Një PostgreSQL i dedikuar për EVCharging. Tetë migrimet aktuale përfshijnë identitetin, pikat/historinë, OCPP/outbox, claim-et dhe sesionet e pavarura nga protokolli. [Dokumentimi i sesioneve](charging-session-realtime.md) është referenca për modelin aktual, migrimin e të dhënave dhe provat PostgreSQL ende të paekzekutuara. Pjesët e mëposhtme përshkruajnë edhe modelin e synuar; initial-schema.sql është një snapshot historik, jo skripti i migrimeve të fundit.
 
 ## Tabelat dhe lidhjet
 
