@@ -252,4 +252,84 @@ public sealed class AccountApiTests : IDisposable
     }
 
     public void Dispose() => factory.Dispose();
+
+    [Fact]
+    public async Task UsableBatteryCapacityPersistsAndCanBeClearedWithoutInventingADefault()
+    {
+        var (client, auth) = await Register();
+        Assert.Null(auth.User.BatteryCapacityKWh);
+        var request = new ProfileRequest(
+            "Arta",
+            "Deda",
+            null,
+            "VW",
+            "ID.4",
+            "Lithium-ion",
+            auth.User.Version,
+            77.25m
+        );
+        var response = await client.PatchAsJsonAsync("/api/v1/me/profile", request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var saved = (await response.Content.ReadFromJsonAsync<UserDto>())!;
+        Assert.Equal(77.25m, saved.BatteryCapacityKWh);
+        Assert.Equal(
+            77.25m,
+            (await client.GetFromJsonAsync<UserDto>("/api/v1/me"))!.BatteryCapacityKWh
+        );
+        Assert.Equal(
+            HttpStatusCode.PreconditionFailed,
+            (
+                await client.PatchAsJsonAsync(
+                    "/api/v1/me/profile",
+                    request with
+                    {
+                        BatteryCapacityKWh = 60,
+                    }
+                )
+            ).StatusCode
+        );
+        var cleared = await client.PatchAsJsonAsync(
+            "/api/v1/me/profile",
+            request with
+            {
+                Version = saved.Version,
+                BatteryCapacityKWh = null,
+            }
+        );
+        Assert.Equal(HttpStatusCode.OK, cleared.StatusCode);
+        Assert.Null((await cleared.Content.ReadFromJsonAsync<UserDto>())!.BatteryCapacityKWh);
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ChargingDbContext>();
+        Assert.Null((await db.Accounts.SingleAsync()).BatteryCapacityKWh);
+        Assert.Equal(2, await db.Audit.CountAsync(x => x.Action == "ProfileChanged"));
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(0)]
+    [InlineData(1000.01)]
+    [InlineData(60.001)]
+    public async Task InvalidBatteryCapacityCannotChangeTheProfile(double value)
+    {
+        var (client, auth) = await Register();
+        var response = await client.PatchAsJsonAsync(
+            "/api/v1/me/profile",
+            new ProfileRequest(
+                "Changed",
+                "Name",
+                null,
+                null,
+                null,
+                null,
+                auth.User.Version,
+                (decimal)value
+            )
+        );
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("invalid_battery_capacity", await response.Content.ReadAsStringAsync());
+        var current = (await client.GetFromJsonAsync<UserDto>("/api/v1/me"))!;
+        Assert.Equal("Arta", current.FirstName);
+        Assert.Equal(auth.User.Version, current.Version);
+        Assert.Null(current.BatteryCapacityKWh);
+    }
 }

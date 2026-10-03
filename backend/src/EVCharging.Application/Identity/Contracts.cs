@@ -23,7 +23,8 @@ public sealed record ProfileRequest(
     string? VehicleMake,
     string? VehicleModel,
     string? BatteryType,
-    long Version
+    long Version,
+    decimal? BatteryCapacityKWh = null
 );
 
 public sealed record SettingsRequest(string Language, bool PushEnabled, long Version);
@@ -42,7 +43,8 @@ public sealed record UserDto(
     string? VehicleMake,
     string? VehicleModel,
     string? BatteryType,
-    long Version
+    long Version,
+    decimal? BatteryCapacityKWh = null
 );
 
 public sealed record AuthResult(string AccessToken, DateTimeOffset ExpiresAt, UserDto User);
@@ -95,6 +97,20 @@ public static class AccountRules
             _ => throw new RequestFailure(400, "invalid_language", "Choose sq or en."),
         };
 
+    public static decimal? BatteryCapacity(decimal? value)
+    {
+        if (
+            value is not null
+            && (value is <= 0 or > 1000 || decimal.Round(value.Value, 2) != value)
+        )
+            throw new RequestFailure(
+                400,
+                "invalid_battery_capacity",
+                "Enter a usable battery capacity between 0.01 and 1000 kWh, with at most two decimal places."
+            );
+        return value;
+    }
+
     public static UserDto ToDto(Account user) =>
         new(
             user.Id,
@@ -108,6 +124,7 @@ public static class AccountRules
             user.VehicleMake,
             user.VehicleModel,
             user.BatteryType,
-            user.Version
+            user.Version,
+            user.BatteryCapacityKWh
         );
 }

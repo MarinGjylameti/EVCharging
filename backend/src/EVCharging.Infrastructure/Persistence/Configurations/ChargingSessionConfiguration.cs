@@ -50,6 +50,10 @@ internal sealed class ChargingSessionConfiguration : IEntityTypeConfiguration<Ch
                     "ck_session_values",
                     "(energy_kwh IS NULL OR energy_kwh >= 0) AND unit_price_snapshot >= 0 AND (state_of_charge IS NULL OR state_of_charge BETWEEN 0 AND 100)"
                 );
+                t.HasCheckConstraint(
+                    "ck_session_battery_capacity",
+                    "battery_capacity_kwh IS NULL OR battery_capacity_kwh > 0 AND battery_capacity_kwh <= 1000"
+                );
             }
         );
         e.HasKey(x => x.Id);
@@ -81,6 +85,7 @@ internal sealed class ChargingSessionConfiguration : IEntityTypeConfiguration<Ch
         e.Property(x => x.EnergyKWh).HasPrecision(18, 6);
         e.Property(x => x.PowerKW).HasPrecision(12, 3);
         e.Property(x => x.StateOfCharge).HasPrecision(6, 3);
+        e.Property(x => x.BatteryCapacityKWh).HasPrecision(6, 2);
         e.Property(x => x.TemperatureCelsius).HasPrecision(8, 3);
         e.Property(x => x.UnitPriceSnapshot).HasPrecision(18, 6);
         e.Property(x => x.Currency).HasMaxLength(3);

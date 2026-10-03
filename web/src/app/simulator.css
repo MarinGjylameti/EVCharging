@@ -1,0 +1,11 @@
+.automatic-simulator{max-width:1000px}
+.automatic-simulator>p{font-size:14px;line-height:1.8}
+.simulator-controls{display:flex;align-items:end;gap:12px;flex-wrap:wrap;margin:20px 0}
+.simulator-controls label{margin:0;min-width:180px}
+.simulator-controls .button-primary,.simulator-controls .button-outline{width:auto;margin:0;min-height:44px}
+.settings-card .simulator-own-account{display:flex;align-items:center;gap:10px;margin-top:12px}
+.settings-card .simulator-own-account input{width:18px;min-height:18px;margin:0;padding:0;accent-color:var(--green)}
+.simulator-traffic{padding-left:20px;max-height:440px;overflow:auto}
+.simulator-traffic li{font-size:12px;margin:14px 0}
+.simulator-traffic pre{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--paper);padding:12px;border-radius:6px}
+@media(max-width:600px){.simulator-controls>button{flex:1 1 140px}}

@@ -146,6 +146,11 @@ public sealed class DriverChargingService(
                 current.State = "Linked";
                 current.SessionId = active.Id;
                 current.LinkedAt = now;
+                active.BatteryCapacityKWh = await db
+                    .Accounts.Where(x => x.Id == driverId)
+                    .Select(x => x.BatteryCapacityKWh)
+                    .SingleAsync(ct);
+                active.Version++;
                 // Physical start, energy, tariff and timestamps remain untouched.
             }
             if (own is null || active is not null)

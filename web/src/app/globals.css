@@ -66,7 +66,7 @@
 
 @media(max-width:800px){
   .driver-sidebar{padding:14px 20px;min-height:68px;flex-wrap:nowrap}
-  .driver-sidebar nav{position:fixed;z-index:50;left:0;right:0;bottom:0;width:auto;margin:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:7px max(12px,env(safe-area-inset-right)) calc(7px + env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));background:#fffffff5;border-top:1px solid #dce7d9;box-shadow:0 -8px 24px #123b2914;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
+  .driver-sidebar nav{position:fixed;z-index:50;left:0;right:0;bottom:0;width:auto;margin:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;padding:7px max(12px,env(safe-area-inset-right)) calc(7px + env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));background:#fffffff5;border-top:1px solid #dce7d9;box-shadow:0 -8px 24px #123b2914;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
   .driver-sidebar nav a{min-width:0;min-height:54px;display:flex;flex-direction:column;justify-content:center;gap:2px;padding:5px 3px;text-align:center;border-radius:9px}
   .driver-sidebar nav a .app-nav-icon{width:auto;font-size:21px;line-height:1.1}
   .driver-sidebar nav a .app-nav-label{width:auto;max-width:100%;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center}

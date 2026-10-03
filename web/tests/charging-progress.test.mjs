@@ -17,7 +17,8 @@ function compile(path, dependencies = {}) {
 }
 const fault = compile("../src/features/driver/charging-fault.tsx");
 const diagnostics = compile("../src/features/driver/simulator-diagnostics.tsx");
-const progress = compile("../src/features/driver/charging-progress.tsx", { "./charging-fault": fault });
+const estimate = compile("../src/features/driver/charging-estimate.ts");
+const progress = compile("../src/features/driver/charging-progress.tsx", { "./charging-fault": fault, "./charging-estimate": estimate });
 const { ChargingProgress, formatChargingDuration } = progress;
 const session = {
   id: "session-1", status: "Charging", energyKWh: 2.75, powerKW: null,
@@ -41,7 +42,7 @@ test("missing battery level and remaining time never produce an invented percent
   assert.doesNotMatch(html, /aria-valuenow|~\d|62:00|NaN/);
   assert.match(html, /Battery level/);
   assert.match(html, /TIME UNTIL BATTERY IS FULL/);
-  assert.match(html, /Insufficient data for an estimate/);
+  assert.match(html, /Add battery capacity in your profile/);
 });
 
 test("charging time advances in minutes while the start date and time stay fixed", () => {
@@ -134,7 +135,22 @@ test("100 percent reports battery level without inventing a stop or completion t
   const html = render({ stateOfCharge: 100 });
   assert.match(html, /aria-valuenow="100"/);
   assert.match(html, /Charging/);
-  assert.doesNotMatch(html, /Charge completed|Saved in history|remaining/i);
+  assert.doesNotMatch(html, /Charge completed|Saved in history|≈ \d/i);
+});
+
+test("remaining time renders an estimate and changes on new battery, power and profile data", () => {
+  const valid = { batteryCapacityKWh: 60, stateOfCharge: 45, powerKW: 22, powerScope: "Total",
+    powerValidUntil: "2026-10-01T13:04:00Z", stateOfChargeValidUntil: "2026-10-01T13:07:00Z" };
+  assert.match(render(valid), /≈ 1 h 30 min/);
+  assert.match(render({ ...valid, stateOfCharge: 56 }), /≈ 1 h 12 min/);
+  assert.match(render(valid, { language: "sq" }), /Vlerësim me fuqinë aktuale/);
+  assert.match(render({ ...valid, powerScope: "L1" }), /A total charging power reading is needed/);
+  for (const status of ["PausedByVehicle", "Faulted", "ConnectionLost"]) {
+    assert.doesNotMatch(render({ ...valid, status }), /≈ \d/);
+  }
+  const full = render({ ...valid, stateOfCharge: 100, powerKW: 0 });
+  assert.match(full, /≈ 0 min/);
+  assert.doesNotMatch(full, /Charge completed|Saved in history/);
 });
 
 test("elapsed minutes do not wrap after an hour or day and reject invalid timestamps", () => {

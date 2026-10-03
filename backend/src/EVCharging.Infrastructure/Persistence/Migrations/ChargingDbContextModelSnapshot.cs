@@ -276,6 +276,11 @@ namespace EVCharging.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<decimal?>("BatteryCapacityKWh")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("battery_capacity_kwh");
+
                     b.Property<string>("CompletionWarning")
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)")
@@ -355,6 +360,10 @@ namespace EVCharging.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("soc_observed_at");
 
+                    b.Property<DateTimeOffset?>("SocReceivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("soc_received_at");
+
                     b.Property<DateTimeOffset>("StartReceivedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("start_received_at");
@@ -414,6 +423,8 @@ namespace EVCharging.Infrastructure.Persistence.Migrations
 
                     b.ToTable("charging_sessions", null, t =>
                         {
+                            t.HasCheckConstraint("ck_session_battery_capacity", "battery_capacity_kwh IS NULL OR battery_capacity_kwh > 0 AND battery_capacity_kwh <= 1000");
+
                             t.HasCheckConstraint("ck_session_time", "ended_at IS NULL OR ended_at >= started_at");
 
                             t.HasCheckConstraint("ck_session_values", "(energy_kwh IS NULL OR energy_kwh >= 0) AND unit_price_snapshot >= 0 AND (state_of_charge IS NULL OR state_of_charge BETWEEN 0 AND 100)");
@@ -572,6 +583,11 @@ namespace EVCharging.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("archived_at");
 
+                    b.Property<decimal?>("BatteryCapacityKWh")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("battery_capacity_kwh");
+
                     b.Property<string>("BatteryType")
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)")
@@ -658,6 +674,8 @@ namespace EVCharging.Infrastructure.Persistence.Migrations
 
                     b.ToTable("accounts", null, t =>
                         {
+                            t.HasCheckConstraint("ck_account_battery_capacity", "battery_capacity_kwh IS NULL OR battery_capacity_kwh > 0 AND battery_capacity_kwh <= 1000");
+
                             t.HasCheckConstraint("ck_account_language", "language IN ('Sq', 'En')");
 
                             t.HasCheckConstraint("ck_account_role", "role IN ('Driver', 'Admin', 'Superadmin')");

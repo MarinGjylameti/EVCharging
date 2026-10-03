@@ -113,17 +113,24 @@ public sealed class ChargerEventReceiver(
             );
             if (waiting is not null)
             {
+                // Match the claim/profile lock order: device, then account. A profile
+                // update cannot race the capacity snapshot taken when charging starts.
+                if (db.Database.IsRelational())
+                    await db.Database.ExecuteSqlInterpolatedAsync(
+                        $"SELECT 1 FROM accounts WHERE id = {waiting.DriverId} FOR UPDATE",
+                        ct
+                    );
+                var driver = await db.Accounts.SingleOrDefaultAsync(
+                    x => x.Id == waiting.DriverId,
+                    ct
+                );
                 if (waiting.ExpiresAt <= now)
                     waiting.State = "Expired";
                 else if (
-                    !await db.Accounts.AnyAsync(
-                        x =>
-                            x.Id == waiting.DriverId
-                            && x.IsActive
-                            && x.ArchivedAt == null
-                            && x.Role == UserRole.Driver,
-                        ct
-                    )
+                    driver is null
+                    || !driver.IsActive
+                    || driver.ArchivedAt is not null
+                    || driver.Role != UserRole.Driver
                 )
                     waiting.State = "Cancelled";
                 else
@@ -131,6 +138,7 @@ public sealed class ChargerEventReceiver(
                     waiting.State = "Linked";
                     waiting.SessionId = session.Id;
                     waiting.LinkedAt = now;
+                    session.BatteryCapacityKWh = driver.BatteryCapacityKWh;
                     ChargingRealtime.Stage(
                         db,
                         station.Id,
@@ -221,6 +229,7 @@ public sealed class ChargerEventReceiver(
             {
                 session.StateOfCharge = soc;
                 session.SocObservedAt = change.ObservedAt;
+                session.SocReceivedAt = now;
             }
             if (
                 change.TemperatureCelsius is { } temperature

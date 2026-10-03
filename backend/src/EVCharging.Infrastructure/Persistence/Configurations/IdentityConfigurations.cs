@@ -18,6 +18,10 @@ internal sealed class AccountConfiguration : IEntityTypeConfiguration<Account>
                     "role IN ('Driver', 'Admin', 'Superadmin')"
                 );
                 table.HasCheckConstraint("ck_account_language", "language IN ('Sq', 'En')");
+                table.HasCheckConstraint(
+                    "ck_account_battery_capacity",
+                    "battery_capacity_kwh IS NULL OR battery_capacity_kwh > 0 AND battery_capacity_kwh <= 1000"
+                );
             }
         );
         e.HasKey(x => x.Id);
@@ -31,6 +35,7 @@ internal sealed class AccountConfiguration : IEntityTypeConfiguration<Account>
         e.Property(x => x.VehicleMake).HasMaxLength(80);
         e.Property(x => x.VehicleModel).HasMaxLength(80);
         e.Property(x => x.BatteryType).HasMaxLength(80);
+        e.Property(x => x.BatteryCapacityKWh).HasPrecision(6, 2);
         e.Property(x => x.Role).HasConversion<string>().HasMaxLength(20);
         e.Property(x => x.Language).HasConversion<string>().HasMaxLength(2);
         e.Property(x => x.Version).IsConcurrencyToken();

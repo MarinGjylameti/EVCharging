@@ -12,6 +12,19 @@ new Function("exports", ts.transpileModule(readFileSync(new URL("../src/features
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText)(policyExports);
 
+test("private vehicle updates change the active session without refetching or overwriting newer meter data", () => {
+  const session = { id: "session-1", version: 10, status: "Charging", stoppedAt: null, energyKWh: 1,
+    batteryCapacityKWh: 60, readings: [{ measurand: "SoC", value: "45" }] };
+  const current = { station: { id: "station-1", version: 1 }, session, connectionRequest: null };
+  const event = { eventType: "SessionVehicleChanged", entityVersion: 11, session: { ...session, version: 11, batteryCapacityKWh: 80 } };
+  const update = policyExports.chargingLivePolicy.event(current, event);
+  assert.equal(update.refreshUrl, undefined);
+  assert.equal(update.snapshot.session.batteryCapacityKWh, 80);
+  assert.equal(update.snapshot.session.energyKWh, 1);
+  assert.equal(policyExports.chargingLivePolicy.event(update.snapshot, { ...event, session }), null);
+  assert.equal(policyExports.driverLivePolicy.event({ stations: [], history: [] }, event), null);
+});
+
 function mount(t, stationId = "station-1", initial = { value: "initial" }, policy) {
   const names = ["document", "window", "EventSource", "fetch", "setTimeout", "clearTimeout", "setInterval", "clearInterval"];
   const originals = Object.fromEntries(names.map(name => [name, globalThis[name]]));

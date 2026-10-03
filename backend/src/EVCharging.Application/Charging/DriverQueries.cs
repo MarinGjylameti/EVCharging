@@ -87,5 +87,7 @@ public sealed record DriverChargingSession(
     string? FaultInfo = null,
     IReadOnlyList<ChargingSampleDiagnostic>? Readings = null,
     string? StopReason = null,
-    string? CompletionWarning = null
+    string? CompletionWarning = null,
+    decimal? BatteryCapacityKWh = null,
+    DateTimeOffset? StateOfChargeValidUntil = null
 );

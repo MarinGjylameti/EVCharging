@@ -21,6 +21,7 @@ export function AccountForm({ initial }: { initial: User }) {
       if (!response.ok) {
         setError(response.status === 412 ? (sq ? "Të dhënat kanë ndryshuar. Rifresko faqen dhe provo përsëri." : "Your account changed. Refresh the page and try again.") :
           data?.code === "incorrect_password" ? (sq ? "Fjalëkalimi aktual nuk është i saktë." : "The current password is incorrect.") :
+          data?.code === "invalid_battery_capacity" ? (sq ? "Kapaciteti duhet të jetë 0.01–1000 kWh, me deri në dy shifra pas presjes." : "Capacity must be 0.01–1000 kWh, with up to two decimal places.") :
           response.status === 400 ? (sq ? "Kontrollo fushat dhe provo përsëri." : "Check the fields and try again.") :
           (sq ? "Shërbimi nuk përgjigjet. Provo përsëri." : "The service is unavailable. Please try again."));
         return;
@@ -36,8 +37,10 @@ export function AccountForm({ initial }: { initial: User }) {
   function profile(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
+    const capacity = String(data.get("batteryCapacityKWh") ?? "").trim();
     void send("profile", {firstName:data.get("firstName"),lastName:data.get("lastName"),phone:data.get("phone"),
-      vehicleMake:user.vehicleMake,vehicleModel:user.vehicleModel,batteryType:user.batteryType,version:user.version});
+      vehicleMake:data.get("vehicleMake"),vehicleModel:data.get("vehicleModel"),batteryType:data.get("batteryType"),
+      batteryCapacityKWh:capacity === "" ? null : Number(capacity),version:user.version});
   }
   function password(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -58,7 +61,18 @@ export function AccountForm({ initial }: { initial: User }) {
         <label>{sq ? "Mbiemri" : "Last name"}<input name="lastName" autoComplete="family-name" maxLength={80} required defaultValue={user.lastName}/></label>
         <label>Email<input type="email" readOnly value={user.email}/></label>
         <label>{sq ? "Telefoni" : "Phone"}<input name="phone" type="tel" autoComplete="tel" maxLength={32} defaultValue={user.phone ?? ""}/></label>
-      </div><button className="button-primary">{busy === "profile" ? (sq ? "Duke ruajtur…" : "Saving…") : (sq ? "Ruaj profilin" : "Save profile")}</button></fieldset>
+      </div>
+      <h3>{sq ? "Makina jote" : "Your vehicle"}</h3>
+      <div className="field-grid">
+        <label>{sq ? "Marka" : "Make"}<input name="vehicleMake" maxLength={80} defaultValue={user.vehicleMake ?? ""}/></label>
+        <label>{sq ? "Modeli" : "Model"}<input name="vehicleModel" maxLength={80} defaultValue={user.vehicleModel ?? ""}/></label>
+        <label>{sq ? "Lloji i baterisë" : "Battery type"}<input name="batteryType" maxLength={80} defaultValue={user.batteryType ?? ""}/></label>
+        <label>{sq ? "Kapaciteti i përdorshëm i baterisë (kWh)" : "Usable battery capacity (kWh)"}
+          <input id="battery-capacity" name="batteryCapacityKWh" type="number" inputMode="decimal" min="0.01" max="1000" step="0.01" defaultValue={user.batteryCapacityKWh ?? ""} aria-describedby="battery-capacity-help"/>
+        </label>
+      </div>
+      <p id="battery-capacity-help">{sq ? "Fushë opsionale. Vendos kapacitetin e përdorshëm nga specifikimet e makinës. E përdorim me përqindjen dhe fuqinë e raportuar për të vlerësuar kohën deri në 100%." : "Optional. Enter the usable capacity from your vehicle specifications. We use it with reported battery percentage and power to estimate the time to 100%."}</p>
+      <button className="button-primary">{busy === "profile" ? (sq ? "Duke ruajtur…" : "Saving…") : (sq ? "Ruaj profilin" : "Save profile")}</button></fieldset>
     </form>
     <form className="settings-card" onSubmit={password}><h2>{sq ? "Ndrysho fjalëkalimin" : "Change password"}</h2>
       <p>{sq ? "Përdor 12–128 karaktere. Pas ndryshimit do të hysh përsëri në të gjitha pajisjet." : "Use 12–128 characters. You will need to sign in again on all devices."}</p>

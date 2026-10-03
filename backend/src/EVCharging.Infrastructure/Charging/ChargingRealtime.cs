@@ -145,7 +145,9 @@ internal static class ChargingRealtime
                     session.LatestReadingsJson
                 ),
             session.StopReason,
-            session.CompletionWarning
+            session.CompletionWarning,
+            session.BatteryCapacityKWh,
+            session.SocReceivedAt?.AddMinutes(5)
         );
     }
 }

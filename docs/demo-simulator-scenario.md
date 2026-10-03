@@ -1,5 +1,10 @@
 # Dhjetë pika për provën me simulatorin
 
+Për provën pa dërgim manual të `MeterValues`, përdor simulatorin brenda projektit:
+udhëzimi hap pas hapi është te [Simulatori automatik](automatic-simulator.md).
+Ai dërgon edhe fuqinë totale dhe përqindjen e baterisë. Hapat më poshtë mbeten
+për simulatorin e jashtëm dhe provat me mesazhe të veçanta.
+
 Konfigurimi standard krijon `SIM-001` deri te `SIM-010`, secila me lidhësin 1,
 Type 2, fuqi nominale 22 kW dhe tarifë 0.35 EUR/kWh. Gjendja fillestare është
 `Unknown`; statusi dhe matjet e marra nga simulatori përcaktojnë hartën.
@@ -98,8 +103,10 @@ Te formulari **MeterValues**, gjatë një transaksioni aktiv, përdor:
 Dërgo **Send MeterValues** për secilën provë dhe prit përgjigjen RESP.
 UI duhet të shfaqë 22 kW (ose 22 kW · L1) dhe baterinë 45% pa rifreskim.
 Vlera 45% është vetëm një matje prove. Ajo nuk krijon automatikisht një
-vlerësim të kohës së mbetur. Aktualisht aplikacioni nuk ka kapacitetin e
-baterisë ose një llogaritje të kësaj kohe. Fuqia skadon pas 120 sekondash
+vlerësim të kohës së mbetur pa kapacitetin e përdorshëm në profil dhe
+fuqinë totale aktuale. Fuqia `L1` shfaqet në UI, por nuk përdoret si total
+për këtë vlerësim. Simulatori brenda projektit dërgon të tre matjet bashkë
+pa fazë. Fuqia skadon pas 120 sekondash
 pa matje të re; ridërgoje gjatë provës që të mbetet aktuale.
 
 Mos përdor ID-në fillestare `1` të formularit nëse transaksioni aktiv ka një

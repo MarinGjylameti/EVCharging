@@ -5,7 +5,7 @@ export type LivePolicy<T> = {
   event: (current: T, event: ChargingRealtimeEvent) => LiveUpdate<T>;
   merge: (current: T, incoming: T, url: string) => T;
 };
-const sessionEvents = new Set(["SessionStarted", "SessionMeasured", "SessionStatusChanged", "SessionCompleted"]);
+const sessionEvents = new Set(["SessionStarted", "SessionMeasured", "SessionStatusChanged", "SessionCompleted", "SessionVehicleChanged"]);
 
 function newerSession(current: StationCharging["session"], incoming: StationCharging["session"]) {
   if (!current) return incoming;

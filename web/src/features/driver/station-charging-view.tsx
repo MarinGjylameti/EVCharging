@@ -114,6 +114,7 @@ export function StationChargingView({ initial, language }: { initial: StationCha
     {snapshot.canConnect && !snapshot.inUse && !active && <p className="charge-test-instruction">{sq
       ? `Për testin aktual, QR anashkalohet. Lidh simulatorin ${station.code} dhe shtyp Start charging me TAG-001, lidhësi 1.`
       : `QR is bypassed for this test. Connect simulator ${station.code}, then press Start charging with TAG-001, connector 1.`}</p>}
+    {snapshot.canConnect && station.isDemo && <p><a href={`/driver/simulator?station=${encodeURIComponent(station.code)}`} target="_blank" rel="noopener noreferrer">{sq ? "Hap simulatorin automatik ↗" : "Open automatic simulator ↗"}</a></p>}
     {!snapshot.canConnect && !session && <p className="charge-point-notice">{sq ? "Lidhja pa QR është e aktivizuar vetëm për pikat e testimit." : "Connection without QR is enabled only for test charge points."}</p>}
     {snapshot.canConnect && snapshot.diagnostics && <SimulatorDiagnostics key={session?.id ?? stationId} initial={snapshot.diagnostics} session={session} language={language} />}
   </div>;

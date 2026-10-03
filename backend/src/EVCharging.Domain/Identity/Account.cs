@@ -25,6 +25,7 @@ public sealed class Account
     public string? VehicleMake { get; set; }
     public string? VehicleModel { get; set; }
     public string? BatteryType { get; set; }
+    public decimal? BatteryCapacityKWh { get; set; }
     public UserRole Role { get; set; } = UserRole.Driver;
     public AppLanguage Language { get; set; } = AppLanguage.Sq;
     public bool PushEnabled { get; set; }

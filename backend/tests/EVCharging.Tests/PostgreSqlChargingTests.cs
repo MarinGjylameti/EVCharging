@@ -71,13 +71,15 @@ public sealed partial class PostgreSqlChargingTests
                 PayloadHash = "test",
                 ReceivedAt = received,
             };
-            db.Accounts.Add(driver);
+            await InsertLegacyAccountsAsync(db, [driver]);
             db.Stations.Add(station);
             // Seed the old schema without columns introduced by later migrations.
-            await db.Database.ExecuteSqlInterpolatedAsync($"""
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"""
                 INSERT INTO ocpp_charge_points (id, identity, protocol_version, is_enabled)
                 VALUES ({device.Id}, {device.Identity}, '1.6J', true);
-                """);
+                """
+            );
             db.OcppConnections.Add(connection);
             db.OcppInboundMessages.Add(message);
             await db.SaveChangesAsync();
@@ -271,6 +273,46 @@ public sealed partial class PostgreSqlChargingTests
             .ToArray();
         gate.SetResult();
         return await Task.WhenAll(tasks).WaitAsync(TimeSpan.FromSeconds(30));
+    }
+
+    // Legacy migration fixtures must use columns from that schema, rather than
+    // inserting newly mapped optional properties before their migration runs.
+    private static async Task InsertLegacyAccountsAsync(ChargingDbContext db, Account[] accounts)
+    {
+        foreach (var account in accounts)
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                INSERT INTO accounts (id, email, normalized_email, password_hash, first_name, last_name,
+                    role, language, push_enabled, is_active, version, created_at)
+                VALUES ({account.Id}, {account.Email}, {account.NormalizedEmail}, {account.PasswordHash},
+                    {account.FirstName}, {account.LastName}, {account.Role.ToString()}, {account.Language.ToString()},
+                    {account.PushEnabled}, {account.IsActive}, {account.Version}, {account.CreatedAt});
+                """
+            );
+    }
+
+    [PostgreSqlFact]
+    public async Task BatteryCapacityMigrationIsNullableAndRejectsInvalidStoredValues()
+    {
+        await using var test = await DatabaseTest.CreateAsync();
+        var (driver, _) = await test.DriversAsync();
+        await using var db = test.Context();
+        Assert.Null((await db.Accounts.SingleAsync(x => x.Id == driver)).BatteryCapacityKWh);
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE accounts SET battery_capacity_kwh = 77.25 WHERE id = {driver}"
+        );
+        db.ChangeTracker.Clear();
+        Assert.Equal(
+            77.25m,
+            (await db.Accounts.SingleAsync(x => x.Id == driver)).BatteryCapacityKWh
+        );
+        var error = await Assert.ThrowsAsync<PostgresException>(() =>
+            db.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE accounts SET battery_capacity_kwh = 0 WHERE id = {driver}"
+            )
+        );
+        Assert.Equal(PostgresErrorCodes.CheckViolation, error.SqlState);
+        Assert.False(db.Database.HasPendingModelChanges());
     }
 
     private sealed class DatabaseTest : IAsyncDisposable

@@ -2,6 +2,17 @@
 
 import type { DriverChargingSession, Language } from "../../../../contracts/account";
 import { ChargingFault } from "./charging-fault";
+import { chargingEstimate, formatChargingEstimate, type ChargingEstimateReason } from "./charging-estimate";
+
+const estimateNotes: Record<ChargingEstimateReason, [string, string]> = {
+  notCharging: ["Vlerësimi rifillon kur makina karikon", "Estimate resumes when charging starts"],
+  stale: ["Në pritje të përditësimeve të reja", "Waiting for fresh updates"],
+  missingCapacity: ["Shto kapacitetin e baterisë në profil", "Add battery capacity in your profile"],
+  missingBattery: ["Në pritje të përqindjes nga makina", "Waiting for battery percentage from the vehicle"],
+  staleBattery: ["Në pritje të një përqindjeje të re nga makina", "Waiting for a fresh battery percentage"],
+  missingPower: ["Në pritje të një matjeje të re fuqie", "Waiting for a fresh power reading"],
+  partialPower: ["Duhet matja e fuqisë totale të karikimit", "A total charging power reading is needed"],
+};
 
 export const chargingLabels: Record<string, [string, string]> = {
   Charging: ["Në karikim", "Charging"], Connecting: ["Makina po lidhet", "Connecting vehicle"],
@@ -48,6 +59,7 @@ export function ChargingProgress({ session, language, now, stale }: {
     : actualPower === null ? (sq ? "Në pritje të një matjeje të vlefshme fuqie" : "Waiting for a valid power reading")
     : (sq ? "Sipas pajisjes" : "Reported by charger");
   const saved = ended && session.energyKWh !== null && session.cost !== null && !session.completionWarning;
+  const estimate = chargingEstimate(session, now, stale);
 
   return <article className={`charge-process ${charging ? "is-charging" : paused ? "is-paused" : ended ? "is-complete" : faulted ? "is-faulted" : ""}`}>
     <div className="charge-process-heading">
@@ -91,7 +103,11 @@ export function ChargingProgress({ session, language, now, stale }: {
         <small>{sq ? "Nga nisja · përfshin pauzat" : "Since start · includes pauses"}</small>
         <small>{startDate ? <>{sq ? "Nisur" : "Started"}: <time dateTime={startTimestamp}>{startDate.toLocaleDateString("en-GB", { timeZone: "Europe/Tirane", day: "2-digit", month: "2-digit", year: "numeric" })} · {startDate.toLocaleTimeString(sq ? "sq-AL" : "en-GB", { timeZone: "Europe/Tirane", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}</time> · {sq ? "Tiranë" : "Tirana"}</> : (sq ? "Koha e nisjes nuk është e disponueshme" : "Start time is unavailable")}</small>
       </div>
-      {!ended && <div><span>{sq ? "KOHA DERI NË BATERI TË PLOTË" : "TIME UNTIL BATTERY IS FULL"}</span><strong>—</strong><small>{sq ? "Mungojnë të dhënat për vlerësim" : "Insufficient data for an estimate"}</small></div>}
+      {!ended && <div><span>{sq ? "KOHA DERI NË BATERI TË PLOTË" : "TIME UNTIL BATTERY IS FULL"}</span>
+        <strong>{estimate.minutes === null ? "—" : `≈ ${formatChargingEstimate(estimate.minutes)}`}</strong>
+        <small>{estimate.reason ? estimateNotes[estimate.reason][sq ? 0 : 1] : (sq ? "Vlerësim me fuqinë aktuale · deri në 100%" : "Estimate at current power · to 100%")}</small>
+        {estimate.reason === "missingCapacity" && <small><a href="/driver/account#battery-capacity">{sq ? "Plotëso profilin →" : "Update profile →"}</a></small>}
+      </div>}
     </div>
     <details className="charge-reading-details">
       <summary>{sq ? "Rreth matjeve" : "About the readings"}</summary>
@@ -100,7 +116,7 @@ export function ChargingProgress({ session, language, now, stale }: {
         ? (sq ? "Kohëzgjatja përdor marrjen e nisjes dhe ndalimit nga serveri. Shpejtësia e simulatorit nuk e përshpejton këtë orë." : "Duration uses the server receipt of start and stop. The simulator speed does not accelerate this clock.")
         : (sq ? "Ora e pajisjes ndryshon nga ora reale. Kohëzgjatja bazohet në nisjen e raportuar nga pajisja." : "Device time differs from real time. Duration uses the start reported by the charger.")}</p>}
       {session.temperatureCelsius !== null && <p>{sq ? "Temperatura e raportuar" : "Reported temperature"}: {number(session.temperatureCelsius, 1)} °C</p>}
-      {!ended && <p>{sq ? "Koha deri në bateri të plotë kërkon një vlerësim nga pajisja ose të dhëna për kapacitetin e baterisë dhe ritmin e karikimit. Energjia e marrë dhe fuqia e pikës nuk mjaftojnë për ta përcaktuar." : "Time until the battery is full needs an estimate from the charger or battery capacity and charging rate data. Delivered energy and the charger rating alone cannot determine it."}</p>}
+      {!ended && <p>{sq ? "Koha e mbetur është vlerësim deri në 100%, nga kapaciteti i profilit, përqindja e fundit dhe fuqia totale aktuale. Përditësohet me matjet e reja; humbjet dhe ulja e fuqisë afër fundit mund ta zgjasin karikimin. Vlerësimi fshihet nëse fuqia nuk rifreskohet për 2 minuta ose përqindja për 5 minuta." : "Remaining time estimates charging to 100% using your profile capacity, the latest battery percentage and current total power. New readings update it; losses and reduced power near full charge can extend charging. The estimate is hidden if power is not refreshed for 2 minutes or battery percentage for 5 minutes."}</p>}
     </details>
     {ended && <p className="charge-session-end">{saved ? (sq ? "Ky karikim përfundoi. Përmbledhja e tij është ruajtur në historikun tënd." : "This charge is complete. Its summary has been saved in your history.") : (sq ? "Sesioni u mbyll. Përmbledhja financiare kërkon një matje finale dhe tarifë të vlefshme." : "The session is closed. A financial summary requires a valid final reading and tariff.")}</p>}
   </article>;

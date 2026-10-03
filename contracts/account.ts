@@ -4,6 +4,7 @@ export type User = {
   id: string; email: string; firstName: string; lastName: string;
   role: Role; language: Language; pushEnabled: boolean; version: number;
   phone: string | null; vehicleMake: string | null; vehicleModel: string | null; batteryType: string | null;
+  batteryCapacityKWh: number | null;
 };
 export type AuthResult = { accessToken: string; expiresAt: string; user: User };
 export type ApiFailure = { status?: number; code: string; title?: string; traceId?: string };
@@ -39,6 +40,7 @@ export type DriverChargingSession = {
   unitPricePerKWh?: number | null;
   powerSource?: "Reported" | null; powerValidUntil?: string | null; version?: number;
   faultCode?: string | null; faultInfo?: string | null;
+  batteryCapacityKWh?: number | null; stateOfChargeValidUntil?: string | null;
   readings?: ChargingSampleDiagnostic[]; stopReason?: string | null; completionWarning?: string | null;
 };
 export type ChargingSampleDiagnostic = {

@@ -16,6 +16,7 @@ public sealed class ChargingSession
     public decimal? EnergyKWh { get; set; } = 0;
     public decimal? PowerKW { get; set; }
     public decimal? StateOfCharge { get; set; }
+    public decimal? BatteryCapacityKWh { get; set; }
     public decimal? TemperatureCelsius { get; set; }
     public DateTimeOffset LastMeasurementAt { get; set; }
     public DateTimeOffset? LastMeasurementReceivedAt { get; set; }
@@ -23,6 +24,7 @@ public sealed class ChargingSession
     public DateTimeOffset? PowerObservedAt { get; set; }
     public DateTimeOffset? PowerReceivedAt { get; set; }
     public DateTimeOffset? SocObservedAt { get; set; }
+    public DateTimeOffset? SocReceivedAt { get; set; }
     public DateTimeOffset? TemperatureObservedAt { get; set; }
     public string? EnergyScope { get; set; }
     public string? PowerScope { get; set; }

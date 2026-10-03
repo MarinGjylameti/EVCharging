@@ -5,6 +5,7 @@ using EVCharging.Application.Common;
 using EVCharging.Application.Identity;
 using EVCharging.Domain.Auditing;
 using EVCharging.Domain.Identity;
+using EVCharging.Infrastructure.Charging;
 using EVCharging.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -21,7 +22,8 @@ public sealed class AccountService(
     ChargingDbContext db,
     IPasswordHasher<Account> hasher,
     IOptions<SessionOptions> options,
-    TimeProvider clock
+    TimeProvider clock,
+    StationEventSignal events
 )
 {
     public static string HashToken(string token) =>
@@ -128,8 +130,49 @@ public sealed class AccountService(
         CancellationToken ct
     )
     {
+        var capacity = AccountRules.BatteryCapacity(request.BatteryCapacityKWh);
+        var claim = await db
+            .ChargingConnectionRequests.AsNoTracking()
+            .SingleOrDefaultAsync(
+                x => x.DriverId == userId && (x.State == "Linked" || x.State == "Waiting"),
+                ct
+            );
+        var connector = claim is null
+            ? null
+            : await db.ChargingConnectors.SingleAsync(
+                x => x.StationId == claim.StationId && x.Number == claim.ConnectorNumber,
+                ct
+            );
+        await using var transaction =
+            connector is not null
+                ? await ConnectorMutationLock.BeginAsync(db, connector.Id, userId, ct)
+            : db.Database.IsRelational() ? await db.Database.BeginTransactionAsync(ct)
+            : null;
+        if (connector is null && db.Database.IsRelational())
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT 1 FROM accounts WHERE id = {userId} FOR UPDATE",
+                ct
+            );
         var user = await GetAsync(userId, ct);
         CheckVersion(user, request.Version);
+        var lockedClaim = await db
+            .ChargingConnectionRequests.AsNoTracking()
+            .SingleOrDefaultAsync(
+                x => x.DriverId == userId && (x.State == "Linked" || x.State == "Waiting"),
+                ct
+            );
+        if (
+            lockedClaim is not null
+            && (
+                lockedClaim.StationId != claim?.StationId
+                || lockedClaim.ConnectorNumber != claim?.ConnectorNumber
+            )
+        )
+            throw new RequestFailure(
+                412,
+                "version_conflict",
+                "Your charging association changed. Refresh and try again."
+            );
         var before = new
         {
             user.FirstName,
@@ -138,6 +181,7 @@ public sealed class AccountService(
             user.VehicleMake,
             user.VehicleModel,
             user.BatteryType,
+            user.BatteryCapacityKWh,
         };
         user.FirstName = AccountRules.Name(request.FirstName);
         user.LastName = AccountRules.Name(request.LastName);
@@ -145,6 +189,7 @@ public sealed class AccountService(
         user.VehicleMake = Optional(request.VehicleMake, 80);
         user.VehicleModel = Optional(request.VehicleModel, 80);
         user.BatteryType = Optional(request.BatteryType, 80);
+        user.BatteryCapacityKWh = capacity;
         user.Version++;
         AddAudit(
             user,
@@ -161,11 +206,45 @@ public sealed class AccountService(
                         user.VehicleMake,
                         user.VehicleModel,
                         user.BatteryType,
+                        user.BatteryCapacityKWh,
                     },
                 }
             )
         );
+        if (before.BatteryCapacityKWh != capacity && connector is not null)
+        {
+            var active = await db.ChargingSessions.SingleOrDefaultAsync(
+                x =>
+                    x.ConnectorId == connector.Id
+                    && x.EndedAt == null
+                    && db.ChargingConnectionRequests.Any(c =>
+                        c.DriverId == userId && c.State == "Linked" && c.SessionId == x.Id
+                    ),
+                ct
+            );
+            if (active is not null)
+            {
+                active.BatteryCapacityKWh = capacity;
+                active.Version++;
+                var station = await db.Stations.SingleAsync(x => x.Id == active.PointId, ct);
+                var now = clock.GetUtcNow();
+                ChargingRealtime.Stage(
+                    db,
+                    station.Id,
+                    "SessionVehicleChanged",
+                    "ChargingSession",
+                    active.Id,
+                    active.Version,
+                    now,
+                    userId,
+                    session: ChargingRealtime.SessionDto(active, connector, station, now)
+                );
+            }
+        }
         await db.SaveChangesAsync(ct);
+        if (transaction is not null)
+            await transaction.CommitAsync(ct);
+        events.Notify();
         return AccountRules.ToDto(user);
     }
 

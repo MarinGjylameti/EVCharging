@@ -256,7 +256,7 @@ public sealed partial class PostgreSqlChargingTests
         params LegacySession[] sessions
     )
     {
-        db.Accounts.AddRange(drivers);
+        await InsertLegacyAccountsAsync(db, drivers);
         var number = 0;
         foreach (var legacy in sessions)
         {
@@ -288,10 +288,12 @@ public sealed partial class PostgreSqlChargingTests
                 ReceivedAt = legacy.Received,
             };
             db.Stations.Add(station);
-            await db.Database.ExecuteSqlInterpolatedAsync($"""
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"""
                 INSERT INTO ocpp_charge_points (id, identity, protocol_version, is_enabled)
                 VALUES ({device.Id}, {device.Identity}, '1.6J', true);
-                """);
+                """
+            );
             db.OcppConnections.Add(connection);
             db.OcppInboundMessages.Add(message);
             await db.SaveChangesAsync();
