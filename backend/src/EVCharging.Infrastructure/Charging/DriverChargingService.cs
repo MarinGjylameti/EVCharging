@@ -13,8 +13,7 @@ public sealed class DriverChargingService(
     TimeProvider clock,
     StationEventSignal events,
     IChargingClaimVerification verification,
-    IChargingDiagnostics diagnostics,
-    StationProjection projection
+    IChargingDiagnostics diagnostics
 ) : IDriverCharging
 {
     public async Task<DriverStationCharging> GetAsync(
@@ -44,17 +43,32 @@ public sealed class DriverChargingService(
         var own = (
             await queries.GetChargingStateAsync(driverId, ct, stationId)
         ).Sessions.FirstOrDefault();
+        var activeSessionId = connector is null
+            ? null
+            : await db
+                .ChargingSessions.AsNoTracking()
+                .Where(x => x.ConnectorId == connector.Id && x.EndedAt == null)
+                .Select(x => (Guid?)x.Id)
+                .SingleOrDefaultAsync(ct);
+        var inUse =
+            claim is not null && claim.DriverId != driverId
+            || activeSessionId is not null && own?.Id != activeSessionId;
+        // A previous personal charge must not look like the other vehicle's
+        // current charge. Its summary remains available in personal history.
+        if (inUse)
+            own = null;
         return new(
             ChargingRealtime.StationDto(station, now),
             verification.DemoBypassEnabled && station.IsDemo && connector is not null,
             connector?.IsOnline == true,
-            claim is not null && claim.DriverId != driverId,
+            inUse,
             claim?.DriverId == driverId && claim.State == "Waiting"
                 ? new(claim.Id, claim.State, claim.ExpiresAt)
                 : null,
             own,
             connector is null ? null : ChargingRealtime.ConnectorDto(connector),
             verification.DemoBypassEnabled
+            && !inUse
             && station.IsDemo
             && connector is not null
             && (claim?.DriverId == driverId || own is not null && claim is null)
@@ -130,6 +144,14 @@ public sealed class DriverChargingService(
                 x => x.ConnectorId == connector.Id && x.EndedAt == null,
                 ct
             );
+            // Demo access to a charger is not proof that an already started
+            // transaction belongs to the visitor. Only its existing owner can reopen it.
+            if (active is not null && (own?.State != "Linked" || own.SessionId != active.Id))
+                throw new RequestFailure(
+                    409,
+                    "charger_in_use",
+                    "This connector already has an active charging session."
+                );
             var current =
                 own
                 ?? new ChargingConnectionRequest
@@ -142,19 +164,6 @@ public sealed class DriverChargingService(
                 };
             if (own is null)
                 db.ChargingConnectionRequests.Add(current);
-            if (active is not null && current.State != "Linked")
-            {
-                current.State = "Linked";
-                current.SessionId = active.Id;
-                current.LinkedAt = now;
-                active.BatteryCapacityKWh = await db
-                    .Accounts.Where(x => x.Id == driverId)
-                    .Select(x => x.BatteryCapacityKWh)
-                    .SingleAsync(ct);
-                active.Version++;
-                await projection.RefreshAsync(stationId, ct);
-                // Physical start, energy, tariff and timestamps remain untouched.
-            }
             if (own is null || active is not null)
             {
                 ChargingRealtime.Stage(

@@ -15,6 +15,8 @@ API-së; UI e karikimit përditësohet nga stream-i ekzistues i serverit.
    kapacitet si në profil. Intervali fillestar është 5 sekonda, shpejtësia 1×.
 4. Lëre të zgjedhur **Lidhe karikimin me llogarinë time**. Shtyp **Lidh simulatorin**,
    pastaj **Nis karikimin**.
+   Hapja e faqes së pikës është vetëm për lexim. Pritja e llogarisë përgatitet
+   nga ky buton para `StartTransaction`, ose nga **Lidhu me pikën** në faqen e saj.
 5. Te skeda e pikës, energjia, fuqia totale, përqindja dhe koha e mbetur duhet të
    përditësohen me matjet e reja. Nuk nevojitet rifreskim i faqes.
 6. Provo pauzën nga makina ose pika, vazhdimin, kodet e defektit, ndryshimin e fuqisë
@@ -23,6 +25,9 @@ API-së; UI e karikimit përditësohet nga stream-i ekzistues i serverit.
 7. Shtyp **Ndalo karikimin**, ose prit objektivin e baterisë. Simulatori dërgon
    regjistrin final, `StopTransaction` me ID-në e pranuar, pastaj `Available`.
    UI duhet të mbyllë sesionin dhe të shfaqë përmbledhjen e konfirmuar.
+8. Për të provuar heqjen e kabllos para përfundimit, shtyp **Hiq kabllon nga makina**.
+   Dërgohen matjet finale dhe `StopTransaction` me `reason=EVDisconnected`.
+   Konfirmimi mbyll sesionin, liron lidhjen e llogarisë dhe krijon njoftim për pronarin.
 
 Nëse serveri ka një transaksion ekzistues të llogarisë tënde, nisja e re nuk
 kryhet. Paneli shfaq ID-në dhe fushën e regjistrit final të testit. Kontrollo
@@ -51,11 +56,18 @@ Mesazhet dhe përgjigjet e fundit shfaqen në panelin e trafikut.
 Hap `/driver/simulator?station=SIM-004` deri te `SIM-010` në skeda të veçanta.
 Kutia e lidhjes me llogarinë tënde është bosh si parazgjedhje. Kjo ruan pronësinë
 ekzistuese të përdoruesve të provës dhe dërgon ndryshimet publike në hartë.
+Kur kutia është bosh, simulatori anulon vetëm pritjen `Waiting` të llogarisë
+tënde në atë pikë, para lidhjes dhe nisjes. Lidhja aktive dhe pritja e një
+përdoruesi tjetër ruhen. Kështu një vizitë e mëparshme nuk ta cakton karikimin.
 Pronësia private kërkon që pritja e përdoruesit tjetër të jetë ende aktive;
 seed-i i skenarit përgatit pritje 30-minutëshe. Nëse pritja ka skaduar, përgatite
 nga llogaria përkatëse ose rinis API-në demo sipas `demo-simulator-scenario.md`.
 Një sesion pa pronar vazhdon të ndryshojë statusin publik, por nuk futet në
 historikun e një llogarie. Matjet private të të tjerëve nuk shfaqen te llogaria jote.
+Një transaksion fizik që ka filluar pa pronar nuk mund të merret më pas nga një
+vizitor. Për një provë personale, mbylle transaksionin ekzistues me regjistrin
+final, pastaj përgatit pritjen e llogarisë para nisjes së re. Vetëm pronari
+ekzistues mund të rihapë pamjen private të karikimit aktiv.
 
 Koha e mbetur shfaqet edhe në panelin e pikës në hartë. Simulatori automatik
 dërgon pas çdo matjeje një `DataTransfer` me `vendorId=EVCharging.Simulator`,
@@ -77,6 +89,28 @@ hiqet. Përfundimi i karikimit nuk garanton që makina është larguar nga lidh�
 Mbaji skedat e simulatorëve hapur gjatë provës. Mbyllja e skedës shkëput WebSocket-in
 dhe nuk është konfirmim ndalimi. Rilidhja brenda panelit ruan ID-në aktive;
 rinisja e faqes kërkon rikuperimin e transaksionit nga serveri për llogarinë tënde.
+Humbja e internetit krijon paralajmërim për pronarin dhe ruan transaksionin e
+lidhjen e llogarisë deri në konfirmimin fizik të ndalimit. Redeploy nuk fshin
+transaksionet. Lidhësi bëhet i lirë vetëm kur pajisja konfirmon `Available`.
+
+## Raporti i testimit
+
+Shtyp **Shkarko loget e testit** në simulator. Raporti JSON përmban konfigurimin,
+ID-në e transaksionit, sinjalet, përgjigjet, gabimet dhe pamjen aktuale të
+autorizuar nga API-ja. Raporti shkarkohet edhe kur API-ja nuk përgjigjet;
+shënohet arsyeja e mungesës së pamjes së serverit.
+
+Paneli shfaq 100 mesazhet e fundit. Raporti mban deri në 5000 mesazhe të fundit
+dhe 300 mesazhe nisjeje, ndalimi, rilidhjeje e gabimesh në një listë të veçantë.
+Numëruesit tregojnë sa hyrje janë hequr. Loget ruhen veçmas për çdo pikë dhe
+mbijetojnë gjatë rilidhjes brenda skedës; rifreskimi i faqes i pastron.
+Fjalëkalimet, token-et dhe URL-ja me kredenciale përjashtohen nga eksporti.
+
+Në faqen e karikimit tënd, **Diagnostikimi i simulatorit → Shkarko diagnostikimin**
+eksporton pamjen aktuale të serverit dhe matjet e saj. Për karikimin e një tjetri
+faqja shfaq statusin publik dhe kohën e mbetur; diagnostikimi dhe përmbledhja
+private nuk shfaqen. Eksporti nga browser-i nuk është kopje e plotë e logeve
+persistentë të serverit. Dërgo raportin bashkë me hapat që shkaktuan problemin.
 
 ## Llogaritja e kohës deri në 100%
 
@@ -121,6 +155,12 @@ ekzistues. Duhen deploy-t e backend-it dhe web-it për këtë veçori.
 Migrimi `20261003144227_PublicChargingForecastExpiry` shton vetëm afatin nullable
 të vlerësimit publik në pikën e karikimit. Afati i simulatorit është 2 minuta;
 vlerësimi i llogaritur skadon me fuqinë (2 minuta) ose SoC (5 minuta), cilado e para.
+
+Rregullimi i konfliktit të nisjes nuk kërkon migrim të ri. Pas deploy-t, API-ja
+rilexon çdo pajisje nën të njëjtin bllokim si gateway OCPP dhe pastron lidhjet
+e braktisura veçmas. Një konflikt versioni riprovohet deri në tre përpjekje me
+entitete të reja; një dështim i vazhdueshëm raportohet. Transaksionet dhe
+historiku ruhen. Pas rifillimit të API-së, rilidh simulatorët e hapur.
 
 Testet përfshijnë ruajtjen/validimin e profilit, përditësimin privat live,
 telemetrinë automatike, refuzimin e nisjes, timeout-in, pauzën, defektin,

@@ -17,6 +17,10 @@ function compile(path, dependencies = {}) {
 }
 const fault = compile("../src/features/driver/charging-fault.tsx");
 const diagnostics = compile("../src/features/driver/simulator-diagnostics.tsx");
+const report = compile("../src/features/driver/charging-test-report.ts");
+const availability = compile("../src/features/driver/station-availability.tsx", {
+  "@/lib/availability": compile("../src/lib/availability.ts"),
+});
 const estimate = compile("../src/features/driver/charging-estimate.ts");
 const progress = compile("../src/features/driver/charging-progress.tsx", { "./charging-fault": fault, "./charging-estimate": estimate });
 const { ChargingProgress, formatChargingDuration } = progress;
@@ -110,6 +114,7 @@ test("single charger page shows its live process and excludes the old multi-poin
     "./charging-progress": progress,
     "./charging-fault": fault,
     "./simulator-diagnostics": diagnostics,
+    "./charging-test-report": report, "./station-availability": availability,
     "./live-update-policy": compile("../src/features/driver/live-update-policy.ts"),
   });
   const html = renderToStaticMarkup(createElement(StationChargingView, { initial: live, language: "en" }));
@@ -254,6 +259,7 @@ test("station controller faults are separate from an active connector's Charging
     "next/link": { default: ({ href, children }) => createElement("a", { href }, children) },
     "./use-live-snapshot": { useLiveSnapshot: () => ({ snapshot: live, setSnapshot: () => {}, connected: true, unavailable: false }) },
     "./charging-progress": progress, "./charging-fault": fault, "./simulator-diagnostics": diagnostics,
+    "./charging-test-report": report, "./station-availability": availability,
     "./live-update-policy": compile("../src/features/driver/live-update-policy.ts"),
   });
   const html = renderToStaticMarkup(createElement(StationChargingView, { initial: live, language: "en" }));
@@ -278,5 +284,29 @@ test("public station warning badges describe the warning in the selected languag
   assert.match(renderWarning("HighTemperature", "sq"), /Paralajmërim: Temperaturë e lartë/);
   assert.equal(renderWarning("NoError", "en"), "");
   assert.equal(renderWarning(null, "en"), "");
+});
+
+test("another driver's charge page hides private cost, energy, battery and diagnostics even with a stale personal summary", () => {
+  const live = { station: { id: "station-1", code: "SIM-001", name: "Station One", status: "Charging", address: "Address", city: "Tirana", connectorType: "CCS2", powerKW: 22, pricePerKWh: .35, currency: "EUR" },
+    canConnect: true, inUse: true, deviceConnected: true, connectionRequest: null,
+    session: { ...session, stateOfCharge: 45, cost: 123.45, energyKWh: 987.65 }, diagnostics: { externalSessionId: "secret-transaction", samples: [] } };
+  const { StationChargingView } = compile("../src/features/driver/station-charging-view.tsx", {
+    "next/link": { default: ({ href, children }) => createElement("a", { href }, children) },
+    "./use-live-snapshot": { useLiveSnapshot: () => ({ snapshot: live, setSnapshot: () => {}, connected: true, unavailable: false }) },
+    "./charging-progress": progress, "./charging-fault": fault, "./simulator-diagnostics": diagnostics,
+    "./charging-test-report": report, "./station-availability": availability,
+    "./live-update-policy": compile("../src/features/driver/live-update-policy.ts"),
+  });
+  const html = renderToStaticMarkup(createElement(StationChargingView, { initial: live, language: "en" }));
+  assert.match(html, /Another driver is using this charger/);
+  assert.match(html, /TIME REMAINING/);
+  assert.doesNotMatch(html, /123.45|987.65|secret-transaction|Battery level|ESTIMATED COST|Download diagnostics|Connect to charger/);
+});
+
+test("confirmed vehicle unplug shows closure and released association without treating a pause as completion", () => {
+  const html = render({ status: "Completed", stopReason: "EVDisconnected", stoppedAt: "2026-10-01T13:03:00Z" });
+  assert.match(html, /vehicle was unplugged/);
+  assert.match(html, /account association was released/);
+  assert.doesNotMatch(render({ status: "PausedByVehicle", stopReason: "EVDisconnected" }), /account association was released/);
 });
 

@@ -69,11 +69,11 @@ public static class NotificationTemplates
             ),
             (NotificationKind.ChargingCompleted, AppLanguage.Sq) => new(
                 "Karikimi përfundoi",
-                "Përmbledhja e karikimit është gati në aplikacion."
+                "Karikuesi konfirmoi ndalimin. Hap aplikacionin për detajet."
             ),
             (NotificationKind.UnexpectedDisconnect, AppLanguage.Sq) => new(
-                "Karikimi u ndërpre",
-                "U raportua një shkëputje e papritur."
+                "Lidhja me karikuesin u humb",
+                "Presim rilidhjen për të konfirmuar gjendjen e karikimit."
             ),
             (NotificationKind.ManualStatusChanged, AppLanguage.Sq) => new(
                 "Gjendja u ndryshua",
@@ -97,11 +97,11 @@ public static class NotificationTemplates
             ),
             (NotificationKind.ChargingCompleted, AppLanguage.En) => new(
                 "Charging completed",
-                "Your charging summary is ready in the app."
+                "The charger confirmed the stop. Open the app for details."
             ),
             (NotificationKind.UnexpectedDisconnect, AppLanguage.En) => new(
-                "Charging interrupted",
-                "An unexpected disconnection was reported."
+                "Charger connection lost",
+                "Waiting for reconnection to confirm the charging state."
             ),
             (NotificationKind.ManualStatusChanged, AppLanguage.En) => new(
                 "Status changed",

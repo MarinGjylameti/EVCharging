@@ -14,7 +14,8 @@ namespace EVCharging.Tests;
 public sealed class ApiFactory(
     bool simulator = false,
     bool anonymousSimulators = false,
-    string? postgresConnection = null
+    string? postgresConnection = null,
+    SaveChangesInterceptor? saveInterceptor = null
 ) : WebApplicationFactory<Program>
 {
     private readonly string database = Guid.NewGuid().ToString();
@@ -47,6 +48,8 @@ public sealed class ApiFactory(
                     options.UseNpgsql(postgresConnection);
                 else
                     options.UseInMemoryDatabase(database).AddInterceptors(new TestTransactionIds());
+                if (saveInterceptor is not null)
+                    options.AddInterceptors(saveInterceptor);
             });
         });
     }

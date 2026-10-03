@@ -138,12 +138,12 @@ public sealed partial class OcppWebSocketTests
     }
 
     [Fact]
-    public async Task LateAssociationTakesCapacityFromTheOwnerAndUnclaimedSessionsDoNotTakeItFromDemoDefaults()
+    public async Task UnclaimedChargeCannotBeAdoptedAndOnlyAnExplicitNewClaimCopiesOwnerCapacity()
     {
         using var driver = await DriverAsync();
         await CapacityAsync(driver, 77);
         using var socket = await ConnectAsync();
-        await SimulatorStartAsync(socket, DateTimeOffset.UtcNow);
+        var unowned = await SimulatorStartAsync(socket, DateTimeOffset.UtcNow);
         using (var scope = factory.Services.CreateScope())
             Assert.Null(
                 (
@@ -152,7 +152,29 @@ public sealed partial class OcppWebSocketTests
                         .ChargingSessions.SingleAsync()
                 ).BatteryCapacityKWh
             );
+        var station = await MapStationAsync(driver, "SIM-001");
+        using var rejected = await driver.PostAsync(
+            $"/api/v1/driver/stations/{station.Id}/connect",
+            null,
+            timeout.Token
+        );
+        Assert.Equal(System.Net.HttpStatusCode.Conflict, rejected.StatusCode);
+        var publicView = await ChargingViewAsync(driver);
+        Assert.True(publicView.InUse);
+        Assert.Null(publicView.Session);
+        Assert.Null(publicView.Diagnostics);
+        await CallAsync(
+            socket,
+            "StopTransaction",
+            new
+            {
+                transactionId = unowned,
+                meterStop = 0,
+                timestamp = DateTimeOffset.UtcNow,
+            }
+        );
         await ClaimAsync(driver);
+        await SimulatorStartAsync(socket, DateTimeOffset.UtcNow);
         Assert.Equal(77, (await ChargingViewAsync(driver)).Session!.BatteryCapacityKWh);
     }
 }

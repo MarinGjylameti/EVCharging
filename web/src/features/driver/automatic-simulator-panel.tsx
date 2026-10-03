@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { Language, Station, StationCharging } from "../../../../contracts/account";
 import { AutomaticSimulator, simulatorErrors, simulatorStopReasons, type SimulatorLog, type SimulatorState } from "./automatic-simulator";
+import { createChargingTestReport, downloadChargingTestReport, reportSimulatorConfig, SimulatorTestJournal } from "./charging-test-report";
+import { prepareSimulatorAccount, SimulatorAccountError } from "./simulator-account";
 
 export function AutomaticSimulatorPanel({ stations, selected, socketBase, capacityKWh, language }: {
   stations: Station[]; selected: string; socketBase: string; capacityKWh: number | null; language: Language;
@@ -14,14 +16,51 @@ export function AutomaticSimulatorPanel({ stations, selected, socketBase, capaci
   const [logs, setLogs] = useState<SimulatorLog[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const [reportNotice, setReportNotice] = useState("");
   const [fault, setFault] = useState<string>("HighTemperature");
   const [stopReason, setStopReason] = useState("Local");
   const [existing, setExisting] = useState<{ id: number; finalWh: number } | null>(null);
   const engine = useRef<AutomaticSimulator | null>(null);
+  const journals = useRef(new Map<string, SimulatorTestJournal>());
+  const currentCode = useRef(selected);
   const mounted = useRef(false);
   const station = stations.find(item => item.code === code)!;
   const active = state.transactionId !== null;
-  const blocked = busy || active || state.connected;
+  const blocked = busy || exporting || active || state.connected;
+
+  function journal(stationCode: string) {
+    let value = journals.current.get(stationCode);
+    if (!value) { value = new SimulatorTestJournal(); journals.current.set(stationCode, value); }
+    return value;
+  }
+  function record(log: SimulatorLog, stationCode = code) {
+    const saved = journal(stationCode).record(log);
+    if (mounted.current && currentCode.current === stationCode) setLogs(previous => [saved, ...previous].slice(0, 100));
+  }
+
+  async function exportReport() {
+    setExporting(true); setReportNotice("");
+    let view: StationCharging | null = null;
+    let snapshotError: string | null = null;
+    try {
+      try {
+        const response = await fetch(`/api/driver/stations/${station.id}/charging`, { cache: "no-store", signal: AbortSignal.timeout(5000) });
+        if (response.ok) view = await response.json() as StationCharging;
+        else snapshotError = `Charging snapshot returned HTTP ${response.status}.`;
+      } catch { snapshotError = "Charging snapshot could not be retrieved."; }
+      const simulator = engine.current?.config.stationCode === code ? engine.current : null;
+      const report = createChargingTestReport({ source: "automatic-simulator", station, view, snapshotError,
+        simulator: { config: simulator?.config ?? null, state: simulator?.snapshot ?? null,
+          traffic: journal(code).snapshot(), lastError: error || null, associateWithAccount: own, existingTransaction: existing } });
+      downloadChargingTestReport(report, code);
+      if (mounted.current) setReportNotice(snapshotError
+        ? (sq ? "Loget u shkarkuan. Pamja e serverit nuk ishte e disponueshme; shkarko edhe diagnostikimin nga pika kur të rilidhet." : "Logs downloaded. The server snapshot was unavailable; also download charger diagnostics when it reconnects.")
+        : (sq ? "Raporti u shkarkua. Mund ta dërgosh bashkë me përshkrimin e problemit." : "Report downloaded. Share it with a description of the issue."));
+    } catch {
+      if (mounted.current) setReportNotice(sq ? "Shkarkimi dështoi. Provo përsëri." : "Download failed. Please retry.");
+    } finally { if (mounted.current) setExporting(false); }
+  }
 
   useEffect(() => {
     mounted.current = true;
@@ -35,18 +74,24 @@ export function AutomaticSimulatorPanel({ stations, selected, socketBase, capaci
   async function run(action: () => Promise<void>) {
     setBusy(true); setError("");
     try { await action(); }
-    catch (failure) { if (mounted.current) setError(failure instanceof Error ? failure.message : String(failure)); }
+    catch (failure) {
+      const detail = failure instanceof Error ? failure.message : String(failure);
+      record({ at: new Date().toISOString(), direction: "SYS", action: "ActionFailed", detail });
+      if (mounted.current) setError(detail);
+    }
     finally { if (mounted.current) setBusy(false); }
   }
   async function prepare() {
-    if (!own) return true;
-    const response = await fetch(`/api/driver/stations/${station.id}/charging`, { method: "POST" });
-    if (response.status === 401) { window.location.assign("/"); return false; }
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.code === "driver_already_connected"
-      ? (sq ? "Përfundo karikimin në pikën tjetër përpara se të nisësh këtë." : "Finish the charge at the other station first.")
-      : (sq ? "Lidhja e llogarisë nuk u konfirmua; pika mund të jetë në përdorim." : "Account association failed; the charger may already be in use."));
-    const view = data as StationCharging;
+    let view: StationCharging;
+    try { view = await prepareSimulatorAccount(station.id, own); }
+    catch (failure) {
+      if (failure instanceof SimulatorAccountError && failure.status === 401) { window.location.assign("/"); throw failure; }
+      throw new Error(failure instanceof SimulatorAccountError && failure.code === "driver_already_connected"
+        ? (sq ? "Përfundo karikimin në pikën tjetër përpara se të nisësh këtë." : "Finish the charge at the other station first.")
+        : (sq ? "Lidhja e llogarisë nuk u konfirmua; pika mund të ketë një karikim aktiv. Nuk u ndryshua pronari i tij." : "Account association failed; the charger may already have an active charge. Its owner was not changed."));
+    }
+    record({ at: new Date().toISOString(), direction: "SYS", action: "AccountAssociation",
+      detail: JSON.stringify({ mode: own ? "own" : "other-user", waiting: view.connectionRequest !== null, inUse: view.inUse }) });
     if (view.session && view.session.stoppedAt === null) {
       const id = Number(view.diagnostics?.externalSessionId);
       if (!Number.isSafeInteger(id) || !view.diagnostics || view.session.energyKWh == null)
@@ -62,13 +107,17 @@ export function AutomaticSimulatorPanel({ stations, selected, socketBase, capaci
     const capacity = Number(form.get("capacity"));
     void run(async () => {
       engine.current?.dispose();
+      setExisting(null);
+      if (!own) await prepare();
       const simulator = new AutomaticSimulator({ url: socketBase + encodeURIComponent(code), stationCode: code,
         capacityKWh: capacity, initialSoc: Number(form.get("initialSoc")), targetSoc: Number(form.get("targetSoc")),
         powerKW: Number(form.get("power")), meterStartWh: Number(form.get("meterStart")),
         intervalSeconds: Number(form.get("interval")), speed: Number(form.get("speed")) },
         value => { if (mounted.current) setState(value); },
-        log => { if (mounted.current) setLogs(previous => [log, ...previous].slice(0, 100)); });
-      engine.current = simulator; setLogs([]); setExisting(null);
+        log => record(log, simulator.config.stationCode));
+      engine.current = simulator;
+      record({ at: new Date().toISOString(), direction: "SYS", action: "Configuration",
+        detail: JSON.stringify({ ...reportSimulatorConfig(simulator.config), associateWithAccount: own }) });
       await simulator.connect();
     });
   }
@@ -80,9 +129,18 @@ export function AutomaticSimulatorPanel({ stations, selected, socketBase, capaci
     <p>{sq ? "1. Lidh simulatorin. 2. Nis karikimin. Energjia, fuqia dhe përqindja dërgohen bashkë në çdo interval; ndalimi dërgohet kur arrihet objektivi." : "1. Connect the simulator. 2. Start charging. Energy, power and battery percentage are sent together at each interval; reaching the target sends the stop."}</p>
     <p><a href="/driver/account#battery-capacity" target="_blank" rel="noopener noreferrer">{sq ? "Vendos kapacitetin e makinës në profil për vlerësimin e kohës →" : "Set your vehicle capacity in your profile to estimate remaining time →"}</a></p>
     {error && <p className="form-error" role="alert">{error}</p>}
+    <section className="settings-card" aria-label={sq ? "Raporti i testit" : "Test report"}>
+      <button type="button" className="button-outline" disabled={exporting} onClick={() => void exportReport()}>{exporting
+        ? (sq ? "Po përgatitet raporti…" : "Preparing report…") : (sq ? "Shkarko loget e testit" : "Download test logs")}</button>
+      <p>{sq ? "Raporti ruan komandat, përgjigjet, gabimet dhe gjendjen e pikës. Shkarkoje kur del problemi, përpara se ta rifreskosh ose mbyllësh këtë skedë." : "The report includes commands, responses, errors and charger state. Download it when the issue occurs, before refreshing or closing this tab."}</p>
+      {reportNotice && <p role="status">{reportNotice}</p>}
+    </section>
     <form className="settings-card" onSubmit={configure}>
       <fieldset disabled={blocked}><div className="field-grid">
-        <label>{sq ? "Pika" : "Station"}<select value={code} onChange={event => { setCode(event.target.value); setOwn(Number(event.target.value.slice(-3)) <= 3); setExisting(null); }}>
+        <label>{sq ? "Pika" : "Station"}<select value={code} onChange={event => {
+          const value = event.target.value; currentCode.current = value; setCode(value); setOwn(Number(value.slice(-3)) <= 3);
+          setExisting(null); setError(""); setReportNotice(""); setLogs(journal(value).snapshot().logs.slice(-100).reverse());
+        }}>
           {stations.map(item => <option key={item.id} value={item.code}>{item.code}</option>)}
         </select></label>
         <label>{sq ? "Kapaciteti i baterisë (kWh)" : "Battery capacity (kWh)"}<input name="capacity" type="number" min="0.01" max="1000" step="0.01" required defaultValue={capacityKWh ?? 60}/></label>
@@ -108,6 +166,7 @@ export function AutomaticSimulatorPanel({ stations, selected, socketBase, capaci
         <button type="button" className="button-outline" disabled={busy || !state.connected || state.status !== "Charging"} onClick={() => void run(() => engine.current!.pause(true))}>{sq ? "Pauzë nga pika" : "Charger pause"}</button>
         <button type="button" className="button-outline" disabled={busy || !state.connected || !active || state.status === "Charging"} onClick={() => void run(() => engine.current!.resume())}>{sq ? "Vazhdo" : "Resume"}</button>
         <button type="button" className="button-outline" disabled={busy || !state.connected || !active} onClick={() => void run(() => engine.current!.stop(stopReason))}>{sq ? "Ndalo karikimin" : "Stop charging"}</button>
+        <button type="button" className="button-outline" disabled={busy || !state.connected || !active} onClick={() => void run(() => engine.current!.stop("EVDisconnected"))}>{sq ? "Hiq kabllon nga makina" : "Unplug vehicle"}</button>
         <button type="button" className="button-outline" disabled={busy || !state.connected} onClick={() => engine.current!.disconnect()}>{sq ? "Shkëput lidhjen" : "Disconnect"}</button>
         <button type="button" className="button-outline" disabled={busy || state.connected || !engine.current} onClick={() => void run(() => engine.current!.connect())}>{sq ? "Rilidhu" : "Reconnect"}</button>
       </div>

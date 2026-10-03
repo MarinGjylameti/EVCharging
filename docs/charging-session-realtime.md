@@ -34,7 +34,7 @@ Claim merr bllokimin ekzistues `FOR UPDATE` të pajisjes dhe bllokimin e llogari
 ### Dy rendet e nisjes
 
 1. **Aplikacioni i pari:** krijohet `Waiting` me afat 30 minuta. Nisja fizike e lidh atomikisht dhe e kalon në `Linked`.
-2. **Pajisja e para:** krijohet një sesion pa pronar. Claim-i i verifikuar lidhet me atë ID ekzistuese; nuk krijon sesion tjetër dhe nuk rivendos matësin, energjinë, tarifën apo kohën.
+2. **Pajisja e para:** krijohet një sesion pa pronar. Vizitori sheh vetëm statusin dhe vlerësimin publik. Claim-i i mëvonshëm refuzohet me `charger_in_use`; pronësia përgatitet para një nisjeje të re.
 
 Retry në të njëjtën pikë është i sigurt. Pritja mund të anulohet/skadojë. Stop fizik e kalon lidhjen në `Completed` dhe liron kufirin e Driver-it. Humbja e rrjetit nuk e liron pronësinë dhe nuk e mbyll sesionin.
 
@@ -44,8 +44,8 @@ Retry në të njëjtën pikë është i sigurt. Pritja mund të anulohet/skadoj�
 
 - `StartedAt` / `EndedAt`: ora e raportuar nga pajisja.
 - `StartReceivedAt` / `StopReceivedAt`: kur backend-i mori mesazhin.
-- `LinkedAt`: kur përdoruesi u lidh me sesionin. Mund të jetë disa minuta pas nisjes fizike.
-- Tarifa fiksohet kur përpunohet nisja fizike. Një ndryshim tarife para claim-it nuk ndryshon tarifën e sesionit ekzistues.
+- `LinkedAt`: kur nisja fizike lidhi pritjen ekzistuese me sesionin. Ora e pajisjes mund të ndryshojë nga ora e marrjes.
+- Tarifa fiksohet kur përpunohet nisja fizike. Ndryshimi i mëvonshëm i tarifës nuk ndryshon sesionin ekzistues.
 
 Për çdo sesion `IsDemo`, UI përdor marrjen e nisjes dhe ndalimit nga serveri për kohëzgjatjen reale. Shfaq orë, minuta, sekonda dhe ditë kur duhen. Adapteri pranon rendin e marrjes së formularëve manualë vetëm kur simulator mode dhe `IsDemo` janë aktivë: një timestamp i vjetër mund të vijë pas një simulimi të përshpejtuar. Kohët origjinale ruhen. Hardware real ruan renditjen sipas kohës së pajisjes.
 
@@ -94,7 +94,7 @@ Kodi i vjetër caktonte `Demo:DriverEmail` në nisjet pa kërkesë lidhjeje. Kjo
 - Nëse një caktim demo aktiv bie ndesh me një kërkesë `Waiting`/`Linked` ose me një tjetër caktim aktiv për transferim, sesioni ruhet pa pronar. Vendimi merret për të gjithë kandidatët para insert-it; rendi i rekordeve nuk zgjedh një fitues.
 - Çdo caktim demo i lënë pa pronar ruhet në `audit_entries`, me action `ChargingBusinessSessions.DemoOwnerUnlinked`. `changes_json.legacyTransaction` përmban rekordin e mëparshëm, përfshirë Driver-in, pikën, kohët, matjet dhe tarifën. `actor_role` është `Migration`; `actor_id` është UUID zero.
 - Kërkesat ekzistuese mbeten autoritative. Migrimi nuk ndryshon pronarin e tyre. Pritjet e skaduara dhe lidhjet me sesione të ndaluara normalizohen përpara kontrollit.
-- Sesionet, rekordet OCPP dhe historiku ruhen. Përdoruesi mund të lidhet me një sesion demo pa pronar përmes rrjedhës së zakonshme; kufizimi i një lidhjeje aktive për Driver mbetet në fuqi.
+- Sesionet, rekordet OCPP dhe historiku ruhen. Një sesion demo pa pronar që ka filluar nuk mund të merret nga një vizitor; përgatitja e pronësisë kërkohet para nisjes së re. Kufizimi i një lidhjeje aktive për Driver mbetet në fuqi.
 
 Konfliktet mes kërkesave eksplicite ose pronarëve të pikave jo-demo ende e ndalin migrimin. Gabimi përfshin `DETAIL` me ID-të e kërkesave/Driver-ëve/pikave dhe `HINT` për pajtimin e tyre (shfaqja e `DETAIL` varet nga konfigurimi Npgsql). Rekordet pa mapping/tarifën origjinale gjithashtu refuzohen. Dështimi kthen pas edhe ndryshimet dhe auditin e këtij migrimi. Down refuzohet sepse do të humbiste sesionet e modelit të ri; kthimi pas kërkon plan eksporti/rikthimi të të dhënave.
 

@@ -18,19 +18,42 @@ public sealed class OcppSimulatorProvisioner(
         if (settings.SimulatorEnabled)
             foreach (var identity in settings.SimulatorIdentities)
                 await EnsureSimulatorAsync(identity, ct);
-        // A restarted single-instance API no longer owns any previously open sockets.
-        var connections = await db
-            .OcppConnections.Where(x => x.DisconnectedAt == null)
-            .ToListAsync(ct);
-        foreach (var connection in connections)
-            connection.DisconnectedAt = clock.GetUtcNow();
-        var devices = await db.OcppChargePoints.ToListAsync(ct);
-        foreach (var device in devices)
+        var deviceIds = await db.OcppChargePoints.AsNoTracking().Select(x => x.Id).ToListAsync(ct);
+        foreach (var deviceId in deviceIds)
+            await ReconcileStartupAsync(deviceId, ct);
+    }
+
+    private async Task ReconcileStartupAsync(Guid deviceId, CancellationToken ct)
+    {
+        // Use the gateway's device lock and fresh entities: an old instance can
+        // still receive frames during a rolling deploy. Retry a competing station edit.
+        for (var attempt = 0; ; attempt++)
         {
+            db.ChangeTracker.Clear();
+            await using var transaction = await OcppDeviceUpdate.BeginAsync(db, deviceId, ct);
+            var device = await db.OcppChargePoints.SingleOrDefaultAsync(x => x.Id == deviceId, ct);
+            if (device is null)
+                return;
+            var connections = await db
+                .OcppConnections.Where(x => x.ChargePointId == deviceId && x.DisconnectedAt == null)
+                .ToListAsync(ct);
+            foreach (var connection in connections)
+                connection.DisconnectedAt = clock.GetUtcNow();
             device.LastSeenAt = null;
             await projection.InvalidateDeviceAsync(device.Id, ct);
+            try
+            {
+                await db.SaveChangesAsync(ct);
+                if (transaction is not null)
+                    await transaction.CommitAsync(ct);
+                return;
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < 2)
+            {
+                if (transaction is not null)
+                    await transaction.RollbackAsync(ct);
+            }
         }
-        await db.SaveChangesAsync(ct);
     }
 
     public async Task<OcppChargePoint> EnsureSimulatorAsync(string identity, CancellationToken ct)

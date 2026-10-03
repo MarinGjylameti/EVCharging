@@ -37,9 +37,16 @@ function updateFailure(diagnostics: ChargingDiagnostics | null | undefined, comm
 export const chargingLivePolicy: LivePolicy<StationCharging> = {
   event(current, event) {
     const refreshUrl = `/api/driver/stations/${current.station.id}/charging`;
-    // Public station updates only change public station data.
-    if (event.eventType === "StationChanged") return event.station ? { snapshot: { ...current,
-      station: event.station.version >= current.station.version ? event.station : current.station } } : { refreshUrl };
+    // Public events carry no ownership or private measurements. Resolve those
+    // through the authenticated endpoint when another vehicle starts or stops.
+    if (event.eventType === "StationChanged") {
+      if (!event.station) return { refreshUrl };
+      if (event.station.version < current.station.version) return null;
+      const changed = event.station.status !== current.station.status;
+      const ownActive = current.session?.stoppedAt === null;
+      return { snapshot: { ...current, station: event.station },
+        ...(changed || !ownActive && !current.inUse && event.station.status === "Charging" ? { refreshUrl } : {}) };
+    }
     if (event.command && event.eventType === "DeviceCommandChanged") {
       if (commandIsOlder(current.diagnostics?.lastCommand, event.command)) return null;
       const connector = event.connector && (event.connector.version ?? event.entityVersion) >= (current.connector?.version ?? -1)
@@ -74,7 +81,8 @@ export const chargingLivePolicy: LivePolicy<StationCharging> = {
     if (event.connector) {
       if (current.connector && (current.connector.version ?? -1) > (event.connector.version ?? event.entityVersion)) return null;
       return { snapshot: { ...current, connector: event.connector,
-        deviceConnected: event.connector.status !== "ConnectionLost" } };
+        deviceConnected: event.connector.status !== "ConnectionLost" },
+        ...(current.session?.stoppedAt !== null ? { refreshUrl } : {}) };
     }
     if (event.station) return { snapshot: { ...current, station: event.station.version >= current.station.version ? event.station : current.station } };
     return { refreshUrl };
@@ -98,7 +106,7 @@ export const chargingLivePolicy: LivePolicy<StationCharging> = {
     return { ...incoming,
       diagnostics,
       station: current.station.version > incoming.station.version ? current.station : incoming.station,
-      session: newerSession(current.session, incoming.session),
+      session: incoming.inUse ? null : newerSession(current.session, incoming.session),
       ...(current.connector && (current.connector.version ?? -1) > (incoming.connector?.version ?? -1)
         ? { connector: current.connector, deviceConnected: current.deviceConnected } : {}),
     };

@@ -25,6 +25,24 @@ test("private vehicle updates change the active session without refetching or ov
   assert.equal(policyExports.driverLivePolicy.event({ stations: [], history: [] }, event), null);
 });
 
+test("public start and stop events refresh authorized ownership without injecting another driver's private data", () => {
+  const policy = policyExports.chargingLivePolicy;
+  const completed = { id: "my-old-charge", version: 4, stoppedAt: "2026-10-03T14:00:00Z", cost: 1.2 };
+  const current = { station: { id: "station-1", status: "Available", version: 1 }, session: completed, inUse: false };
+  const start = policy.event(current, { eventType: "StationChanged", station: { ...current.station, status: "Charging", version: 2 } });
+  assert.equal(start.refreshUrl, "/api/driver/stations/station-1/charging");
+  const refreshed = policy.merge(start.snapshot, { ...start.snapshot, inUse: true, session: null });
+  assert.equal(refreshed.session, null);
+  const stop = policy.event(refreshed, { eventType: "StationChanged", station: { ...refreshed.station, status: "Available", version: 3 } });
+  assert.equal(stop.refreshUrl, start.refreshUrl);
+  const free = policy.merge(stop.snapshot, { ...stop.snapshot, inUse: false, session: null });
+  assert.equal(free.inUse, false);
+  assert.equal(free.session, null);
+  const physicalStart = policy.event(current, { eventType: "ConnectorChanged", connector: { status: "Connecting", version: 2 } });
+  assert.equal(physicalStart.refreshUrl, start.refreshUrl);
+  assert.equal(policy.event(free, { eventType: "StationChanged", station: { ...current.station, version: 1 } }), null);
+});
+
 function mount(t, stationId = "station-1", initial = { value: "initial" }, policy) {
   const names = ["document", "window", "EventSource", "fetch", "setTimeout", "clearTimeout", "setInterval", "clearInterval"];
   const originals = Object.fromEntries(names.map(name => [name, globalThis[name]]));
@@ -289,7 +307,7 @@ test("all command acknowledgements patch the diagnostic result immediately witho
   assert.equal(h.requests.length, 1);
 });
 
-test("connector faults patch without a session and old recovery snapshots cannot erase them", async t => {
+test("connector faults patch immediately, preserve newer versions and refresh authorized ownership", async t => {
   const initial = { ...charging, connector: { status: "Available", faultCode: null, faultInfo: null, version: 1 } };
   const h = mount(t, "station-1", initial, policyExports.chargingLivePolicy);
   const connector = { status: "Faulted", faultCode: "GroundFailure", faultInfo: "Safety check", version: 4 };
@@ -301,7 +319,10 @@ test("connector faults patch without a session and old recovery snapshots cannot
   h.changed(event("ConnectorChanged", { entityType: "ChargingConnector", entityId: "connector-1", entityVersion: 5, connector: restored }));
   assert.deepEqual(h.state[0].connector, restored);
   await h.advance(0);
-  assert.equal(h.requests.length, 1);
+  assert.equal(h.requests.length, 2);
+  await h.resolveData({ ...initial, connector: restored, inUse: true });
+  assert.equal(h.state[0].inUse, true);
+  assert.deepEqual(h.state[0].connector, restored);
 });
 
 test("new readings and command rejections received during recovery survive its older response", async t => {

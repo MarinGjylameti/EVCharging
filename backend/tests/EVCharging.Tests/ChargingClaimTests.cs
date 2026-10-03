@@ -11,11 +11,12 @@ namespace EVCharging.Tests;
 public sealed partial class OcppWebSocketTests
 {
     [Fact]
-    public async Task LateClaimPreservesPhysicalTimeMeasurementsAndOriginalTariffAndSurvivesAppReopen()
+    public async Task ExplicitClaimBeforeStartPreservesPhysicalTimeMeasurementsAndOriginalTariffAndSurvivesAppReopen()
     {
         using var driver = await DriverAsync();
         using var other = await DriverAsync("late-other@test.com");
         using var socket = await ConnectAsync("SIM-003");
+        await ClaimAsync(driver, "SIM-003");
         var started = DateTimeOffset.UtcNow.AddMinutes(-4);
         var start = await CallAsync(
             socket,
@@ -47,7 +48,7 @@ public sealed partial class OcppWebSocketTests
                 },
             }
         );
-        Assert.Empty(
+        Assert.Single(
             (
                 await driver.GetFromJsonAsync<DriverChargingState>(
                     "/api/v1/driver/charging-sessions",

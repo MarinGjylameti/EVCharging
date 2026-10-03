@@ -141,7 +141,7 @@ public sealed partial class PostgreSqlChargingTests
     }
 
     [PostgreSqlFact]
-    public async Task PhysicalStartRacesClaimAndUnownedSessionCanBeClaimedOnlyOnce()
+    public async Task PhysicalStartRacesClaimAndAnAlreadyStartedUnownedSessionCannotBeAdopted()
     {
         await using var test = await DatabaseTest.CreateAsync();
         var (first, second) = await test.DriversAsync();
@@ -156,22 +156,30 @@ public sealed partial class PostgreSqlChargingTests
                 return null;
             }
         );
-        Assert.All(result, Assert.Null);
+        Assert.Null(result[1]);
+        Assert.True(result[0] is null or "charger_in_use");
         Guid sessionId;
         await using (var db = test.Context())
         {
             var session = await db.ChargingSessions.SingleAsync();
             sessionId = session.Id;
-            var claim = await db.ChargingConnectionRequests.SingleAsync();
-            Assert.Equal("Linked", claim.State);
-            Assert.Equal(sessionId, claim.SessionId);
+            var claims = await db.ChargingConnectionRequests.ToListAsync();
+            if (result[0] is null)
+            {
+                var claim = Assert.Single(claims);
+                Assert.Equal("Linked", claim.State);
+                Assert.Equal(sessionId, claim.SessionId);
+            }
+            else
+                Assert.Empty(claims);
             Assert.Equal(
                 started.ToUnixTimeMilliseconds(),
                 session.StartedAt.ToUnixTimeMilliseconds()
             );
         }
-        Assert.Null(await test.ClaimAsync(first, stations[0])); // Idempotent retry / another app.
-        Assert.Equal("driver_already_connected", await test.ClaimAsync(first, stations[1]));
+        Assert.Equal(result[0], await test.ClaimAsync(first, stations[0])); // Only the existing owner can reopen it.
+        if (result[0] is null)
+            Assert.Equal("driver_already_connected", await test.ClaimAsync(first, stations[1]));
         await test.StopAsync(connection);
         var unowned = await test.OpenAsync("SIM-002");
         await test.StartAsync(unowned, started);
@@ -179,19 +187,21 @@ public sealed partial class PostgreSqlChargingTests
             () => test.ClaimAsync(first, stations[1]),
             () => test.ClaimAsync(second, stations[1])
         );
-        Assert.Single(twoOwners, x => x is null);
-        Assert.Single(twoOwners, x => x == "charger_in_use");
+        Assert.All(twoOwners, x => Assert.Equal("charger_in_use", x));
         await using var final = test.Context();
         Assert.Equal(2, await final.ChargingSessions.CountAsync());
-        Assert.Single(
+        Assert.Empty(
             await final.ChargingConnectionRequests.Where(x => x.State == "Linked").ToListAsync()
         );
-        Assert.Equal(
-            "Completed",
-            (
-                await final.ChargingConnectionRequests.SingleAsync(x => x.SessionId == sessionId)
-            ).State
-        );
+        if (result[0] is null)
+            Assert.Equal(
+                "Completed",
+                (
+                    await final.ChargingConnectionRequests.SingleAsync(x =>
+                        x.SessionId == sessionId
+                    )
+                ).State
+            );
     }
 
     [PostgreSqlFact]

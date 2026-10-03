@@ -1,6 +1,7 @@
 "use client";
 
 import type { ChargingCommandResult, ChargingDiagnostics, DriverChargingSession, Language } from "../../../../contracts/account";
+import type { ReactNode } from "react";
 
 function rejectionMessage(command: ChargingCommandResult, sq: boolean) {
   if (command.action === "StartTransaction" && command.failureCode === "OccurrenceConstraintViolation")
@@ -12,8 +13,8 @@ function rejectionMessage(command: ChargingCommandResult, sq: boolean) {
   return sq ? "Pajisja dërgoi një mesazh që shërbimi nuk e pranoi. Detajet shfaqen më poshtë." : "The charger sent a message that the service rejected. Details appear below.";
 }
 
-export function SimulatorDiagnostics({ initial: data, session, language }: {
-  initial: ChargingDiagnostics; session: DriverChargingSession | null; language: Language;
+export function SimulatorDiagnostics({ initial: data, session, language, children }: {
+  initial: ChargingDiagnostics; session: DriverChargingSession | null; language: Language; children?: ReactNode;
 }) {
   const sq = language === "sq";
   const active = session?.stoppedAt === null;
@@ -43,6 +44,7 @@ export function SimulatorDiagnostics({ initial: data, session, language }: {
     </div>}
     <details className="charge-reading-details">
       <summary>{sq ? "Diagnostikimi i simulatorit" : "Simulator diagnostics"}</summary>
+      {children}
       {data.externalSessionId && <p><strong>{sq ? "Transaction ID i këtij sesioni" : "This session’s Transaction ID"}: {data.externalSessionId}</strong>
         {active && <span> · {sq ? "Përdor këtë ID te MeterValues dhe StopTransaction; prit përgjigjen RESP." : "Use this ID in MeterValues and StopTransaction; wait for the RESP acknowledgement."}</span>}</p>}
       {data.meterStartWh !== null && <p>Meter start: {data.meterStartWh} Wh. {sq ? "Meter stop duhet të jetë regjistri final i matësit në Wh, jo objektivi në kWh." : "Meter stop must be the final meter register in Wh, not the target in kWh."}</p>}

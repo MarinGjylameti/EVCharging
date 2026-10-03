@@ -156,7 +156,7 @@ njëjtën ID për dy lidhje njëkohësisht: lidhja e dytë refuzohet.
    shfletuesi: secili hap pikën e vet përpara Start charging. Sesioni i tjetrit
    dhe matjet e tij nuk shfaqen në llogarinë tënde.
 
-Pritja është bypass QR vetëm për testin demo të aktivizuar. Një Driver mund të presë/karikojë vetëm në një pikë në një kohë; profile të ndryshme të të njëjtit Driver shohin të njëjtin sesion. Nëse pajisja nis e para, sesioni mbetet pa pronar derisa Driver-i ta marrë përmes claim-it demo. Nuk përdoret më Demo:DriverEmail për caktimin automatik. Claim-i i mëvonshëm ruan të gjitha matjet, kohën e nisjes dhe tarifën fillestare.
+Pritja është bypass QR vetëm për testin demo të aktivizuar. Një Driver mund të presë/karikojë vetëm në një pikë në një kohë; profile të ndryshme të të njëjtit Driver shohin të njëjtin sesion. Nëse pajisja nis e para, sesioni mbetet pa pronar dhe claim-i i mëvonshëm refuzohet. Vizitori sheh vetëm statusin dhe vlerësimin publik; matjet private kërkojnë një lidhje të përgatitur para nisjes. Nuk përdoret më Demo:DriverEmail për caktimin automatik.
 StartTransaction → StopTransaction përbën një sesion. SuspendedEV/SuspendedEVSE
 tregon ndërprerje të transferimit nga makina/pika dhe ruan të njëjtin sesion,
 energjinë dhe pronarin. Pauza nuk shton hyrje në historik. Komandat Pause/Resume

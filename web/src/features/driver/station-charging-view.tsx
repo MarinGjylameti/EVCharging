@@ -8,6 +8,8 @@ import { ChargingProgress, chargingLabels } from "./charging-progress";
 import { chargingLivePolicy } from "./live-update-policy";
 import { ChargingFault } from "./charging-fault";
 import { SimulatorDiagnostics } from "./simulator-diagnostics";
+import { createChargingTestReport, downloadChargingTestReport } from "./charging-test-report";
+import { AvailabilityCard } from "./station-availability";
 
 export function StationChargingView({ initial, language }: { initial: StationCharging; language: Language }) {
   const sq = language === "sq";
@@ -17,10 +19,9 @@ export function StationChargingView({ initial, language }: { initial: StationCha
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [now, setNow] = useState(0);
-  const attempted = useRef(false);
   const mounted = useRef(false);
   const station = snapshot.station;
-  const session = snapshot.connectionRequest && snapshot.session?.stoppedAt ? null : snapshot.session;
+  const session = snapshot.inUse || snapshot.connectionRequest && snapshot.session?.stoppedAt ? null : snapshot.session;
   const active = session && session.stoppedAt === null;
   const waiting = snapshot.connectionRequest !== null;
   const number = (value: number) => new Intl.NumberFormat(sq ? "sq-AL" : "en-GB", { maximumFractionDigits: 3 }).format(value);
@@ -52,13 +53,6 @@ export function StationChargingView({ initial, language }: { initial: StationCha
     } finally { if (mounted.current) setBusy(false); }
   }, [url, sq, setSnapshot]);
 
-  useEffect(() => {
-    if (attempted.current) return;
-    attempted.current = true;
-    if (initial.canConnect && !initial.inUse && !initial.connectionRequest
-      && !initial.session) void mutate("POST");
-  }, [initial, mutate]);
-
   const requestExpired = waiting && now > Date.parse(snapshot.connectionRequest!.expiresAt);
   return <div className="driver-content charge-point-page">
     <nav className="charge-page-navigation" aria-label={sq ? "Navigimi i karikimit" : "Charging navigation"}>
@@ -66,7 +60,7 @@ export function StationChargingView({ initial, language }: { initial: StationCha
       <Link href="/driver/history">{sq ? "Historiku im" : "My history"} ↗</Link>
     </nav>
     <div className="charge-point-title"><div>
-      <span className="driver-eyebrow">{sq ? "PIKA JOTE E KARIKIMIT" : "YOUR CHARGE POINT"}</span>
+      <span className="driver-eyebrow">{sq ? "PIKA E KARIKIMIT" : "CHARGE POINT"}</span>
       <h1>{station.name}</h1><p>{station.address} · {station.city}</p>
     </div><span className={`charging-live ${connected && !unavailable ? "is-live" : ""}`} role="status"><i aria-hidden="true" />{connected && !unavailable ? (sq ? "Përditësime aktive" : "Live updates") : (sq ? "Po rilidhet…" : "Reconnecting…")}</span></div>
     <div className="charge-point-specs">
@@ -84,6 +78,7 @@ export function StationChargingView({ initial, language }: { initial: StationCha
     {!active && snapshot.connector && <p className="charge-point-notice" role="status">{sq ? "Statusi i lidhësit" : "Connector status"}: {chargingLabels[snapshot.connector.status]?.[sq ? 0 : 1] ?? snapshot.connector.status}</p>}
     {snapshot.inUse && !active && <p className="charge-point-notice" role="status">{sq ? "Pika po përdoret nga një drejtues tjetër. Karikimi i tij nuk shfaqet në llogarinë tënde." : "Another driver is using this charger. Their session is private."}</p>}
     {session ? <ChargingProgress session={session} language={language} now={now || Date.parse(session.startReceivedAt ?? session.startedAt)} stale={unavailable} />
+      : snapshot.inUse ? <AvailabilityCard station={station} language={language} nowMs={now || null} stale={unavailable || !connected}/>
       : <section className="charge-waiting-card" aria-labelledby="charge-wait-title">
         <div className={`charge-wait-icon ${waiting && snapshot.deviceConnected && !requestExpired ? "is-ready" : ""}`} aria-hidden="true">ϟ</div>
         <span className="driver-eyebrow">{sq ? "LIDHJA ME PIKËN" : "CONNECTING TO THE CHARGER"}</span>
@@ -115,7 +110,12 @@ export function StationChargingView({ initial, language }: { initial: StationCha
       ? `Për testin aktual, QR anashkalohet. Lidh simulatorin ${station.code} dhe shtyp Start charging me TAG-001, lidhësi 1.`
       : `QR is bypassed for this test. Connect simulator ${station.code}, then press Start charging with TAG-001, connector 1.`}</p>}
     {snapshot.canConnect && station.isDemo && <p><a href={`/driver/simulator?station=${encodeURIComponent(station.code)}`} target="_blank" rel="noopener noreferrer">{sq ? "Hap simulatorin automatik ↗" : "Open automatic simulator ↗"}</a></p>}
-    {!snapshot.canConnect && !session && <p className="charge-point-notice">{sq ? "Lidhja pa QR është e aktivizuar vetëm për pikat e testimit." : "Connection without QR is enabled only for test charge points."}</p>}
-    {snapshot.canConnect && snapshot.diagnostics && <SimulatorDiagnostics key={session?.id ?? stationId} initial={snapshot.diagnostics} session={session} language={language} />}
+    {!snapshot.canConnect && !session && !snapshot.inUse && <p className="charge-point-notice">{sq ? "Lidhja pa QR është e aktivizuar vetëm për pikat e testimit." : "Connection without QR is enabled only for test charge points."}</p>}
+    {snapshot.canConnect && !snapshot.inUse && snapshot.diagnostics && <SimulatorDiagnostics key={session?.id ?? stationId} initial={snapshot.diagnostics} session={session} language={language}>
+      <button type="button" className="button-outline" onClick={() => {
+        try { downloadChargingTestReport(createChargingTestReport({ source: "charger-view", station, view: snapshot, stream: { connected, unavailable } }), station.code); }
+        catch { setError(sq ? "Shkarkimi i diagnostikimit dështoi. Provo përsëri." : "Diagnostic download failed. Please retry."); }
+      }}>{sq ? "Shkarko diagnostikimin" : "Download diagnostics"}</button>
+    </SimulatorDiagnostics>}
   </div>;
 }

@@ -74,6 +74,7 @@ export function ChargingProgress({ session, language, now, stale }: {
         : (sq ? "Pajisja konfirmoi ndalimin. Përmbledhja financiare pret verifikimin e matjes finale." : "The charger confirmed the stop. The financial summary awaits verification of the final reading.")}</span>
     </div>}
     {!ended && <p className="charge-session-start">{sq ? "Sesioni mbetet i hapur deri në konfirmimin e ndalimit nga pajisja." : "The session remains open until the charger confirms its stop."}</p>}
+    {ended && session.stopReason === "EVDisconnected" && <p className="charge-point-notice" role="status">{sq ? "Kablloja u hoq nga makina. Karikuesi konfirmoi ndalimin; sesioni u mbyll dhe lidhja e llogarisë me pikën u lirua." : "The vehicle was unplugged. The charger confirmed the stop; the session closed and the account association was released."}</p>}
     <div className="charge-energy-display">
       <div className="charge-bolt" aria-hidden="true">ϟ</div>
       <div><span>{sq ? "Energjia e marrë" : "Energy delivered"}{session.energyScope && session.energyScope !== "Total" ? ` · ${session.energyScope}` : ""}</span>

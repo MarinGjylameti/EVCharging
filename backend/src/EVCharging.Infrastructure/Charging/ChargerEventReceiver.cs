@@ -2,6 +2,8 @@ using System.Text.Json;
 using EVCharging.Application.Charging;
 using EVCharging.Domain.Charging;
 using EVCharging.Domain.Identity;
+using EVCharging.Domain.Notifications;
+using EVCharging.Infrastructure.Notifications;
 using EVCharging.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,7 +14,8 @@ namespace EVCharging.Infrastructure.Charging;
 public sealed class ChargerEventReceiver(
     ChargingDbContext db,
     StationProjection projection,
-    TimeProvider clock
+    TimeProvider clock,
+    NotificationService notifications
 ) : IChargerEventReceiver
 {
     public async Task ReceiveAsync(ChargerEvent change, CancellationToken ct)
@@ -63,6 +66,20 @@ public sealed class ChargerEventReceiver(
                 }
                 active.Version++;
                 await NotifySessionAsync(active, "SessionStatusChanged", now, ct);
+                if (change.Kind == ChargerEventKind.Disconnected && priorOnline)
+                {
+                    var owner = await db.ChargingConnectionRequests.SingleOrDefaultAsync(
+                        x => x.SessionId == active.Id && x.State == "Linked",
+                        ct
+                    );
+                    if (owner is not null)
+                        await notifications.EnqueueAsync(
+                            owner.DriverId,
+                            $"connection-lost:{connector.Id}:{connector.Version}",
+                            NotificationKind.UnexpectedDisconnect,
+                            ct
+                        );
+                }
             }
             ChargingRealtime.Stage(
                 db,
@@ -267,6 +284,12 @@ public sealed class ChargerEventReceiver(
             if (claim is not null)
             {
                 claim.State = "Completed";
+                await notifications.EnqueueAsync(
+                    claim.DriverId,
+                    $"charging-completed:{session.Id}",
+                    NotificationKind.ChargingCompleted,
+                    ct
+                );
                 if (session.EnergyKWh is { } energy && session.CalculatedCost is { } cost)
                     db.ChargingHistory.Add(
                         new ChargingHistory
