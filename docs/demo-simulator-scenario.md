@@ -102,14 +102,55 @@ vlerësim të kohës së mbetur. Aktualisht aplikacioni nuk ka kapacitetin e
 baterisë ose një llogaritje të kësaj kohe. Fuqia skadon pas 120 sekondash
 pa matje të re; ridërgoje gjatë provës që të mbetet aktuale.
 
-**Nisja e karikimit** shfaq orën në formatin 24-orësh dhe datën sipas zonës
-Europe/Tirane. Kohëzgjatja shfaqet veçmas si **Kohë e kaluar**, përfshirë
-pauzat. Në demo përdoret koha kur serveri pranoi nisjen; për pajisjet reale
+Mos përdor ID-në fillestare `1` të formularit nëse transaksioni aktiv ka një
+ID tjetër. Për shembull, kur përgjigjja e një nisjeje të refuzuar thotë
+`active transaction 18`, prova e fuqisë kërkon `transactionId: 18`,
+`measurand: Power.Active.Import`, `unit: kW` dhe `value: 22`.
+Një përgjigje `[3, ..., {}]` konfirmon marrjen e mesazhit: një matje e ruajtur
+për një transaksion të përfunduar nuk përditëson transaksionin aktual, dhe
+`Power.Active.Import` me njësi `Wh` nuk përdoret si fuqi. UI e diagnostikimit
+shpjegon njësinë e gabuar kur matja i përket sesionit të autorizuar.
+
+**Koha e karikimit** shfaq minutat dhe sekondat nga nisja, p.sh. `12 min 34 s`,
+dhe përditësohet çdo sekondë. Përfshin pauzat dhe ndalet në kohën e ndalimit
+të konfirmuar. Data dhe ora e nisjes shfaqen poshtë si informacion shtesë,
+sipas zonës Europe/Tirane. Në demo përdoret koha kur serveri pranoi nisjen; për pajisjet reale
 përdoret nisja e raportuar nga pajisja. Një StartTransaction i refuzuar nuk
 ndryshon orën e nisjes së transaksionit ekzistues.
 
 StopTransaction duhet të shfaqet si mesazh i dërguar dhe i konfirmuar në
 trafikun OCPP; përfundimi i animacionit të simulatorit nuk e mbyll sesionin.
+
+### Kur animacioni përfundon, por UI mbetet në pauzë
+
+Logu i provës së 3 tetorit tregon nisje të refuzuar sepse transaksioni 18
+ishte ende aktiv, pastaj `MeterValues: waiting for StartTransaction.conf
+transactionId`. Në fund ka vetëm `IN Simulation: StopTransaction: 20.00 kWh`
+dhe `OUT StatusNotification: SuspendedEV`. Nuk ka `OUT StopTransaction` apo
+`RESP StopTransaction`. UI për këtë mesazh shfaq pauzë, ruan energjinë dhe
+heq fuqinë aktuale; transaksioni mbetet i hapur. Matjet `Power.Active.Import`
+përditësojnë fuqinë. Energjia kërkon `Energy.Active.Import.Register`.
+
+Për ta mbyllur provën e mbetur hap formularin e veçantë **StopTransaction**:
+
+| Fusha | Vlera |
+| --- | --- |
+| Transaction ID | ID-ja aktuale në diagnostikim; në këtë log është 18 |
+| Timestamp | Ora aktuale në UTC |
+| Reason | Local |
+| Meter stop (Wh) | Regjistri final i matësit për këtë transaksion |
+
+Nëse `Meter start` është 0 dhe regjistri final është 2383 Wh, vendos 2383.
+Objektivi 20 kWh i animacionit të nisjes së refuzuar nuk provon energjinë e
+transaksionit 18. Përdor regjistrin përkatës, jo objektivin e animacionit.
+
+Shtyp **Send StopTransaction**, pastaj kontrollo `OUT StopTransaction` dhe
+përgjigjen `[3, ..., {}]`. UI duhet të kalojë në **Karikimi përfundoi** dhe
+numëruesi të ndalet. Dërgo `Available/NoError`, përgatit karikimin e ri nga
+UI dhe përditëso **Start time** në simulator në kohën aktuale. Nis provën
+tjetër dhe verifiko përgjigjen e pranuar të StartTransaction me një ID të re
+përpara se të vazhdosh matjet. Nëse nisja refuzohet përsëri, zgjidh arsyen
+e refuzimit përpara se të vazhdosh animacionin.
 
 ## Dokumentacioni dhe mbulimi
 

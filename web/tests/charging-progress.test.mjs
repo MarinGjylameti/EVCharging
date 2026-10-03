@@ -35,7 +35,7 @@ test("missing battery level and remaining time never produce an invented percent
   const html = render();
   assert.match(html, /2.75/);
   assert.match(html, /0.96/);
-  assert.match(html, /2:00/);
+  assert.match(html, /2 min 00 s/);
   assert.match(html, /No battery percentage reading received yet/);
   assert.match(html, /charge-progress-indeterminate/);
   assert.doesNotMatch(html, /aria-valuenow|~\d|62:00|NaN/);
@@ -44,18 +44,20 @@ test("missing battery level and remaining time never produce an invented percent
   assert.match(html, /Insufficient data for an estimate/);
 });
 
-test("charging start shows a fixed 24-hour Tirana time separately from the advancing duration", () => {
+test("charging time advances in minutes while the start date and time stay fixed", () => {
   for (const language of ["sq", "en"]) {
     const html = render({}, { language });
-    assert.match(html, /<time dateTime="2026-10-01T13:00:00Z">15:00<\/time>/);
-    assert.match(html, language === "sq" ? /NISJA E KARIKIMIT/ : /CHARGING STARTED/);
-    assert.match(html, language === "sq" ? /Kohë e kaluar: 00:02:00/ : /Elapsed: 00:02:00/);
+    assert.match(html, /<time dateTime="2026-10-01T13:00:00Z">01\/10\/2026 · 15:00<\/time>/);
+    assert.match(html, /01\/10\/2026/);
+    assert.match(html, language === "sq" ? /KOHA E KARIKIMIT/ : /CHARGING TIME/);
+    assert.match(html, /<strong>2 min 00 s<\/strong>/);
+    assert.match(render({}, { language, now: Date.parse("2026-10-01T13:02:01Z") }), /<strong>2 min 01 s<\/strong>/);
     const later = render({}, { language, now: Date.parse("2026-10-03T13:02:00Z") });
-    assert.match(later, /<time dateTime="2026-10-01T13:00:00Z">15:00<\/time>/);
-    assert.match(later, language === "sq" ? /2 ditë 00:02:00/ : /2 days 00:02:00/);
+    assert.match(later, /<time dateTime="2026-10-01T13:00:00Z">01\/10\/2026 · 15:00<\/time>/);
+    assert.match(later, /<strong>2882 min 00 s<\/strong>/);
   }
-  assert.match(render({ isDemo: false }), /<time dateTime="2026-10-01T12:00:00Z">14:00<\/time>/);
-  assert.match(render({ startReceivedAt: "2026-12-01T13:00:00Z" }), /<time dateTime="2026-12-01T13:00:00Z">14:00<\/time>/);
+  assert.match(render({ isDemo: false }), /<time dateTime="2026-10-01T12:00:00Z">01\/10\/2026 · 14:00<\/time>/);
+  assert.match(render({ startReceivedAt: "2026-12-01T13:00:00Z" }), /<time dateTime="2026-12-01T13:00:00Z">01\/12\/2026 · 14:00<\/time>/);
   const invalid = render({ startReceivedAt: "invalid" });
   assert.match(invalid, /Start time is unavailable/);
   assert.doesNotMatch(invalid, /Invalid Date|NaN|<time/);
@@ -83,7 +85,8 @@ test("pause preserves energy and cost and hides stale power and remaining time",
 test("completion uses receipt duration and only confirms history with valid totals", () => {
   const changes = { status: "Completed", stoppedAt: "2026-10-01T12:40:00Z", stopReceivedAt: "2026-10-01T13:03:00Z" };
   const html = render(changes);
-  assert.match(html, /3:00/);
+  assert.match(html, /<strong>3 min 00 s<\/strong>/);
+  assert.match(render(changes, { now: Date.parse("2026-10-03T13:02:00Z") }), /<strong>3 min 00 s<\/strong>/);
   assert.match(html, /Saved in history/);
   const missing = render({ ...changes, energyKWh: null, cost: null });
   assert.doesNotMatch(missing, /Saved in history|has been saved/);
@@ -92,7 +95,7 @@ test("completion uses receipt duration and only confirms history with valid tota
 
 test("real charger duration uses the physical start even when app association or receipt is later", () => {
   const html = render({ isDemo: false });
-  assert.match(html, /01:02:00/);
+  assert.match(html, /62 min 00 s/);
   assert.match(html, /Duration uses the start reported by the charger/);
   assert.doesNotMatch(html, /Duration here uses message receipt times/);
 });
@@ -134,13 +137,13 @@ test("100 percent reports battery level without inventing a stop or completion t
   assert.doesNotMatch(html, /Charge completed|Saved in history|remaining/i);
 });
 
-test("duration is readable across hours and days and rejects invalid timestamps", () => {
-  assert.equal(formatChargingDuration(59, false), "00:00:59");
-  assert.equal(formatChargingDuration(3661, false), "01:01:01");
-  assert.equal(formatChargingDuration(86461, false), "1 day 00:01:01");
-  assert.equal(formatChargingDuration(172861, true), "2 ditë 00:01:01");
-  assert.equal(formatChargingDuration(-10, true), "00:00:00");
-  assert.equal(formatChargingDuration(NaN, false), "—");
+test("elapsed minutes do not wrap after an hour or day and reject invalid timestamps", () => {
+  assert.equal(formatChargingDuration(59), "0 min 59 s");
+  assert.equal(formatChargingDuration(3661), "61 min 01 s");
+  assert.equal(formatChargingDuration(86461), "1441 min 01 s");
+  assert.equal(formatChargingDuration(172861), "2881 min 01 s");
+  assert.equal(formatChargingDuration(-10), "0 min 00 s");
+  assert.equal(formatChargingDuration(NaN), "—");
 });
 
 test("a contradictory final register closes the process but never claims saved financial totals", () => {
@@ -197,7 +200,25 @@ test("unresolved rejection stays visible after accepted heartbeat activity", () 
   assert.match(html, /The new start was rejected/);
   assert.match(html, /Heartbeat: Accepted/);
   assert.match(html, /Active transaction/);
+  assert.ok(html.indexOf("Active transaction: 17") < html.indexOf("<details"));
+  assert.match(html, /Use this ID in MeterValues/);
   assert.doesNotMatch(renderDiagnostics({ lastCommand: lastFailure, lastFailure: null }), /role="alert"/);
+});
+
+test("an acknowledged power sample with an energy unit explains why power did not change", () => {
+  const invalid = { ...sample, measurand: "Power.Active.Import", value: "22", unit: "Wh" };
+  const command = { action: "MeterValues", accepted: true, failureCode: null, description: null,
+    receivedAt: sample.receivedAt, readings: [invalid] };
+  const html = renderDiagnostics({ lastCommand: command });
+  assert.ok(html.indexOf("The power reading was not used") < html.indexOf("<details"));
+  assert.match(html, /unit Wh/);
+  assert.match(html, /kW for a value of 22, or W for 22000/);
+  assert.match(html, /confirms receipt of the message/);
+  assert.doesNotMatch(html, /MeterValues was rejected/);
+  for (const unit of ["W", "kW"]) {
+    assert.doesNotMatch(renderDiagnostics({ samples: [{ ...invalid, unit }], lastCommand: command }), /power reading was not used/);
+  }
+  assert.doesNotMatch(renderDiagnostics({ samples: [{ ...invalid, format: "SignedData" }] }), /power reading was not used/);
 });
 
 test("a reported warning during Charging keeps live power and uses warning styling", () => {

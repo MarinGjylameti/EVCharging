@@ -18,6 +18,8 @@ export function SimulatorDiagnostics({ initial: data, session, language }: {
   const sq = language === "sq";
   const active = session?.stoppedAt === null;
   const samples = data.samples.length ? data.samples : data.lastCommand?.readings ?? session?.readings ?? [];
+  const powerSample = samples.find(sample => sample.measurand === "Power.Active.Import" && sample.format !== "SignedData");
+  const invalidPowerUnit = powerSample && powerSample.unit !== "W" && powerSample.unit !== "kW";
   const stopReason = session?.stopReason ?? data.stopReason;
   const command = data.lastCommand;
   const failure = data.lastFailure !== undefined ? data.lastFailure : command && !command.accepted ? command : null;
@@ -28,12 +30,21 @@ export function SimulatorDiagnostics({ initial: data, session, language }: {
         : failure.action === "StopTransaction" ? (sq ? "Ndalimi nuk u pranua" : "The stop was rejected")
         : (sq ? `${failure.action} nuk u pranua` : `${failure.action} was rejected`)}</strong>
       <p>{rejectionMessage(failure, sq)}</p>
+      {failure.action === "StartTransaction" && active && data.externalSessionId && <p>
+        <strong>{sq ? "Transaksioni aktiv" : "Active transaction"}: {data.externalSessionId}</strong>
+        {sq ? " · Përdor këtë ID te MeterValues. Për të nisur një sesion të ri, përfundo këtë me StopTransaction." : " · Use this ID in MeterValues. To start a new session, end this one with StopTransaction."}
+      </p>}
       <p>{failure.failureCode}{failure.description ? ` · ${failure.description}` : ""}</p>
+    </div>}
+    {invalidPowerUnit && <div className="charge-point-notice" role="status">
+      <strong>{sq ? "Matja e fuqisë nuk u përdor" : "The power reading was not used"}</strong>
+      <p>{sq ? `Power.Active.Import u dërgua me njësinë ${powerSample.unit ?? "Wh (parazgjedhje)"}. Te MeterValues ndrysho Unit në kW për vlerën 22, ose në W për 22000. Wh është njësi energjie.` : `Power.Active.Import was sent with unit ${powerSample.unit ?? "Wh (default)"}. In MeterValues, change Unit to kW for a value of 22, or W for 22000. Wh is an energy unit.`}</p>
+      <p>{sq ? "Përgjigjja RESP konfirmon marrjen e mesazhit. Matja me këtë njësi nuk përditëson fuqinë aktuale." : "The RESP acknowledgement confirms receipt of the message. A reading with this unit does not update current power."}</p>
     </div>}
     <details className="charge-reading-details">
       <summary>{sq ? "Diagnostikimi i simulatorit" : "Simulator diagnostics"}</summary>
       {data.externalSessionId && <p><strong>{sq ? "Transaction ID i këtij sesioni" : "This session’s Transaction ID"}: {data.externalSessionId}</strong>
-        {active && <span> · {sq ? "Përdor këtë ID te StopTransaction dhe prit përgjigjen RESP." : "Use this ID in StopTransaction and wait for the RESP acknowledgement."}</span>}</p>}
+        {active && <span> · {sq ? "Përdor këtë ID te MeterValues dhe StopTransaction; prit përgjigjen RESP." : "Use this ID in MeterValues and StopTransaction; wait for the RESP acknowledgement."}</span>}</p>}
       {data.meterStartWh !== null && <p>Meter start: {data.meterStartWh} Wh. {sq ? "Meter stop duhet të jetë regjistri final i matësit në Wh, jo objektivi në kWh." : "Meter stop must be the final meter register in Wh, not the target in kWh."}</p>}
       {stopReason && <p>{sq ? "Arsyeja e ndalimit" : "Stop reason"}: {stopReason}</p>}
       {command && <p role="status">{command.action}: {command.accepted ? (sq ? "U pranua" : "Accepted") : (sq ? "U refuzua" : "Rejected")} · {new Date(command.receivedAt).toLocaleTimeString(sq ? "sq-AL" : "en-GB", { timeZone: "Europe/Tirane", hour: "2-digit", minute: "2-digit", second: "2-digit" })}</p>}
