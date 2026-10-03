@@ -23,7 +23,8 @@ public sealed class AccountService(
     IPasswordHasher<Account> hasher,
     IOptions<SessionOptions> options,
     TimeProvider clock,
-    StationEventSignal events
+    StationEventSignal events,
+    StationProjection projection
 )
 {
     public static string HashToken(string token) =>
@@ -239,6 +240,7 @@ public sealed class AccountService(
                     userId,
                     session: ChargingRealtime.SessionDto(active, connector, station, now)
                 );
+                await projection.RefreshAsync(station.Id, ct);
             }
         }
         await db.SaveChangesAsync(ct);

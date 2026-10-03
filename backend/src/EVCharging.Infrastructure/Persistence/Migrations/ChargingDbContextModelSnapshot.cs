@@ -489,6 +489,10 @@ namespace EVCharging.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(20)")
                         .HasColumnName("forecast_source");
 
+                    b.Property<DateTimeOffset?>("ForecastValidUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("forecast_valid_until");
+
                     b.Property<bool>("IsArchived")
                         .HasColumnType("boolean")
                         .HasColumnName("is_archived");

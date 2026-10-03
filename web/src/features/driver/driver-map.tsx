@@ -26,23 +26,23 @@ const centerOf = (stations: Station[]): Coordinates => stations.length ? {
 } : {latitude:41.3275,longitude:19.8187};
 
 type Props = {stations: Station[]; history: ChargingHistory[]; language: Language; firstName: string};
-function AvailabilityCard({station,language,nowMs}: {
-  station: Station; language: Language; nowMs: number|null;
+function AvailabilityCard({station,language,nowMs,stale}: {
+  station: Station; language: Language; nowMs: number|null; stale: boolean;
 }) {
   if (station.status!=="Charging") return null;
   const sq=language==="sq";
   const forecast=station.availabilityForecast;
-  const remaining=nowMs===null ? null : remainingChargingMinutes(forecast,nowMs);
+  const remaining=nowMs===null || stale ? null : remainingChargingMinutes(forecast,nowMs);
   return <div className="station-forecast">
     <span className="driver-eyebrow">{forecast?.source==="Demo" ?
       (sq?"SHEMBULL DEMO":"DEMO EXAMPLE") : (sq?"KOHA E MBETUR":"TIME REMAINING")}</span>
     {remaining!==null && forecast ? <>
       <strong>{sq?`Rreth ${remaining} min të mbetura`:`About ${remaining} min remaining`}</strong>
-      <small>{sq?`Lidhësi ${forecast.connectorId} · vlerësim nga ${forecast.source==="Demo"?"simulimi":"pajisja"}`:
-        `Connector ${forecast.connectorId} · ${forecast.source==="Demo"?"simulated":"device"} estimate`}</small>
-      <small>{sq?"Vlerësimi mund të ndryshojë dhe nuk rezervon lidhësin.":
-        "The estimate can change and does not reserve the connector."}</small>
-    </> : <p>{nowMs===null ? (sq?"Po kontrolloj kohën e mbetur…":"Checking remaining time…") : forecast ?
+      <small>{sq?`Lidhësi ${forecast.connectorId} · ${forecast.source==="Simulator"?"deri te objektivi i simulimit":forecast.source==="Calculated"?"deri në bateri të plotë":forecast.source==="Demo"?"shembull demo":"vlerësim nga pajisja"}`:
+        `Connector ${forecast.connectorId} · ${forecast.source==="Simulator"?"until the simulation target":forecast.source==="Calculated"?"until the battery is full":forecast.source==="Demo"?"demo example":"device estimate"}`}</small>
+      <small>{sq?"Koha është e përafërt; përfundimi i karikimit nuk garanton lirimin e lidhësit.":
+        "Time is approximate; finishing the charge does not guarantee that the connector is free."}</small>
+    </> : <p>{stale ? (sq?"Po rilidhet; në pritje të përditësimit të kohës së mbetur…":"Reconnecting; waiting for a remaining-time update…") : nowMs===null ? (sq?"Po kontrolloj kohën e mbetur…":"Checking remaining time…") : forecast ?
       (sq?"Vlerësimi i fundit ka skaduar. Duhet një përditësim i ri nga burimi i të dhënave.":
         "The latest estimate expired. A new update from the data source is needed.") :
       (sq?"Nuk ka ende një vlerësim të kohës së mbetur për këtë karikim.":
@@ -253,7 +253,7 @@ export function DriverMap({stations: initialStations, history: initialHistory, l
           {shown.map(station=>{
             const at=position(station);
             const selected=active?.id===station.id;
-            const remaining=nowMs===null?null:remainingChargingMinutes(station.availabilityForecast,nowMs);
+            const remaining=nowMs===null||unavailable||!connected?null:remainingChargingMinutes(station.availabilityForecast,nowMs);
             const warning = station.warningCode && station.warningCode !== "NoError";
             return <Fragment key={station.id}><button type="button" className={`map-pin status-${station.status.toLowerCase()}${selected?" selected":""}${warning?" has-warning":""}`}
               style={{left:at.left,top:at.top}} onClick={()=>setSelectedId(station.id)}
@@ -296,7 +296,7 @@ export function DriverMap({stations: initialStations, history: initialHistory, l
               {sq?"Hap navigimin në":"Open directions in"} {mapProvider === "apple"?"Apple Maps":"Google Maps"}
               <span aria-hidden="true">↗</span>
             </a>
-            <AvailabilityCard station={active} language={language} nowMs={nowMs}/>
+            <AvailabilityCard station={active} language={language} nowMs={nowMs} stale={unavailable||!connected}/>
             <div className="station-specs">
               <div><span>{sq ? "FUQIA" : "POWER"}</span><strong>{active.powerKW} kW</strong></div>
               <div><span>{sq ? "LIDHËS" : "CONNECTORS"}</span><strong>{active.connectorCount} × {active.connectorType}</strong></div>

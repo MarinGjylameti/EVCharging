@@ -37,6 +37,7 @@ export class AutomaticSimulator {
   private queue: Promise<void> = Promise.resolve();
   private chargingPowerKW: number;
   private disposed = false;
+  private estimatesSupported = true;
   private state: SimulatorState;
 
   constructor(readonly config: SimulatorConfig, private changed: (state: SimulatorState) => void,
@@ -156,6 +157,21 @@ export class AutomaticSimulator {
         { value: String(this.state.powerKW), measurand: "Power.Active.Import", unit: "kW", context, location: "Outlet" },
         { value: this.state.soc.toFixed(2), measurand: "SoC", unit: "Percent", context, location: "EV" },
       ] }] });
+    if (!this.estimatesSupported) return;
+    const seconds = this.state.status === "Charging" && this.state.powerKW > 0
+      ? Math.ceil(this.config.capacityKWh * Math.max(0, this.config.targetSoc - this.state.soc) / 100 / this.state.powerKW * 3600 / this.config.speed) : 0;
+    try {
+      const estimate = await this.call("DataTransfer", { vendorId: "EVCharging.Simulator", messageId: "ChargingEstimate",
+        data: JSON.stringify({ transactionId: this.state.transactionId, remainingSeconds: seconds <= 86400 ? seconds : 0 }) });
+      if (estimate.status !== "Accepted") {
+        if (["UnknownVendorId", "UnknownMessageId"].includes(String(estimate.status))) this.estimatesSupported = false;
+        this.log("SYS", "ChargingEstimate", "The server did not accept the availability estimate.");
+      }
+    } catch (error) {
+      if (!(error instanceof Error) || !/^DataTransfer: (NotSupported|NotImplemented)\b/.test(error.message)) throw error;
+      this.estimatesSupported = false;
+      this.log("SYS", "ChargingEstimate", "This server version does not support public estimates yet.");
+    }
   }
   private scheduleMeters() {
     if (this.meter) clearInterval(this.meter);

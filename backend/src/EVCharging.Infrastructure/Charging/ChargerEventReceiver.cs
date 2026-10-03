@@ -153,6 +153,7 @@ public sealed class ChargerEventReceiver(
                 }
             }
             // Also notify open, currently unclaimed charger views without private data.
+            await projection.RefreshAsync(station.Id, ct);
             ChargingRealtime.Stage(
                 db,
                 station.Id,
@@ -299,6 +300,7 @@ public sealed class ChargerEventReceiver(
                 );
             }
         }
+        await projection.RefreshAsync(session.PointId, ct);
     }
 
     private async Task NotifySessionAsync(

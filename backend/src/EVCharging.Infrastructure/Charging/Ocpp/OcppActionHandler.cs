@@ -1,4 +1,5 @@
 using System.Text.Json;
+using EVCharging.Domain.Charging;
 using EVCharging.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -11,7 +12,8 @@ public sealed class OcppActionHandler(
     OcppMeterHandler meters,
     OcppStationProjection projection,
     IOptions<OcppOptions> options,
-    TimeProvider clock
+    TimeProvider clock,
+    StationProjection stations
 )
 {
     public async Task<object> HandleAsync(
@@ -48,8 +50,75 @@ public sealed class OcppActionHandler(
             case "MeterValues":
                 await meters.RecordAsync(device.Id, message, payload, ct);
                 return new { };
+            case "DataTransfer":
+                return await EstimateAsync(device, payload, ct);
             default:
                 throw new OcppFault("NotSupported", "This action is not supported.");
+        }
+    }
+
+    // This vendor extension is restricted to enabled, allowlisted demo chargers.
+    // It carries only a transaction-bound duration; no account or battery profile.
+    private async Task<object> EstimateAsync(
+        OcppChargePoint device,
+        JsonElement payload,
+        CancellationToken ct
+    )
+    {
+        if (
+            OcppPayload.Text(payload, "vendorId", 255) != "EVCharging.Simulator"
+            || !options.Value.SimulatorEnabled
+            || !options.Value.SimulatorIdentities.Contains(device.Identity)
+        )
+            return new { status = "UnknownVendorId" };
+        if (OcppPayload.OptionalText(payload, "messageId", 50) != "ChargingEstimate")
+            return new { status = "UnknownMessageId" };
+        JsonDocument data;
+        try
+        {
+            data = JsonDocument.Parse(OcppPayload.Text(payload, "data", 1024));
+        }
+        catch (JsonException)
+        {
+            throw new OcppFault("FormationViolation", "Invalid estimate data.");
+        }
+        using (data)
+        {
+            if (data.RootElement.ValueKind != JsonValueKind.Object)
+                throw new OcppFault("FormationViolation", "Estimate data must be an object.");
+            var transactionId = OcppPayload.Integer(data.RootElement, "transactionId", 1);
+            var seconds = OcppPayload.Integer(data.RootElement, "remainingSeconds");
+            if (seconds > 86400)
+                throw new OcppFault("PropertyConstraintViolation", "Estimate exceeds 24 hours.");
+            var transaction = await db.OcppChargingTransactions.SingleOrDefaultAsync(
+                x =>
+                    x.ChargePointId == device.Id
+                    && x.Ocpp16TransactionId == transactionId
+                    && x.StoppedAt == null,
+                ct
+            );
+            if (transaction is null)
+                return new { status = "Rejected" };
+            var session = await db.ChargingSessions.SingleAsync(
+                x => x.Id == transaction.SessionId,
+                ct
+            );
+            var station = await db.Stations.SingleAsync(x => x.Id == session.PointId, ct);
+            if (!station.IsDemo)
+                return new { status = "Rejected" };
+            var now = clock.GetUtcNow();
+            await stations.RefreshAsync(
+                station.Id,
+                ct,
+                new AvailabilityForecast(
+                    session.ConnectorNumber,
+                    now.AddSeconds(seconds),
+                    now,
+                    "Simulator",
+                    now.AddSeconds(120)
+                )
+            );
+            return new { status = "Accepted" };
         }
     }
 

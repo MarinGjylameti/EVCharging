@@ -13,7 +13,8 @@ public sealed class DriverChargingService(
     TimeProvider clock,
     StationEventSignal events,
     IChargingClaimVerification verification,
-    IChargingDiagnostics diagnostics
+    IChargingDiagnostics diagnostics,
+    StationProjection projection
 ) : IDriverCharging
 {
     public async Task<DriverStationCharging> GetAsync(
@@ -151,6 +152,7 @@ public sealed class DriverChargingService(
                     .Select(x => x.BatteryCapacityKWh)
                     .SingleAsync(ct);
                 active.Version++;
+                await projection.RefreshAsync(stationId, ct);
                 // Physical start, energy, tariff and timestamps remain untouched.
             }
             if (own is null || active is not null)

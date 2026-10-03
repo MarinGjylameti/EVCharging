@@ -8,7 +8,8 @@ API-së; UI e karikimit përditësohet nga stream-i ekzistues i serverit.
 
 1. Pas commit/push dhe deploy-t të backend-it e web-it, hap **Profili dhe makina**
    (`/driver/account`). Vendos kapacitetin e përdorshëm në kWh dhe ruaj profilin.
-2. Hap SIM-001 nga harta. Shtyp **Hap simulatorin automatik**; hapet në një skedë tjetër.
+2. Zgjidh SIM-001 në hartë dhe shtyp **Hap pikën e karikimit**. Pastaj shtyp
+   **Hap simulatorin automatik**; hapet në një skedë tjetër.
 3. Në simulator, kontrollo kapacitetin, përqindjen fillestare, objektivin dhe
    fuqinë. Shembulli 60 kWh është vlerë demo. Për provën tënde përdor të njëjtin
    kapacitet si në profil. Intervali fillestar është 5 sekonda, shpejtësia 1×.
@@ -56,6 +57,23 @@ nga llogaria përkatëse ose rinis API-në demo sipas `demo-simulator-scenario.m
 Një sesion pa pronar vazhdon të ndryshojë statusin publik, por nuk futet në
 historikun e një llogarie. Matjet private të të tjerëve nuk shfaqen te llogaria jote.
 
+Koha e mbetur shfaqet edhe në panelin e pikës në hartë. Simulatori automatik
+dërgon pas çdo matjeje një `DataTransfer` me `vendorId=EVCharging.Simulator`,
+`messageId=ChargingEstimate` dhe vetëm ID-në e transaksionit e sekondat e mbetura.
+[Forma e mesazhit OCPP 1.6](https://github.com/mobilityhouse/ocpp/blob/master/ocpp/v16/schemas/DataTransfer.json)
+lejon të dhëna të furnizuesit si tekst JSON. Ky zgjerim pranohet vetëm për
+simulatorët demo të lejuar dhe transaksionin e tyre aktiv.
+Vlerësimi përdor objektivin e zgjedhur dhe shpejtësinë 1×/10×/30×/60×.
+Nuk kërkon lidhjen me llogarinë e personit që sheh hartën ose ruajtjen e një
+kapaciteti shembull në profilin e përdoruesit tjetër.
+
+Për sesionet e lidhura me një profil, API-ja llogarit edhe një vlerësim nga
+kapaciteti i përdorshëm, SoC dhe fuqia totale aktuale. Harta merr vetëm vlerësimin
+publik; kapaciteti, SoC, identiteti dhe sesioni mbeten privatë. Ndryshimi i
+kapacitetit në profil rifreskon menjëherë edhe vlerësimin publik të llogaritur.
+Në pauzë, defekt, shkëputje, përfundim ose pas skadimit të matjeve, vlerësimi
+hiqet. Përfundimi i karikimit nuk garanton që makina është larguar nga lidhësi.
+
 Mbaji skedat e simulatorëve hapur gjatë provës. Mbyllja e skedës shkëput WebSocket-in
 dhe nuk është konfirmim ndalimi. Rilidhja brenda panelit ruan ID-në aktive;
 rinisja e faqes kërkon rikuperimin e transaksionit nga serveri për llogarinë tënde.
@@ -72,7 +90,7 @@ Nuk ka kapacitet të supozuar për llogaritë reale.
 Pauza, shkëputja, defekti, stream-i i vjetruar, mungesa e SoC/kapacitetit dhe fuqia
 për një fazë të vetme e fshehin vlerësimin me një shpjegim. Fuqia duhet rifreskuar
 brenda 2 minutave dhe SoC brenda 5 minutave. Matjet e energjisë nuk e rifreskojnë
-afatin e SoC. Përqindja dhe koha e mbetur nuk ndryshojnë nga një orë ose nga
+afatin e SoC. Përqindja dhe vlerësimi privat nuk ndryshojnë nga një orë ose nga
 energjia e marrë pa një SoC të ri të raportuar.
 
 Koha e mbetur supozon të njëjtën fuqi deri në 100%; humbjet dhe ulja e fuqisë afër
@@ -100,6 +118,9 @@ Migrimi `20261003134511_BatteryCapacityForChargingEstimates` shton kapacitete
 nullable në profil/sesion dhe kohën e marrjes së SoC. Nuk fshin sesione apo
 histori. `render-entrypoint.sh` kryen migrimet para nisjes sipas konfigurimit
 ekzistues. Duhen deploy-t e backend-it dhe web-it për këtë veçori.
+Migrimi `20261003144227_PublicChargingForecastExpiry` shton vetëm afatin nullable
+të vlerësimit publik në pikën e karikimit. Afati i simulatorit është 2 minuta;
+vlerësimi i llogaritur skadon me fuqinë (2 minuta) ose SoC (5 minuta), cilado e para.
 
 Testet përfshijnë ruajtjen/validimin e profilit, përditësimin privat live,
 telemetrinë automatike, refuzimin e nisjes, timeout-in, pauzën, defektin,

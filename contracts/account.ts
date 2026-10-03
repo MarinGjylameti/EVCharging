@@ -20,7 +20,7 @@ export type Station = {
   statusReceivedAt?: string | null;
   availabilityForecast?: {
     connectorId: number; estimatedAvailableAt: string; observedAt: string;
-    source: "Device" | "Demo";
+    source: "Device" | "Demo" | "Calculated" | "Simulator"; validUntil?: string | null;
   } | null;
   isDemo: boolean; isArchived?: boolean; version: number;
 };

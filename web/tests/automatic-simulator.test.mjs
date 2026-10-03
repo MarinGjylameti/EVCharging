@@ -35,7 +35,8 @@ function setup(t, changes = {}, respond) {
         if (call[0] !== 2) return;
         const payload = call[2] === "BootNotification" ? { status: "Accepted", interval: 30 }
           : call[2] === "Authorize" ? { idTagInfo: { status: "Accepted" } }
-          : call[2] === "StartTransaction" ? { transactionId: 83, idTagInfo: { status: "Accepted" } } : {};
+          : call[2] === "StartTransaction" ? { transactionId: 83, idTagInfo: { status: "Accepted" } }
+          : call[2] === "DataTransfer" ? { status: "Accepted" } : {};
         const frame = respond?.(call) ?? [3, call[1], payload];
         if (frame !== "drop") queueMicrotask(() => socket.onmessage?.({ data: JSON.stringify(frame) }));
       },
@@ -66,6 +67,38 @@ test("one start sends the accepted transaction's energy, total power and changin
   assert.equal(latest.meterValue[0].sampledValue[2].value, "20.31");
   assert.ok(s.calls.some(frame => frame[2] === "Heartbeat"));
 });
+test("the public estimate uses the selected target and simulation speed and follows power and pause", async t => {
+  const s = setup(t, { targetSoc: 80, speed: 30 });
+  await s.engine.connect(); await s.engine.start();
+  const latest = () => {
+    const frame = s.calls.filter(frame => frame[2] === "DataTransfer").at(-1)[3];
+    assert.equal(frame.vendorId, "EVCharging.Simulator");
+    assert.equal(frame.messageId, "ChargingEstimate");
+    return JSON.parse(frame.data);
+  };
+  assert.deepEqual(latest(), { transactionId: 83, remainingSeconds: 197 });
+  await s.engine.setPower(11);
+  assert.deepEqual(latest(), { transactionId: 83, remainingSeconds: 393 });
+  await s.engine.pause();
+  assert.equal(latest().remainingSeconds, 0);
+  await s.engine.resume(); await s.advance(30_000);
+  assert.equal(latest().remainingSeconds, 363);
+  await s.engine.stop();
+  assert.equal(latest().remainingSeconds, 0);
+});
+
+test("an older server without public estimates still receives automatic charging measurements", async t => {
+  const s = setup(t, {}, call => call[2] === "DataTransfer"
+    ? [4, call[1], "NotSupported", "This action is not supported.", {}] : undefined);
+  await s.engine.connect(); await s.engine.start(); await s.advance(30_000);
+  assert.equal(s.engine.snapshot.connected, true);
+  assert.ok(s.engine.snapshot.energyKWh > 0);
+  assert.equal(s.calls.filter(frame => frame[2] === "DataTransfer").length, 1);
+  assert.ok(s.calls.filter(frame => frame[2] === "MeterValues").length > 1);
+  await s.engine.stop();
+  assert.equal(s.engine.snapshot.status, "Completed");
+});
+
 test("vehicle pause and charger pause freeze battery and energy, resume uses the same transaction", async t => {
   const s = setup(t); await s.engine.connect(); await s.engine.start(); await s.advance(30_000);
   for (const byCharger of [false, true]) {

@@ -27,11 +27,12 @@ public sealed class ChargingStation
     public DateTimeOffset? StatusObservedAt { get; set; }
     public DateTimeOffset? StatusReceivedAt { get; set; }
 
-    // Supplied by a verified device adapter when supported. Never inferred from charging power alone.
+    // Device estimates or calculations from capacity, fresh battery level and total power.
     public int? ForecastConnectorId { get; set; }
     public DateTimeOffset? ForecastAvailableAt { get; set; }
     public DateTimeOffset? ForecastObservedAt { get; set; }
     public string? ForecastSource { get; set; }
+    public DateTimeOffset? ForecastValidUntil { get; set; }
     public bool IsArchived { get; set; }
     public bool IsDemo { get; set; }
     public long Version { get; set; }

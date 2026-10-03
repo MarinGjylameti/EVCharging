@@ -6,7 +6,11 @@ namespace EVCharging.Infrastructure.Charging;
 
 public sealed class StationProjection(ChargingDbContext db, TimeProvider clock)
 {
-    public async Task RefreshAsync(Guid stationId, CancellationToken ct)
+    public async Task RefreshAsync(
+        Guid stationId,
+        CancellationToken ct,
+        AvailabilityForecast? reportedEstimate = null
+    )
     {
         var station = await db.Stations.SingleOrDefaultAsync(
             x => x.Id == stationId && !x.IsArchived,
@@ -17,10 +21,16 @@ public sealed class StationProjection(ChargingDbContext db, TimeProvider clock)
         var connectors = await db
             .ChargingConnectors.Where(x => x.StationId == stationId)
             .ToListAsync(ct);
-        var active = await db
+        var sessions = await db
             .ChargingSessions.Where(x => x.PointId == stationId && x.EndedAt == null)
-            .Select(x => x.ConnectorId)
             .ToListAsync(ct);
+        // Include a start or stop staged in this transaction before SaveChanges.
+        sessions = sessions
+            .Concat(db.ChargingSessions.Local.Where(x => x.PointId == stationId))
+            .DistinctBy(x => x.Id)
+            .Where(x => x.EndedAt == null)
+            .ToList();
+        var active = sessions.Select(x => x.ConnectorId).ToArray();
         var states = connectors
             .Select(x =>
                 !x.IsOnline ? PointState.Unknown
@@ -49,22 +59,81 @@ public sealed class StationProjection(ChargingDbContext db, TimeProvider clock)
             .OrderBy(x => x.Number)
             .Select(x => x.DeviceFaultCode ?? x.FaultCode)
             .FirstOrDefault(x => x is not null);
+        var now = clock.GetUtcNow();
+        var statusChanged =
+            station.Status != status
+            || station.StatusSource != "Device"
+            || station.WarningCode != warning;
+        station.Status = status;
+        var saved = AvailabilityForecastRules.ForDriver(station, now);
+        var forecasts = connectors
+            .Where(x =>
+                x.IsOnline
+                && x.Status == ChargingState.Charging
+                && x.FaultCode is (null or "NoError")
+                && x.DeviceFaultCode is (null or "NoError")
+            )
+            .Select(connector =>
+            {
+                var session = sessions.SingleOrDefault(x => x.ConnectorId == connector.Id);
+                if (session is null || session.Status != ChargingState.Charging)
+                    return null;
+                var supplied =
+                    reportedEstimate?.ConnectorId == connector.Number ? reportedEstimate
+                    : saved?.ConnectorId == connector.Number
+                    && saved.Source is ("Device" or "Simulator")
+                        ? saved
+                    : null;
+                if (supplied is not null)
+                {
+                    if (
+                        supplied.Source == "Simulator"
+                        && (
+                            session.PowerKW is not > 0
+                            || session.PowerScope != "Total"
+                            || session.PowerReceivedAt?.AddSeconds(120) <= now
+                            || session.PowerReceivedAt is null
+                        )
+                    )
+                        return null;
+                    return supplied.EstimatedAvailableAt > now && supplied.ValidUntil > now
+                        ? supplied
+                        : null;
+                }
+                return AvailabilityForecastRules.Calculate(session, connector, now);
+            });
+        var forecast =
+            status == PointState.Charging
+                ? forecasts
+                    .Where(x => x is not null)
+                    .OrderBy(x => x!.EstimatedAvailableAt)
+                    .FirstOrDefault()
+                : null;
         if (
-            station.Status == status
-            && station.StatusSource == "Device"
-            && station.WarningCode == warning
+            !statusChanged
+            && station.ForecastConnectorId == forecast?.ConnectorId
+            && station.ForecastAvailableAt == forecast?.EstimatedAvailableAt
+            && station.ForecastObservedAt == forecast?.ObservedAt
+            && station.ForecastSource == forecast?.Source
+            && station.ForecastValidUntil == forecast?.ValidUntil
         )
             return;
-        station.Status = status;
         station.StatusSource = "Device";
         station.WarningCode = warning;
-        station.StatusObservedAt = connectors
-            .Select(x => x.StatusObservedAt)
-            .DefaultIfEmpty()
-            .Max();
-        station.StatusReceivedAt = clock.GetUtcNow();
+        if (statusChanged)
+        {
+            station.StatusObservedAt = connectors
+                .Select(x => x.StatusObservedAt)
+                .DefaultIfEmpty()
+                .Max();
+            station.StatusReceivedAt = now;
+        }
         station.Version++;
-        AvailabilityForecastRules.Clear(station);
+        station.ForecastConnectorId = forecast?.ConnectorId;
+        station.ForecastAvailableAt = forecast?.EstimatedAvailableAt;
+        station.ForecastObservedAt = forecast?.ObservedAt;
+        station.ForecastSource = forecast?.Source;
+        station.ForecastValidUntil = forecast?.ValidUntil;
         ChargingRealtime.Stage(
             db,
             station.Id,
@@ -72,8 +141,8 @@ public sealed class StationProjection(ChargingDbContext db, TimeProvider clock)
             "ChargingStation",
             station.Id,
             station.Version,
-            clock.GetUtcNow(),
-            station: ChargingRealtime.StationDto(station, clock.GetUtcNow())
+            now,
+            station: ChargingRealtime.StationDto(station, now)
         );
     }
 
