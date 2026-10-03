@@ -81,6 +81,33 @@ Provat automatike përdorin host lokal me HTTP, WebSocket dhe SSE: ndryshimi i S
 
 Koha e përshpejtuar dhe shpejtësia 22 kW e formularit nuk janë telemetri.
 Fuqia aktuale kërkon një sampledValue `Power.Active.Import` me njësi W/kW.
+Te formulari **MeterValues**, gjatë një transaksioni aktiv, përdor:
+
+| Fusha | Prova e fuqisë | Prova e baterisë |
+| --- | --- | --- |
+| Connector ID | Connector 1 | Connector 1 |
+| Transaction ID | ID-ja aktive te diagnostikimi i sesionit | E njëjta ID aktive |
+| Timestamp | Ora aktuale në UTC | Ora aktuale në UTC |
+| Context | Sample.Periodic | Sample.Periodic |
+| Measurand | Power.Active.Import | SoC |
+| Phase | Pa fazë nëse ofrohet; L1 për provën e këtij simulatori | Pa fazë nëse ofrohet; L1 pranohet për këtë demo |
+| Location | Outlet | Outlet |
+| Unit | kW | Percent |
+| Meter value | 22 | 45 |
+
+Dërgo **Send MeterValues** për secilën provë dhe prit përgjigjen RESP.
+UI duhet të shfaqë 22 kW (ose 22 kW · L1) dhe baterinë 45% pa rifreskim.
+Vlera 45% është vetëm një matje prove. Ajo nuk krijon automatikisht një
+vlerësim të kohës së mbetur. Aktualisht aplikacioni nuk ka kapacitetin e
+baterisë ose një llogaritje të kësaj kohe. Fuqia skadon pas 120 sekondash
+pa matje të re; ridërgoje gjatë provës që të mbetet aktuale.
+
+**Nisja e karikimit** shfaq orën në formatin 24-orësh dhe datën sipas zonës
+Europe/Tirane. Kohëzgjatja shfaqet veçmas si **Kohë e kaluar**, përfshirë
+pauzat. Në demo përdoret koha kur serveri pranoi nisjen; për pajisjet reale
+përdoret nisja e raportuar nga pajisja. Një StartTransaction i refuzuar nuk
+ndryshon orën e nisjes së transaksionit ekzistues.
+
 StopTransaction duhet të shfaqet si mesazh i dërguar dhe i konfirmuar në
 trafikun OCPP; përfundimi i animacionit të simulatorit nuk e mbyll sesionin.
 

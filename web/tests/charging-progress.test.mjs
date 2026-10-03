@@ -41,7 +41,24 @@ test("missing battery level and remaining time never produce an invented percent
   assert.doesNotMatch(html, /aria-valuenow|~\d|62:00|NaN/);
   assert.match(html, /Battery level/);
   assert.match(html, /TIME UNTIL BATTERY IS FULL/);
-  assert.match(html, /No estimate reported by the charger/);
+  assert.match(html, /Insufficient data for an estimate/);
+});
+
+test("charging start shows a fixed 24-hour Tirana time separately from the advancing duration", () => {
+  for (const language of ["sq", "en"]) {
+    const html = render({}, { language });
+    assert.match(html, /<time dateTime="2026-10-01T13:00:00Z">15:00<\/time>/);
+    assert.match(html, language === "sq" ? /NISJA E KARIKIMIT/ : /CHARGING STARTED/);
+    assert.match(html, language === "sq" ? /Kohë e kaluar: 00:02:00/ : /Elapsed: 00:02:00/);
+    const later = render({}, { language, now: Date.parse("2026-10-03T13:02:00Z") });
+    assert.match(later, /<time dateTime="2026-10-01T13:00:00Z">15:00<\/time>/);
+    assert.match(later, language === "sq" ? /2 ditë 00:02:00/ : /2 days 00:02:00/);
+  }
+  assert.match(render({ isDemo: false }), /<time dateTime="2026-10-01T12:00:00Z">14:00<\/time>/);
+  assert.match(render({ startReceivedAt: "2026-12-01T13:00:00Z" }), /<time dateTime="2026-12-01T13:00:00Z">14:00<\/time>/);
+  const invalid = render({ startReceivedAt: "invalid" });
+  assert.match(invalid, /Start time is unavailable/);
+  assert.doesNotMatch(invalid, /Invalid Date|NaN|<time/);
 });
 
 test("reported state of charge drives the accessible progress bar", () => {
