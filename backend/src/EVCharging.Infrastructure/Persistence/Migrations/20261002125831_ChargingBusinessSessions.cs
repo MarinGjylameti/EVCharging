@@ -156,16 +156,51 @@ namespace EVCharging.Infrastructure.Persistence.Migrations
                 UPDATE ocpp_charging_transactions SET session_id=id;
                 UPDATE charging_connection_requests SET state='Expired' WHERE state='Waiting' AND expires_at <= CURRENT_TIMESTAMP;
                 UPDATE charging_connection_requests r SET state='Completed' FROM charging_sessions s WHERE r.session_id=s.id AND s.ended_at IS NOT NULL;
+
+                -- Older simulator starts fell back to Demo:DriverEmail without an explicit claim.
+                -- Decide all backfills together: iteration order must not choose a demo owner.
+                -- Keep conflicting demo sessions unowned, with their old association in the audit.
+                CREATE TEMPORARY TABLE charging_business_session_legacy_claims ON COMMIT DROP AS
+                  SELECT t.*,
+                    (s.is_demo AND t.stopped_at IS NULL AND (
+                      EXISTS (SELECT 1 FROM charging_connection_requests r
+                        WHERE r.state IN ('Waiting','Linked') AND (r.driver_id=t.driver_id
+                          OR (r.station_id=t.station_id AND r.connector_number=t.connector_number)))
+                      OR EXISTS (SELECT 1 FROM ocpp_charging_transactions other
+                        WHERE other.id<>t.id AND other.driver_id IS NOT NULL AND other.stopped_at IS NULL
+                          AND (other.driver_id=t.driver_id
+                            OR (other.station_id=t.station_id AND other.connector_number=t.connector_number))
+                          AND NOT EXISTS (SELECT 1 FROM charging_connection_requests r WHERE r.session_id=other.id))
+                    )) AS defer_ownership
+                  FROM ocpp_charging_transactions t JOIN charging_stations s ON s.id=t.station_id
+                  WHERE t.driver_id IS NOT NULL
+                    AND NOT EXISTS (SELECT 1 FROM charging_connection_requests r WHERE r.session_id=t.id);
+                INSERT INTO audit_entries (id, actor_id, actor_role, action, entity_id, changes_json, recorded_at)
+                  SELECT gen_random_uuid(), '00000000-0000-0000-0000-000000000000'::uuid, 'Migration',
+                    'ChargingBusinessSessions.DemoOwnerUnlinked', t.id,
+                    jsonb_build_object('reason', 'ConflictingLegacyDemoOwner',
+                      'resolution', 'SessionPreservedWithoutOwner',
+                      'legacyTransaction', to_jsonb(t) - 'defer_ownership')::text, CURRENT_TIMESTAMP
+                  FROM charging_business_session_legacy_claims t WHERE t.defer_ownership;
                 INSERT INTO charging_connection_requests (id, driver_id, station_id, connector_number, state, created_at, expires_at, linked_at, session_id)
                   SELECT t.id, t.driver_id, t.station_id, t.connector_number,
                     CASE WHEN t.stopped_at IS NULL THEN 'Linked' ELSE 'Completed' END,
                     t.start_received_at, t.start_received_at + interval '30 minutes', t.start_received_at, t.id
-                  FROM ocpp_charging_transactions t WHERE t.driver_id IS NOT NULL
-                    AND NOT EXISTS (SELECT 1 FROM charging_connection_requests r WHERE r.session_id=t.id);
-                DO $$ BEGIN
-                  IF EXISTS (SELECT driver_id FROM charging_connection_requests WHERE state IN ('Waiting','Linked') GROUP BY driver_id HAVING count(*)>1)
-                    OR EXISTS (SELECT station_id,connector_number FROM charging_connection_requests WHERE state IN ('Waiting','Linked') GROUP BY station_id,connector_number HAVING count(*)>1) THEN
-                    RAISE EXCEPTION 'Conflicting legacy active claims: reconcile ownership before applying ChargingBusinessSessions. No owner has been chosen automatically.';
+                  FROM charging_business_session_legacy_claims t WHERE NOT t.defer_ownership;
+                DO $$ DECLARE conflicts jsonb; BEGIN
+                  SELECT jsonb_agg(jsonb_build_object('claim_id', r.id, 'driver_id', r.driver_id,
+                    'station_id', r.station_id, 'connector_number', r.connector_number,
+                    'state', r.state, 'session_id', r.session_id)) INTO conflicts
+                    FROM charging_connection_requests r WHERE r.state IN ('Waiting','Linked')
+                      AND EXISTS (SELECT 1 FROM charging_connection_requests other
+                        WHERE other.id<>r.id AND other.state IN ('Waiting','Linked')
+                          AND (other.driver_id=r.driver_id
+                            OR (other.station_id=r.station_id AND other.connector_number=r.connector_number)));
+                  IF conflicts IS NOT NULL THEN
+                    RAISE EXCEPTION USING
+                      MESSAGE = 'Conflicting legacy active claims: reconcile ownership before applying ChargingBusinessSessions. No owner has been chosen automatically.',
+                      DETAIL = conflicts::text,
+                      HINT = 'Conflicts remain in explicit connection requests or non-demo ownership. Reconcile the listed claims, then retry; this migration is rolled back.';
                   END IF;
                 END $$;
                 """);

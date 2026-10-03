@@ -76,24 +76,34 @@ Radhët e stream-it janë të kufizuara. Kur një klient ngec, stream-i mbyllet 
 
 - krijon sesionet/lidhësit e pavarur nga protokolli dhe i lidh me rekordet OCPP;
 - kopjon sesionet ekzistuese me të njëjtat ID, kohë, matje dhe tarifë;
-- transferon pronësinë ekzistuese në claim kur ajo mungon;
+- transferon pronësinë ekzistuese në claim kur ajo mungon dhe nuk ka konflikt demo;
 - skadon pritjet e vjetra dhe shënon lidhjet e përfunduara;
 - shton indeksat dhe foreign keys për invariantet e reja;
 - heq kolonat e dyfishuara të pronarit/tarifës/matjeve nga tabela OCPP.
 
-Migrimi ndalet me gabim të qartë nëse ka pronarë aktivë në konflikt ose rekorde pa mapping/tarifën origjinale. Nuk zgjedh vetë pronarin dhe nuk shpik një tarifë nga çmimi i sotëm. Këto të dhëna duhen pajtuar në një kopje testimi para deploy-it. Down refuzohet sepse do të humbiste sesionet e modelit të ri; kthimi pas kërkon plan eksporti/rikthimi të të dhënave.
+Kodi i vjetër caktonte `Demo:DriverEmail` në nisjet pa kërkesë lidhjeje. Kjo mund të linte disa sesione demo aktive për të njëjtin Driver. Migrimi i korrigjuar më 3 tetor 2026 trajton vetëm caktimet në pika `IsDemo` që nuk kanë një kërkesë ekzistuese për atë sesion:
 
-`20261002180835_ChargingMeasurementClocks` është migrim i ri shtues për kohën e veçantë të energjisë, me backfill nga matjet ekzistuese. Migrimi i publikuar në commit-in c36bdb2 ruhet i pandryshuar, kështu që përditësimi funksionon edhe për instalimet që e kanë zbatuar atë.
+- Sesionet e përfunduara dhe caktimet pa konflikt transferohen si më parë.
+- Nëse një caktim demo aktiv bie ndesh me një kërkesë `Waiting`/`Linked` ose me një tjetër caktim aktiv për transferim, sesioni ruhet pa pronar. Vendimi merret për të gjithë kandidatët para insert-it; rendi i rekordeve nuk zgjedh një fitues.
+- Çdo caktim demo i lënë pa pronar ruhet në `audit_entries`, me action `ChargingBusinessSessions.DemoOwnerUnlinked`. `changes_json.legacyTransaction` përmban rekordin e mëparshëm, përfshirë Driver-in, pikën, kohët, matjet dhe tarifën. `actor_role` është `Migration`; `actor_id` është UUID zero.
+- Kërkesat ekzistuese mbeten autoritative. Migrimi nuk ndryshon pronarin e tyre. Pritjet e skaduara dhe lidhjet me sesione të ndaluara normalizohen përpara kontrollit.
+- Sesionet, rekordet OCPP dhe historiku ruhen. Përdoruesi mund të lidhet me një sesion demo pa pronar përmes rrjedhës së zakonshme; kufizimi i një lidhjeje aktive për Driver mbetet në fuqi.
+
+Konfliktet mes kërkesave eksplicite ose pronarëve të pikave jo-demo ende e ndalin migrimin. Gabimi përfshin `DETAIL` me ID-të e kërkesave/Driver-ëve/pikave dhe `HINT` për pajtimin e tyre (shfaqja e `DETAIL` varet nga konfigurimi Npgsql). Rekordet pa mapping/tarifën origjinale gjithashtu refuzohen. Dështimi kthen pas edhe ndryshimet dhe auditin e këtij migrimi. Down refuzohet sepse do të humbiste sesionet e modelit të ri; kthimi pas kërkon plan eksporti/rikthimi të të dhënave.
+
+Korrigjimi është brenda `ChargingBusinessSessions`, sepse një migrim i ri pas tij nuk do të arrihej nga instalimi që po dështon. Instalimet që e kanë përfunduar atë nuk e ekzekutojnë përsëri. Për instalimin e dështuar, publiko kodin e korrigjuar dhe përsërit komandën e zakonshme `--migrate`; nuk duhet fshirë databaza ose historia e migrimeve.
+
+`20261002180835_ChargingMeasurementClocks` është migrim shtues për kohën e veçantë të energjisë, me backfill nga matjet ekzistuese. Skema përfundimtare dhe snapshot-i nuk ndryshojnë nga korrigjimi i caktimeve demo.
 
 Migrimet dhe indekset janë kontrolluar nga modeli dhe SQL i gjeneruar offline. Zbatimi real në PostgreSQL mbetet i paprovuar në këtë laptop.
 
 ## Provat
 
-Rezultati lokal: **79 teste backend të kaluara, 4 prova PostgreSQL të paekzekutuara; 45 teste web të kaluara.** Typecheck dhe build production i web-it kaluan. Replay offline dha 20 kWh, 7.00 EUR dhe një dublikatë të injoruar.
+Verifikimi i korrigjimit të migrimit më 3 tetor 2026: **79 teste backend të kaluara, 9 prova PostgreSQL të paekzekutuara.** SQL-ja e përditësimit u gjenerua offline me EF dhe kontrolli i modelit/snapshot-it kaloi. Docker-i lokal refuzoi aksesin; migrimi nuk u ekzekutua mbi një databazë PostgreSQL. Në verifikimin e mëparshëm kaluan 45 teste web, typecheck dhe build production; replay offline dha 20 kWh, 7.00 EUR dhe një dublikatë të injoruar. Web-i dhe replay nuk u ndryshuan nga ky korrigjim.
 
 - Backend: lifecycle OCPP → DB → payload privat SSE; SIM-003 me orë të vjetër, pause/resume/fault/stop/restart; fuqi e raportuar dhe e skaduar; SoC; privatësi; claim para/pas nisjes, tarifa fillestare dhe rihapja nga një klient tjetër; konflikte të Driver-it; model/migration snapshot.
 - Web: deltat e sesionit pa GET, 1,000 matje pa ringarkim harte/historiku, deduplikim, ruajtja e versionit të ri, snapshot që nuk rikthen një pikë të arkivuar, rilidhje, timeout dhe skadim autentikimi.
-- Rruga PostgreSQL: katër teste të veçuara për migrimin e të dhënave ekzistuese, garat claim/start dhe dy Driver/pika, indeksat unikë dhe rollback të claim/outbox. Janë **të çaktivizuara si parazgjedhje dhe nuk u ekzekutuan**. InMemory nuk provon locking/FK/rollback.
+- Rruga PostgreSQL: katër teste për migrimin bazë, garat claim/start dhe dy Driver/pika, indeksat unikë dhe rollback të claim/outbox. Pesë teste shtesë mbulojnë konfliktet demo, auditin/historikun, pronarin eksplicit, konfliktet me pritje sipas Driver-it ose konektorit, normalizimin e gjendjeve, retry dhe rollback për konflikte eksplicite/jo-demo. Janë **të çaktivizuara si parazgjedhje dhe nuk u ekzekutuan**. InMemory nuk provon locking/FK/rollback.
 
 Për provën PostgreSQL kërkohet paraprakisht një databazë bosh, e përkohshme, me emër që fillon `evcharging_test`, dhe autorizimi për atë lidhje. Testet krijojnë dhe pastrojnë vetëm një skemë me emër rastësor brenda saj; nuk përdorin skemën `public`. Nuk përdoret production dhe nuk krijohet shërbim Docker nga testet.
 

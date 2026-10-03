@@ -28,7 +28,7 @@ public sealed class PostgreSqlFactAttribute : FactAttribute
     }
 }
 
-public sealed class PostgreSqlChargingTests
+public sealed partial class PostgreSqlChargingTests
 {
     [PostgreSqlFact]
     public async Task MigrationPreservesLegacySessionOwnerPhysicalTimesAndTariff()
@@ -287,7 +287,8 @@ public sealed class PostgreSqlChargingTests
             );
 
         public static async Task<DatabaseTest> CreateAsync(
-            Func<ChargingDbContext, Task>? seedLegacy = null
+            Func<ChargingDbContext, Task>? seedLegacy = null,
+            bool migrateToLatest = true
         )
         {
             var builder = new NpgsqlConnectionStringBuilder(
@@ -326,6 +327,8 @@ public sealed class PostgreSqlChargingTests
                     await seedLegacy(db);
                     db.ChangeTracker.Clear();
                 }
+                if (!migrateToLatest)
+                    return test;
                 await db.Database.MigrateAsync(); // Real migration SQL, keys and checks, not EnsureCreated.
                 test.factory = new ApiFactory(
                     simulator: true,
