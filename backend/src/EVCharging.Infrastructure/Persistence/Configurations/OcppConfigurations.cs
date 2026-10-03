@@ -22,6 +22,9 @@ internal sealed class OcppChargePointConfiguration : IEntityTypeConfiguration<Oc
         e.Property(x => x.Imsi).HasMaxLength(32);
         e.Property(x => x.MeterType).HasMaxLength(64);
         e.Property(x => x.MeterSerialNumber).HasMaxLength(64);
+        e.Property(x => x.ReportedStatus).HasMaxLength(30);
+        e.Property(x => x.ErrorCode).HasMaxLength(50);
+        e.Property(x => x.ErrorInfo).HasMaxLength(80);
         e.HasIndex(x => x.Identity).IsUnique();
         e.HasIndex(x => x.LastSeenAt);
     }
@@ -38,6 +41,7 @@ internal sealed class OcppConnectorConfiguration : IEntityTypeConfiguration<Ocpp
         e.HasKey(x => x.Id);
         e.Property(x => x.ReportedStatus).HasMaxLength(30);
         e.Property(x => x.ErrorCode).HasMaxLength(50);
+        e.Property(x => x.ErrorInfo).HasMaxLength(80);
         e.Property(x => x.Version).IsConcurrencyToken();
         e.HasOne<OcppChargePoint>()
             .WithMany()

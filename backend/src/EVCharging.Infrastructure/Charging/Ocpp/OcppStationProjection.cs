@@ -18,10 +18,13 @@ public sealed class OcppStationProjection(
         int number,
         string status,
         DateTimeOffset observed,
-        CancellationToken ct
+        CancellationToken ct,
+        string? errorCode = null,
+        string? info = null
     )
     {
         var now = clock.GetUtcNow();
+        var device = await db.OcppChargePoints.SingleAsync(x => x.Id == deviceId, ct);
         var connectors = await db
             .OcppConnectors.Where(x =>
                 x.ChargePointId == deviceId && (number == 0 || x.ConnectorNumber == number)
@@ -29,8 +32,6 @@ public sealed class OcppStationProjection(
             .ToListAsync(ct);
         foreach (var connector in connectors)
         {
-            if (number == 0 && status is not ("Unavailable" or "Faulted"))
-                continue;
             var simulation =
                 options.Value.SimulatorEnabled
                 && await db.Stations.AnyAsync(
@@ -43,11 +44,35 @@ public sealed class OcppStationProjection(
                     : observed < now.AddMinutes(-5) || observed > now.AddMinutes(5)
             )
                 continue;
-            if (connector.StatusObservedAt is { } previous && observed < previous)
+            var previous = number == 0 ? device.StatusObservedAt : connector.StatusObservedAt;
+            // Demo forms retain a fixed timestamp while accelerated runs advance it.
+            // Live demo messages are serialized by the gateway; use their receipt order.
+            // Physical chargers retain event-time ordering and the freshness window.
+            if (!simulation && previous is not null && observed < previous)
                 continue;
-            connector.ReportedStatus = status;
-            connector.StatusObservedAt = observed;
-            connector.StatusReceivedAt = now;
+            if (number == 0)
+            {
+                device.ReportedStatus = status;
+                device.ErrorCode = errorCode;
+                device.ErrorInfo = info;
+                device.StatusObservedAt = observed;
+            }
+            else
+            {
+                connector.ReportedStatus = status;
+                connector.StatusObservedAt = observed;
+                connector.StatusReceivedAt = now;
+                // Synthetic start/stop projections must not clear an actual device fault.
+                if (errorCode is not null)
+                {
+                    connector.ErrorCode = errorCode;
+                    connector.ErrorInfo = info;
+                }
+            }
+            var fault = connector.ErrorCode is not (null or "NoError") ? connector.ErrorCode : null;
+            // OCPP 1.6 permits warning codes while charging continues. Only the
+            // reported Faulted status declares an unavailable faulted connector.
+            var effectiveStatus = Map(connector.ReportedStatus);
             connector.Version++;
             if (connector.BusinessConnectorId is { } id)
                 await receiver.ReceiveAsync(
@@ -55,7 +80,7 @@ public sealed class OcppStationProjection(
                         "OCPP",
                         Guid.NewGuid().ToString(),
                         deviceId.ToString(),
-                        number.ToString(),
+                        connector.ConnectorNumber.ToString(),
                         null,
                         ChargerEventKind.StatusReported,
                         observed,
@@ -64,7 +89,16 @@ public sealed class OcppStationProjection(
                         null,
                         ConnectorId: id,
                         ReceivedAt: now,
-                        Status: Map(status)
+                        Status: effectiveStatus,
+                        FaultCode: fault,
+                        FaultInfo: fault is null ? null : connector.ErrorInfo,
+                        DeviceStatus: device.ReportedStatus,
+                        DeviceFaultCode: device.ErrorCode is not (null or "NoError")
+                            ? device.ErrorCode
+                            : null,
+                        DeviceFaultInfo: device.ErrorCode is not (null or "NoError")
+                            ? device.ErrorInfo
+                            : null
                     ),
                     ct
                 );

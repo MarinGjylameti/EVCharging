@@ -88,14 +88,7 @@ internal static class OcppPayload
                         sampleIndex++,
                         timestamp,
                         text,
-                        decimal.TryParse(
-                            text,
-                            NumberStyles.Float,
-                            CultureInfo.InvariantCulture,
-                            out var numeric
-                        ) && numeric is > -1_000_000_000_000m and < 1_000_000_000_000m
-                            ? decimal.Round(numeric, 8)
-                            : null,
+                        Numeric(text),
                         OptionalText(sample, "measurand", 80) ?? "Energy.Active.Import.Register",
                         OptionalText(sample, "unit", 20),
                         OptionalText(sample, "phase", 20),
@@ -108,6 +101,21 @@ internal static class OcppPayload
             meterIndex++;
         }
         return result;
+    }
+
+    private static decimal? Numeric(string text)
+    {
+        if (
+            !decimal.TryParse(
+                text,
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out var numeric
+            )
+        )
+            return null;
+        var rounded = decimal.Round(numeric, 8);
+        return rounded is > -1_000_000_000_000m and < 1_000_000_000_000m ? rounded : null;
     }
 }
 

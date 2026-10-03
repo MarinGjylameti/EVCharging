@@ -4,8 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { Language, StationCharging } from "../../../../contracts/account";
 import { useLiveSnapshot } from "./use-live-snapshot";
-import { ChargingProgress } from "./charging-progress";
+import { ChargingProgress, chargingLabels } from "./charging-progress";
 import { chargingLivePolicy } from "./live-update-policy";
+import { ChargingFault } from "./charging-fault";
+import { SimulatorDiagnostics } from "./simulator-diagnostics";
 
 export function StationChargingView({ initial, language }: { initial: StationCharging; language: Language }) {
   const sq = language === "sq";
@@ -74,6 +76,12 @@ export function StationChargingView({ initial, language }: { initial: StationCha
       <span><small>{sq ? "TARIFA" : "TARIFF"}</small><strong>{number(session?.unitPricePerKWh ?? station.pricePerKWh)} {session?.currency ?? station.currency} / kWh</strong></span>
     </div>
     {error && <div className="form-error" role="alert">{error}</div>}
+    {snapshot.connector?.deviceStatus && <section aria-label={sq ? "Pajisja qendrore e pikës" : "Station controller"}>
+      <p className="charge-point-notice" role="status">{sq ? "Statusi i pajisjes qendrore" : "Station controller status"}: {chargingLabels[snapshot.connector.deviceStatus]?.[sq ? 0 : 1] ?? snapshot.connector.deviceStatus}</p>
+      {snapshot.connector.deviceFaultCode && <ChargingFault code={snapshot.connector.deviceFaultCode} info={snapshot.connector.deviceFaultInfo} language={language} status={snapshot.connector.deviceStatus} />}
+    </section>}
+    {!active && snapshot.connector?.faultCode && <ChargingFault code={snapshot.connector.faultCode} info={snapshot.connector.faultInfo} language={language} status={snapshot.connector.status} />}
+    {!active && snapshot.connector && <p className="charge-point-notice" role="status">{sq ? "Statusi i lidhësit" : "Connector status"}: {chargingLabels[snapshot.connector.status]?.[sq ? 0 : 1] ?? snapshot.connector.status}</p>}
     {snapshot.inUse && !active && <p className="charge-point-notice" role="status">{sq ? "Pika po përdoret nga një drejtues tjetër. Karikimi i tij nuk shfaqet në llogarinë tënde." : "Another driver is using this charger. Their session is private."}</p>}
     {session ? <ChargingProgress session={session} language={language} now={now || Date.parse(session.startReceivedAt ?? session.startedAt)} stale={unavailable} />
       : <section className="charge-waiting-card" aria-labelledby="charge-wait-title">
@@ -107,5 +115,6 @@ export function StationChargingView({ initial, language }: { initial: StationCha
       ? `Për testin aktual, QR anashkalohet. Lidh simulatorin ${station.code} dhe shtyp Start charging me TAG-001, lidhësi 1.`
       : `QR is bypassed for this test. Connect simulator ${station.code}, then press Start charging with TAG-001, connector 1.`}</p>}
     {!snapshot.canConnect && !session && <p className="charge-point-notice">{sq ? "Lidhja pa QR është e aktivizuar vetëm për pikat e testimit." : "Connection without QR is enabled only for test charge points."}</p>}
+    {snapshot.canConnect && snapshot.diagnostics && <SimulatorDiagnostics key={session?.id ?? stationId} initial={snapshot.diagnostics} session={session} language={language} />}
   </div>;
 }

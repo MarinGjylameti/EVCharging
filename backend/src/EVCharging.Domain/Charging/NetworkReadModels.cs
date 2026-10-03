@@ -1,6 +1,6 @@
 namespace EVCharging.Domain.Charging;
 
-// Read models for the driver map and history. Demo rows are seeded only by BrowserTestHost.
+// Read models for the driver map and history. Demo fixtures are explicitly enabled.
 public sealed class ChargingStation
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -23,6 +23,7 @@ public sealed class ChargingStation
     // Null for legacy/demo records. Live projections record their source and
     // both device and server times so readers can reject stale availability.
     public string? StatusSource { get; set; }
+    public string? WarningCode { get; set; }
     public DateTimeOffset? StatusObservedAt { get; set; }
     public DateTimeOffset? StatusReceivedAt { get; set; }
 

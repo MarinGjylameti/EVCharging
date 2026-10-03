@@ -111,7 +111,7 @@ public sealed class OcppMeterHandler(
         foreach (
             var group in records
                 .Where(x =>
-                    x.ObservedAt >= transaction.StartedAt
+                    (simulation || x.ObservedAt >= transaction.StartedAt)
                     && x.ObservedAt <= (simulation ? now.AddDays(1) : now.AddMinutes(5))
                 )
                 .OrderBy(x => x.ObservedAt)
@@ -129,16 +129,7 @@ public sealed class OcppMeterHandler(
             );
             var power = readings.LastOrDefault(x => x.Measurand == "Power.Active.Import");
             var soc = OcppMeterReading.StateOfCharge(group, simulation);
-            var temperature = group
-                .FirstOrDefault(x =>
-                    x.Measurand == "Temperature"
-                    && x.Phase == null
-                    && x.Format != "SignedData"
-                    && x.Unit is null or "Celsius"
-                )
-                ?.NumericValue;
-            if (energy is null && power is null && soc is null && temperature is null)
-                continue;
+            var temperature = OcppMeterReading.Temperature(group, simulation);
             await receiver.ReceiveAsync(
                 new(
                     "OCPP",
@@ -157,7 +148,22 @@ public sealed class OcppMeterHandler(
                     StateOfCharge: soc,
                     TemperatureCelsius: temperature,
                     EnergyScope: energy?.Scope,
-                    PowerScope: power?.Scope
+                    PowerScope: power?.Scope,
+                    UseReceiptOrder: simulation,
+                    Readings: group
+                        .Take(64)
+                        .Select(x => new ChargingSampleDiagnostic(
+                            x.Measurand,
+                            x.ValueText,
+                            x.Unit,
+                            x.Phase,
+                            x.Location,
+                            x.Context,
+                            x.Format,
+                            x.ObservedAt,
+                            x.ReceivedAt
+                        ))
+                        .ToArray()
                 ),
                 ct
             );

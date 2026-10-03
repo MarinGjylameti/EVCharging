@@ -30,7 +30,9 @@ public sealed record StationChanged(
     long EntityVersion = 0,
     DateTimeOffset OccurredAt = default,
     DriverStationDto? Station = null,
-    DriverChargingSession? Session = null
+    DriverChargingSession? Session = null,
+    DriverConnectorState? Connector = null,
+    ChargingCommandResult? Command = null
 );
 
 public interface IStationEventStream

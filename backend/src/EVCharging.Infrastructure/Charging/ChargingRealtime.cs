@@ -17,7 +17,9 @@ internal static class ChargingRealtime
         DateTimeOffset now,
         Guid? driverId = null,
         DriverStationDto? station = null,
-        DriverChargingSession? session = null
+        DriverChargingSession? session = null,
+        DriverConnectorState? connector = null,
+        ChargingCommandResult? command = null
     )
     {
         var entry = new RealtimeOutboxEvent
@@ -44,11 +46,24 @@ internal static class ChargingRealtime
                 version,
                 now,
                 station,
-                session
+                session,
+                connector,
+                command
             )
         );
         db.RealtimeOutbox.Add(entry);
     }
+
+    public static DriverConnectorState ConnectorDto(ChargingConnector connector) =>
+        new(
+            connector.IsOnline ? connector.Status.ToString() : "ConnectionLost",
+            connector.FaultCode,
+            connector.FaultInfo,
+            connector.Version,
+            connector.DeviceStatus,
+            connector.DeviceFaultCode,
+            connector.DeviceFaultInfo
+        );
 
     public static DriverStationDto StationDto(ChargingStation station, DateTimeOffset now) =>
         new(
@@ -70,7 +85,8 @@ internal static class ChargingRealtime
             AvailabilityForecastRules.ForDriver(station, now),
             station.StatusSource,
             station.StatusObservedAt,
-            station.StatusReceivedAt
+            station.StatusReceivedAt,
+            station.WarningCode
         );
 
     public static DriverChargingSession SessionDto(
@@ -120,7 +136,16 @@ internal static class ChargingRealtime
             session.UnitPriceSnapshot,
             power is not null && !ended ? "Reported" : null,
             power is not null && !ended ? powerUntil : null,
-            session.Version
+            session.Version,
+            ended ? null : connector.FaultCode,
+            ended ? null : connector.FaultInfo,
+            session.LatestReadingsJson is null
+                ? null
+                : JsonSerializer.Deserialize<ChargingSampleDiagnostic[]>(
+                    session.LatestReadingsJson
+                ),
+            session.StopReason,
+            session.CompletionWarning
         );
     }
 }

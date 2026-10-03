@@ -8,7 +8,9 @@ public sealed record DriverStationCharging(
     bool DeviceConnected,
     bool InUse,
     ChargingConnectionDto? ConnectionRequest,
-    DriverChargingSession? Session
+    DriverChargingSession? Session,
+    DriverConnectorState? Connector = null,
+    ChargingDiagnostics? Diagnostics = null
 );
 
 public interface IDriverCharging

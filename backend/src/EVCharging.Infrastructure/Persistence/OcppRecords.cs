@@ -8,6 +8,7 @@ public sealed class OcppChargePoint
     public string Identity { get; set; } = "";
     public string ProtocolVersion { get; set; } = "1.6J";
     public bool IsEnabled { get; set; }
+    public long CommandVersion { get; set; }
     public string? Vendor { get; set; }
     public string? Model { get; set; }
     public string? ChargePointSerialNumber { get; set; }
@@ -20,6 +21,10 @@ public sealed class OcppChargePoint
     public DateTimeOffset? LastBootAt { get; set; }
     public DateTimeOffset? LastSeenAt { get; set; }
     public DateTimeOffset? LastHeartbeatAt { get; set; }
+    public string? ReportedStatus { get; set; }
+    public string? ErrorCode { get; set; }
+    public string? ErrorInfo { get; set; }
+    public DateTimeOffset? StatusObservedAt { get; set; }
 }
 
 public sealed class OcppConnector
@@ -34,6 +39,7 @@ public sealed class OcppConnector
     public string? ReportedStatus { get; set; }
     public string? ErrorCode { get; set; }
     public DateTimeOffset? StatusObservedAt { get; set; }
+    public string? ErrorInfo { get; set; }
     public DateTimeOffset? StatusReceivedAt { get; set; }
     public long Version { get; set; }
 }
@@ -63,6 +69,7 @@ public sealed class OcppInboundMessage
     public string PayloadHash { get; set; } = "";
     public string? ResponseJson { get; set; }
     public string ProcessingState { get; set; } = "Received";
+    public long CommandVersion { get; set; }
     public string? FailureCode { get; set; }
     public DateTimeOffset ReceivedAt { get; set; }
     public DateTimeOffset? ProcessedAt { get; set; }

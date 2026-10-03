@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useDriverLiveData } from "./use-driver-live-data";
+import { chargingFaultLabel, StationWarning } from "./charging-fault";
 import type { ChargingHistory, Language, Station } from "../../../../contracts/account";
 import { albanianCities } from "@/lib/albanian-cities";
 import { remainingChargingMinutes } from "@/lib/availability";
@@ -255,12 +256,13 @@ export function DriverMap({stations: initialStations, history: initialHistory, l
             const at=position(station);
             const selected=active?.id===station.id;
             const remaining=nowMs===null?null:remainingChargingMinutes(station.availabilityForecast,nowMs);
-            return <Fragment key={station.id}><button type="button" className={`map-pin status-${station.status.toLowerCase()}${selected?" selected":""}`}
+            const warning = station.warningCode && station.warningCode !== "NoError";
+            return <Fragment key={station.id}><button type="button" className={`map-pin status-${station.status.toLowerCase()}${selected?" selected":""}${warning?" has-warning":""}`}
               style={{left:at.left,top:at.top}} onClick={()=>{
                 if (station.statusSource === "Device") router.push(`/driver/stations/${station.id}`);
                 else setSelectedId(station.id);
               }}
-              aria-label={`${station.name}, ${(sq?statusSq:statusEn)[station.status]}${remaining!==null?`, ${remaining} ${sq?"min të mbetura":"min remaining"}`:""}`}
+              aria-label={`${station.name}, ${(sq?statusSq:statusEn)[station.status]}${warning?`, ${sq?"paralajmërim":"warning"}: ${chargingFaultLabel(station.warningCode!, language)}`:""}${remaining!==null?`, ${remaining} ${sq?"min të mbetura":"min remaining"}`:""}`}
               aria-pressed={selected} title={station.name}><span aria-hidden="true">ϟ</span></button>
               {station.status==="Charging"&&remaining!==null&&<span className="map-eta-badge" aria-hidden="true"
                 style={{left:at.left+17,top:at.top-51}}>~{remaining} min</span>}</Fragment>;
@@ -268,7 +270,7 @@ export function DriverMap({stations: initialStations, history: initialHistory, l
           {driverLocation&&<div className="map-user-pin" role="img" aria-label={sq?"Vendndodhja ime":"My location"}
             style={position(driverLocation)}>●</div>}
           {active&&selectedId===active.id&&<div className="map-selected-card">
-            <div><strong>{active.name}</strong><small>{(sq?statusSq:statusEn)[active.status]} · {active.powerKW} kW</small></div>
+            <div><strong>{active.name}</strong><small>{(sq?statusSq:statusEn)[active.status]} · {active.powerKW} kW</small><StationWarning code={active.warningCode} language={language} /></div>
             <button type="button" onClick={()=>stationPanelRef.current?.scrollIntoView({behavior:"smooth",block:"start"})}>
               {sq?"Detajet":"Details"} ↓</button>
           </div>}
@@ -289,6 +291,7 @@ export function DriverMap({stations: initialStations, history: initialHistory, l
             <strong>{active?.name ?? (sq ? "Zgjidh një pikë" : "Choose a station")}</strong></div>
           {active ? <>
             <div className={`station-status status-text-${active.status.toLowerCase()}`}><i/>{(sq?statusSq:statusEn)[active.status]}</div>
+            <StationWarning code={active.warningCode} language={language} />
             <p className="station-address">{active.address}<br/>{active.city}</p>
             {driverLocation&&<p className="station-distance">{sq?"Largësia nga ti":"Distance from you"}: {distanceKm(driverLocation,active).toFixed(1)} km</p>}
             <a className="station-directions-link" href={directionsUrl(mapProvider, active)}
@@ -319,7 +322,7 @@ export function DriverMap({stations: initialStations, history: initialHistory, l
               setView(previous=>({...previous,center:{latitude:station.latitude,longitude:station.longitude},zoom:Math.max(previous.zoom,13)}));
             }} aria-pressed={active?.id===station.id}>
               <span><strong>{station.name}</strong><small>{station.connectorType} · {station.powerKW} kW
-                {driverLocation?` · ${distanceKm(driverLocation,station).toFixed(1)} km`:""}</small></span>
+                {driverLocation?` · ${distanceKm(driverLocation,station).toFixed(1)} km`:""}</small><StationWarning code={station.warningCode} language={language} /></span>
               <i className={`station-dot status-${station.status.toLowerCase()}`}/></button>)}
           </div>
         </div>

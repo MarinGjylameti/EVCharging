@@ -75,6 +75,8 @@ public static class StationEventsEndpoints
                             occurredAt = events.Current.OccurredAt,
                             station = events.Current.Station,
                             session = events.Current.Session,
+                            connector = events.Current.Connector,
+                            command = events.Current.Command,
                         },
                         new JsonSerializerOptions(JsonSerializerDefaults.Web)
                     );

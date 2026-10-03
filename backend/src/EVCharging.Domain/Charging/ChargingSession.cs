@@ -26,6 +26,9 @@ public sealed class ChargingSession
     public DateTimeOffset? TemperatureObservedAt { get; set; }
     public string? EnergyScope { get; set; }
     public string? PowerScope { get; set; }
+    public string? LatestReadingsJson { get; set; }
+    public string? StopReason { get; set; }
+    public string? CompletionWarning { get; set; }
     public ChargingState Status { get; set; } = ChargingState.Connecting;
     public long Version { get; set; }
     public bool IsDemo { get; set; }

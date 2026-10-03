@@ -12,7 +12,8 @@ public sealed class DriverChargingService(
     IDriverQueries queries,
     TimeProvider clock,
     StationEventSignal events,
-    IChargingClaimVerification verification
+    IChargingClaimVerification verification,
+    IChargingDiagnostics diagnostics
 ) : IDriverCharging
 {
     public async Task<DriverStationCharging> GetAsync(
@@ -50,7 +51,21 @@ public sealed class DriverChargingService(
             claim?.DriverId == driverId && claim.State == "Waiting"
                 ? new(claim.Id, claim.State, claim.ExpiresAt)
                 : null,
-            own
+            own,
+            connector is null ? null : ChargingRealtime.ConnectorDto(connector),
+            verification.DemoBypassEnabled
+            && station.IsDemo
+            && connector is not null
+            && (claim?.DriverId == driverId || own is not null && claim is null)
+                ? await diagnostics.GetAsync(
+                    connector.Id,
+                    claim?.State == "Waiting" ? null : own?.Id,
+                    ct,
+                    claim?.State == "Waiting"
+                        ? claim.CreatedAt
+                        : own?.StartReceivedAt ?? claim?.CreatedAt
+                )
+                : null
         );
     }
 

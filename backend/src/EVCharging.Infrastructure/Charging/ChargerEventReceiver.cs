@@ -1,3 +1,4 @@
+using System.Text.Json;
 using EVCharging.Application.Charging;
 using EVCharging.Domain.Charging;
 using EVCharging.Domain.Identity;
@@ -31,6 +32,14 @@ public sealed class ChargerEventReceiver(
         {
             var priorStatus = connector.Status;
             var priorOnline = connector.IsOnline;
+            if (change.Kind == ChargerEventKind.StatusReported)
+            {
+                connector.FaultCode = change.FaultCode;
+                connector.FaultInfo = change.FaultInfo;
+                connector.DeviceStatus = change.DeviceStatus;
+                connector.DeviceFaultCode = change.DeviceFaultCode;
+                connector.DeviceFaultInfo = change.DeviceFaultInfo;
+            }
             connector.IsOnline = change.Kind != ChargerEventKind.Disconnected;
             if (change.Status is { } status)
                 connector.Status = status;
@@ -62,7 +71,8 @@ public sealed class ChargerEventReceiver(
                 "ChargingConnector",
                 connector.Id,
                 connector.Version,
-                now
+                now,
+                connector: ChargingRealtime.ConnectorDto(connector)
             );
             await projection.RefreshAsync(connector.StationId, ct);
             return;
@@ -142,7 +152,8 @@ public sealed class ChargerEventReceiver(
                 "ChargingConnector",
                 connector.Id,
                 connector.Version,
-                now
+                now,
+                connector: ChargingRealtime.ConnectorDto(connector)
             );
             return;
         }
@@ -152,9 +163,16 @@ public sealed class ChargerEventReceiver(
             return;
         if (change.Kind == ChargerEventKind.Measurement)
         {
-            if (change.ObservedAt < session.StartedAt)
+            var receiptOrder = session.IsDemo && change.UseReceiptOrder;
+            if (!receiptOrder && change.ObservedAt < session.StartedAt)
                 return;
-            if (session.EnergyObservedAt is null || change.ObservedAt >= session.EnergyObservedAt)
+            if (change.Readings is not null)
+                session.LatestReadingsJson = JsonSerializer.Serialize(change.Readings);
+            if (
+                receiptOrder
+                || session.EnergyObservedAt is null
+                || change.ObservedAt >= session.EnergyObservedAt
+            )
             {
                 if (change.SessionEnergyKWh is { } energy && energy >= (session.EnergyKWh ?? 0))
                 {
@@ -168,16 +186,21 @@ public sealed class ChargerEventReceiver(
                     session.EnergyScope = change.EnergyScope;
                 }
             }
-            if (change.ObservedAt >= session.LastMeasurementAt)
+            if (receiptOrder || change.ObservedAt >= session.LastMeasurementAt)
             {
                 session.LastMeasurementAt = change.ObservedAt;
                 session.LastMeasurementReceivedAt = now;
             }
             if (
                 change.PowerKW is { } power
-                && (session.PowerObservedAt is null || change.ObservedAt >= session.PowerObservedAt)
                 && (
-                    connector.StatusObservedAt is null
+                    receiptOrder
+                    || session.PowerObservedAt is null
+                    || change.ObservedAt >= session.PowerObservedAt
+                )
+                && (
+                    receiptOrder
+                    || connector.StatusObservedAt is null
                     || change.ObservedAt >= connector.StatusObservedAt
                 )
             )
@@ -189,7 +212,11 @@ public sealed class ChargerEventReceiver(
             }
             if (
                 change.StateOfCharge is { } soc
-                && (session.SocObservedAt is null || change.ObservedAt >= session.SocObservedAt)
+                && (
+                    receiptOrder
+                    || session.SocObservedAt is null
+                    || change.ObservedAt >= session.SocObservedAt
+                )
             )
             {
                 session.StateOfCharge = soc;
@@ -198,7 +225,8 @@ public sealed class ChargerEventReceiver(
             if (
                 change.TemperatureCelsius is { } temperature
                 && (
-                    session.TemperatureObservedAt is null
+                    receiptOrder
+                    || session.TemperatureObservedAt is null
                     || change.ObservedAt >= session.TemperatureObservedAt
                 )
             )
@@ -215,6 +243,8 @@ public sealed class ChargerEventReceiver(
                 throw new InvalidOperationException("End precedes physical start.");
             session.EndedAt = change.ObservedAt;
             session.StopReceivedAt = now;
+            session.StopReason = change.StopReason;
+            session.CompletionWarning = change.CompletionWarning;
             session.EnergyKWh = change.SessionEnergyKWh;
             session.EnergyScope = "Total";
             session.PowerKW = 0;

@@ -21,7 +21,8 @@ public sealed record DriverStationDto(
     AvailabilityForecast? AvailabilityForecast,
     string? StatusSource,
     DateTimeOffset? StatusObservedAt,
-    DateTimeOffset? StatusReceivedAt
+    DateTimeOffset? StatusReceivedAt,
+    string? WarningCode = null
 );
 
 public sealed record DriverHistoryDto(
@@ -81,5 +82,10 @@ public sealed record DriverChargingSession(
     decimal? UnitPricePerKWh,
     string? PowerSource = null,
     DateTimeOffset? PowerValidUntil = null,
-    long Version = 0
+    long Version = 0,
+    string? FaultCode = null,
+    string? FaultInfo = null,
+    IReadOnlyList<ChargingSampleDiagnostic>? Readings = null,
+    string? StopReason = null,
+    string? CompletionWarning = null
 );

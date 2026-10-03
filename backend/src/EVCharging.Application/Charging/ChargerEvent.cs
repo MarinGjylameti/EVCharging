@@ -31,7 +31,16 @@ public sealed record ChargerEvent(
     decimal? StateOfCharge = null,
     decimal? TemperatureCelsius = null,
     string? EnergyScope = null,
-    string? PowerScope = null
+    string? PowerScope = null,
+    string? FaultCode = null,
+    string? FaultInfo = null,
+    bool UseReceiptOrder = false,
+    IReadOnlyList<ChargingSampleDiagnostic>? Readings = null,
+    string? StopReason = null,
+    string? CompletionWarning = null,
+    string? DeviceStatus = null,
+    string? DeviceFaultCode = null,
+    string? DeviceFaultInfo = null
 );
 
 // Adapters authenticate and normalize their own protocol. UI clients cannot implement this port.

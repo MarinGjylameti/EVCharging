@@ -54,7 +54,7 @@ public sealed class OcppTransactionHandler(
             if (active.StoppedAt is null)
                 throw new OcppFault(
                     "OccurrenceConstraintViolation",
-                    "The connector already has an active transaction."
+                    $"The connector already has active transaction {active.Ocpp16TransactionId}. Send StopTransaction for that transaction before starting another."
                 );
             active.PhysicalClosedAt = clock.GetUtcNow();
             await db.SaveChangesAsync(ct);
@@ -139,6 +139,8 @@ public sealed class OcppTransactionHandler(
         var meterStop = OcppPayload.Integer(payload, "meterStop");
         var stopped = OcppPayload.Timestamp(payload);
         var reason = OcppPayload.OptionalText(payload, "reason", 40);
+        if (reason is not null && !OcppValues.StopReasons.Contains(reason))
+            throw new OcppFault("PropertyConstraintViolation", "Unknown stop reason.");
         var samples = OcppPayload.Samples(payload, "transactionData");
         var transaction =
             await db.OcppChargingTransactions.SingleOrDefaultAsync(
@@ -174,6 +176,14 @@ public sealed class OcppTransactionHandler(
             x => x.ChargePointId == device.Id && x.ConnectorNumber == transaction.ConnectorNumber,
             ct
         );
+        decimal? finalEnergy =
+            meterStop >= transaction.MeterStartWh
+                ? (meterStop - transaction.MeterStartWh) / 1000m
+                : null;
+        var session = await db.ChargingSessions.SingleAsync(x => x.Id == transaction.SessionId, ct);
+        var meterRegression = finalEnergy is null || finalEnergy < session.EnergyKWh;
+        if (meterRegression)
+            finalEnergy = null;
         await receiver.ReceiveAsync(
             new(
                 "OCPP",
@@ -183,14 +193,14 @@ public sealed class OcppTransactionHandler(
                 transactionId.ToString(),
                 ChargerEventKind.Stopped,
                 stopped,
-                meterStop >= transaction.MeterStartWh
-                    ? (meterStop - transaction.MeterStartWh) / 1000m
-                    : null,
+                finalEnergy,
                 null,
                 null,
                 transaction.SessionId,
                 connector.BusinessConnectorId,
-                clock.GetUtcNow()
+                clock.GetUtcNow(),
+                StopReason: reason,
+                CompletionWarning: meterRegression ? "FinalMeterRegression" : null
             ),
             ct
         );

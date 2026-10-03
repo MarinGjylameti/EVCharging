@@ -40,6 +40,7 @@ internal sealed class ChargingStationConfiguration : IEntityTypeConfiguration<Ch
         e.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
         e.Property(x => x.ManualRestriction).HasConversion<string>().HasMaxLength(20);
         e.Property(x => x.StatusSource).HasMaxLength(40);
+        e.Property(x => x.WarningCode).HasMaxLength(50);
         e.Property(x => x.ForecastSource).HasMaxLength(20);
         e.Property(x => x.Version).IsConcurrencyToken();
         e.HasIndex(x => new { x.City, x.IsArchived });

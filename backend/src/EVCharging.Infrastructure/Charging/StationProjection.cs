@@ -45,10 +45,19 @@ public sealed class StationProjection(ChargingDbContext db, TimeProvider clock)
             ManualRestriction.OutOfService => PointState.OutOfService,
             _ => normal,
         };
-        if (station.Status == status && station.StatusSource == "Device")
+        var warning = connectors
+            .OrderBy(x => x.Number)
+            .Select(x => x.DeviceFaultCode ?? x.FaultCode)
+            .FirstOrDefault(x => x is not null);
+        if (
+            station.Status == status
+            && station.StatusSource == "Device"
+            && station.WarningCode == warning
+        )
             return;
         station.Status = status;
         station.StatusSource = "Device";
+        station.WarningCode = warning;
         station.StatusObservedAt = connectors
             .Select(x => x.StatusObservedAt)
             .DefaultIfEmpty()

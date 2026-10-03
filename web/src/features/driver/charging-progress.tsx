@@ -1,6 +1,7 @@
 "use client";
 
 import type { DriverChargingSession, Language } from "../../../../contracts/account";
+import { ChargingFault } from "./charging-fault";
 
 export const chargingLabels: Record<string, [string, string]> = {
   Charging: ["Në karikim", "Charging"], Connecting: ["Makina po lidhet", "Connecting vehicle"],
@@ -20,17 +21,18 @@ export function ChargingProgress({ session, language, now, stale }: {
 }) {
   const sq = language === "sq";
   const ended = session.stoppedAt !== null;
-  const paused = session.status === "PausedByVehicle" || session.status === "PausedByCharger";
-  const charging = session.status === "Charging" && !stale;
+  const paused = !ended && (session.status === "PausedByVehicle" || session.status === "PausedByCharger");
+  const charging = !ended && session.status === "Charging" && !stale;
   const soc = session.stateOfCharge !== null && session.stateOfCharge >= 0 && session.stateOfCharge <= 100
     ? session.stateOfCharge : null;
-  const simulatedClock = session.isDemo && session.deviceClockSkewed;
+  const simulatedClock = session.isDemo;
   const start = Date.parse(simulatedClock ? session.startReceivedAt ?? session.startedAt : session.startedAt);
   const end = simulatedClock ? session.stopReceivedAt ?? session.stoppedAt : session.stoppedAt;
-  const elapsed = Math.max(0, Math.floor(((end ? Date.parse(end) : now) - start) / 1000));
-  const duration = `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}`;
+  const elapsed = ((end ? Date.parse(end) : now) - start) / 1000;
+  const duration = formatChargingDuration(elapsed, sq);
   const number = (value: number, digits = 3) => new Intl.NumberFormat(sq ? "sq-AL" : "en-GB", { maximumFractionDigits: digits }).format(value);
-  const state = stale && !ended ? (sq ? "Po presim përditësimin…" : "Waiting for an update…")
+  const state = ended ? chargingLabels.Completed[sq ? 0 : 1]
+    : stale ? (sq ? "Po presim përditësimin…" : "Waiting for an update…")
     : chargingLabels[session.status]?.[sq ? 0 : 1] ?? session.status;
   const faulted = session.status === "Faulted" || session.status === "Unavailable";
   const powerExpired = session.powerValidUntil ? now >= Date.parse(session.powerValidUntil) : false;
@@ -38,21 +40,33 @@ export function ChargingProgress({ session, language, now, stale }: {
   const powerNote = ended ? (sq ? "Sesioni u mbyll" : "Session closed")
     : paused ? (sq ? "Transferimi është në pauzë" : "Energy transfer is paused")
     : stale || powerExpired ? (sq ? "Në pritje të matjeve të reja" : "Waiting for fresh readings")
-    : actualPower === null ? (sq ? "Në pritje të matjeve" : "Waiting for readings")
+    : faulted ? (sq ? "Fuqia nuk është e disponueshme gjatë defektit" : "Power is unavailable while the charger reports a fault")
+    : session.status === "ConnectionLost" ? (sq ? "Në pritje të rilidhjes së pajisjes" : "Waiting for the charger to reconnect")
+    : session.status !== "Charging" ? (sq ? "Në pritje të karikimit dhe matjeve" : "Waiting for charging and readings")
+    : actualPower === null ? (sq ? "Pajisja nuk ka dërguar matje fuqie" : "No power reading received from the charger")
     : (sq ? "Sipas pajisjes" : "Reported by charger");
-  const saved = ended && session.energyKWh !== null && session.cost !== null;
+  const saved = ended && session.energyKWh !== null && session.cost !== null && !session.completionWarning;
 
   return <article className={`charge-process ${charging ? "is-charging" : paused ? "is-paused" : ended ? "is-complete" : faulted ? "is-faulted" : ""}`}>
     <div className="charge-process-heading">
       <span className="driver-eyebrow">{sq ? "KARIKIMI YT" : "YOUR CHARGE"}</span>
       <span className="charge-status" role="status"><i aria-hidden="true" />{state}</span>
     </div>
+    {!ended && session.faultCode && <ChargingFault code={session.faultCode} info={session.faultInfo} language={language} status={session.status} />}
+    {ended && session.completionWarning && <div className="charge-fault-notice" role="alert">
+      <strong>{sq ? "Matja finale kërkon verifikim" : "The final reading needs verification"}</strong>
+      <span>{session.completionWarning === "FinalMeterRegression"
+        ? (sq ? "Pajisja konfirmoi ndalimin, por regjistri final është më i ulët se matjet e pranuara. Kostoja finale dhe historiku presin verifikimin e kësaj matjeje." : "The charger confirmed the stop, but its final meter register is lower than accepted readings. Final cost and history await verification of this reading.")
+        : (sq ? "Pajisja konfirmoi ndalimin. Përmbledhja financiare pret verifikimin e matjes finale." : "The charger confirmed the stop. The financial summary awaits verification of the final reading.")}</span>
+    </div>}
+    <p className="charge-session-start">{sq ? "Nisur më" : "Started"} {new Date(start).toLocaleString(sq ? "sq-AL" : "en-GB", { timeZone: "Europe/Tirane", dateStyle: "medium", timeStyle: "short" })}
+      {!ended && <span> · {sq ? "Sesioni mbetet i hapur deri në konfirmimin e ndalimit nga pajisja." : "The session remains open until the charger confirms its stop."}</span>}</p>
     <div className="charge-energy-display">
       <div className="charge-bolt" aria-hidden="true">ϟ</div>
       <div><span>{sq ? "Energjia e marrë" : "Energy delivered"}{session.energyScope && session.energyScope !== "Total" ? ` · ${session.energyScope}` : ""}</span>
         <strong>{session.energyKWh === null ? "—" : number(session.energyKWh)} <small>kWh</small></strong>
       </div>
-      {soc !== null && <div className="charge-battery"><span>{sq ? "Niveli i baterisë" : "Battery level"}</span><strong>{number(soc, 1)}<small>%</small></strong></div>}
+      <div className="charge-battery"><span>{sq ? "Niveli i baterisë" : "Battery level"}</span><strong>{soc === null ? "—" : number(soc, 1)}<small>%</small></strong></div>
     </div>
     {(soc !== null || !ended) && <div className="charge-progress-track" role="progressbar"
       aria-label={soc !== null ? (sq ? "Niveli i baterisë" : "Battery level") : (sq ? "Procesi i karikimit" : "Charging activity")}
@@ -65,23 +79,35 @@ export function ChargingProgress({ session, language, now, stale }: {
       <span>{soc !== null ? (sq ? "Niveli i raportuar nga pajisja" : "Battery level reported by the charger")
         : ended ? (sq ? "Sesioni u mbyll" : "Session closed")
         : paused ? (sq ? "Energjia ruhet; sesioni vazhdon pas pauzës" : "Energy is retained; the session resumes after the pause")
-        : (sq ? "Pajisja nuk raporton përqindjen e baterisë" : "The charger does not report battery percentage")}</span>
+        : (sq ? "Ende nuk kemi matje të përqindjes së baterisë" : "No battery percentage reading received yet")}</span>
       {session.lastMeasurementReceivedAt && <span>{sq ? "Matja e fundit" : "Last reading"}: {new Date(session.lastMeasurementReceivedAt).toLocaleTimeString(sq ? "sq-AL" : "en-GB", { timeZone: "Europe/Tirane", hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>}
     </div>
     <div className="charge-process-metrics">
-      <div><span>{sq ? "KOSTO E LLOGARITUR" : "CALCULATED COST"}</span><strong>{session.cost === null ? "—" : number(session.cost, 2)} <small>{session.currency}</small></strong><small>{saved ? (sq ? "U ruajt në historik" : "Saved in history") : ended ? (sq ? "Mungon matja finale ose tarifa" : "Final reading or tariff missing") : (sq ? "Deri tani" : "So far")}</small></div>
+      <div><span>{sq ? "KOSTO E LLOGARITUR" : "CALCULATED COST"}</span><strong>{session.cost === null || session.completionWarning ? "—" : number(session.cost, 2)} <small>{session.currency}</small></strong><small>{saved ? (sq ? "U ruajt në historik" : "Saved in history") : session.completionWarning ? (sq ? "Në pritje të verifikimit" : "Awaiting verification") : ended ? (sq ? "Mungon matja finale ose tarifa" : "Final reading or tariff missing") : (sq ? "Deri tani" : "So far")}</small></div>
       <div><span>{sq ? "FUQIA AKTUALE" : "CURRENT POWER"}</span><strong>{actualPower === null || stale && !ended ? "—" : number(actualPower)} <small>kW</small></strong><small>{powerNote}{actualPower !== null && !ended && !stale && session.powerScope && session.powerScope !== "Total" ? ` · ${session.powerScope}` : ""}</small></div>
-      <div><span>{sq ? "KOHA E SESIONIT" : "SESSION DURATION"}</span><strong>{duration}</strong><small>{sq ? "Përfshin edhe pauzat" : "Includes pauses"}</small></div>
+      <div><span>{sq ? "KOHA E SESIONIT" : "SESSION DURATION"}</span><strong>{duration}</strong><small>{simulatedClock ? (sq ? "Kohë reale · përfshin pauzat" : "Real elapsed time · includes pauses") : (sq ? "Përfshin edhe pauzat" : "Includes pauses")}</small></div>
+      {!ended && <div><span>{sq ? "KOHA DERI NË BATERI TË PLOTË" : "TIME UNTIL BATTERY IS FULL"}</span><strong>—</strong><small>{sq ? "Pajisja nuk ka raportuar një vlerësim" : "No estimate reported by the charger"}</small></div>}
     </div>
-    {(session.energyScope && session.energyScope !== "Total" || session.deviceClockSkewed || session.temperatureCelsius !== null) && <details className="charge-reading-details">
+    <details className="charge-reading-details">
       <summary>{sq ? "Rreth matjeve" : "About the readings"}</summary>
       {session.energyScope && session.energyScope !== "Total" && <p>{sq ? `Energjia dhe kostoja gjatë karikimit bazohen në matjen e raportuar për ${session.energyScope}. Totali final merret nga pajisja kur sesioni përfundon.` : `Live energy and cost use the reported ${session.energyScope} reading. Final totals come from the charger when the session ends.`}</p>}
-      {session.deviceClockSkewed && <p>{simulatedClock
-        ? (sq ? "Ora e simulatorit ndryshon nga ora reale. Kohëzgjatja këtu përdor kohën e marrjes së mesazheve." : "Simulator time differs from real time. Duration here uses message receipt times.")
+      {(simulatedClock || session.deviceClockSkewed) && <p>{simulatedClock
+        ? (sq ? "Kohëzgjatja përdor marrjen e nisjes dhe ndalimit nga serveri. Shpejtësia e simulatorit nuk e përshpejton këtë orë." : "Duration uses the server receipt of start and stop. The simulator speed does not accelerate this clock.")
         : (sq ? "Ora e pajisjes ndryshon nga ora reale. Kohëzgjatja bazohet në nisjen e raportuar nga pajisja." : "Device time differs from real time. Duration uses the start reported by the charger.")}</p>}
       {session.temperatureCelsius !== null && <p>{sq ? "Temperatura e raportuar" : "Reported temperature"}: {number(session.temperatureCelsius, 1)} °C</p>}
-    </details>}
+      {!ended && <p>{sq ? "Koha deri në bateri të plotë kërkon një vlerësim nga pajisja ose të dhëna për kapacitetin e baterisë dhe ritmin e karikimit. Energjia e marrë dhe fuqia e pikës nuk mjaftojnë për ta përcaktuar." : "Time until the battery is full needs an estimate from the charger or battery capacity and charging rate data. Delivered energy and the charger rating alone cannot determine it."}</p>}
+    </details>
     {ended && <p className="charge-session-end">{saved ? (sq ? "Ky karikim përfundoi. Përmbledhja e tij është ruajtur në historikun tënd." : "This charge is complete. Its summary has been saved in your history.") : (sq ? "Sesioni u mbyll. Përmbledhja financiare kërkon një matje finale dhe tarifë të vlefshme." : "The session is closed. A financial summary requires a valid final reading and tariff.")}</p>}
   </article>;
+}
+
+export function formatChargingDuration(seconds: number, sq: boolean) {
+  if (!Number.isFinite(seconds)) return "—";
+  const elapsed = Math.max(0, Math.floor(seconds));
+  const days = Math.floor(elapsed / 86400);
+  const hours = Math.floor(elapsed / 3600) % 24;
+  const minutes = String(Math.floor(elapsed / 60) % 60).padStart(2, "0");
+  const rest = String(elapsed % 60).padStart(2, "0");
+  return `${days ? `${days} ${sq ? "ditë" : days === 1 ? "day" : "days"} ` : ""}${String(hours).padStart(2, "0")}:${minutes}:${rest}`;
 }
 

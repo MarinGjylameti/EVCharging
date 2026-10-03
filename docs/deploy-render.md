@@ -1,6 +1,6 @@
 # Demo në Render
 
-Ky konfigurim publikon web-in Next.js, API-n .NET dhe një PostgreSQL të dedikuar për `EVCharging`. Është provë për klientin: stacionet, gjendjet dhe historiku i krijuar nga seed janë ilustrues. OCPP me pajisje reale ende nuk është i lidhur.
+Ky konfigurim publikon web-in Next.js, API-n .NET dhe një PostgreSQL të dedikuar për `EVCharging`. Seed-i aktual përgatit 10 simulatorë; gjendjet dhe historiku i ri vijnë nga mesazhet OCPP. Pajisjet reale ende nuk janë verifikuar. Për konfigurimin me disa përdorues ndiq [udhëzimin e simulatorëve](demo-simulator-scenario.md).
 
 ## 1. Përgatit repo-n
 
@@ -43,6 +43,7 @@ Vendos këto **Environment Variables** në shërbimin API:
 | Emri | Vlera |
 | --- | --- |
 | `DATABASE_URL` | **Internal Database URL** nga Postgres |
+| `ASPNETCORE_ENVIRONMENT` | `Development`, vetëm për këtë shërbim demo |
 | `EVCHARGING_MIGRATE_ON_START` | `true` |
 | `EVCHARGING_SEED_DEMO_ON_START` | `true` vetëm për këtë demo |
 | `EVCHARGING_Demo__DriverEmail` | Email demonstrues që e zgjedh ti |
@@ -52,7 +53,7 @@ Vendos këto **Environment Variables** në shërbimin API:
 | `AllowedHosts` | `*` për adresën e Render-it |
 | `EVCHARGING_Push__Enabled` | `false` |
 
-Fjalëkalimet nuk kanë vlera parazgjedhje në shërbimin real. Mbaji vetëm në Render Environment; mos i shkruaj në repo ose chat. Seed-i shton 10 pika, 6 seanca historike dhe llogaritë demo në mënyrë idempotente. Ai nuk ndryshon fjalëkalimin e një llogarie që ekziston. Pas krijimit, hap `https://<api-url>/health/ready`: pritet HTTP 200. Shiko log-et nëse merr 503. Pas verifikimit të parë, hiq `EVCHARGING_SEED_DEMO_ON_START` dhe fjalëkalimet e seed-it nga mjedisi i shërbimit; llogaritë e krijuara mbeten në databazë.
+Fjalëkalimet nuk kanë vlera parazgjedhje në shërbimin real. Mbaji vetëm në Render Environment; mos i shkruaj në repo ose chat. Seed-i përgatit SIM-001…010 dhe llogaritë demo në mënyrë idempotente, pa krijuar karikime apo histori imagjinare. Ai ruan llogaritë, fjalëkalimet dhe historikun ekzistues. Migrimi i ri `ChargerFaultDiagnostics` duhet të përfundojë para nisjes së API-së. Pas krijimit, hap `https://<api-url>/health/ready`: pritet HTTP 200. Shiko log-et nëse merr 503. Pas verifikimit të parë, hiq `EVCHARGING_SEED_DEMO_ON_START` dhe fjalëkalimet e seed-it nga mjedisi i shërbimit; llogaritë e krijuara mbeten në databazë.
 
 ## 4. Web-i
 

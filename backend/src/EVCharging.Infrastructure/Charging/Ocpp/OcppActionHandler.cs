@@ -107,10 +107,17 @@ public sealed class OcppActionHandler(
         )
             throw new OcppFault("PropertyConstraintViolation", "Unknown connector status.");
         var error = OcppPayload.Text(payload, "errorCode", 50);
+        if (!OcppValues.ErrorCodes.Contains(error))
+            throw new OcppFault("PropertyConstraintViolation", "Unknown error code.");
+        if (number == 0 && status is not ("Available" or "Unavailable" or "Faulted"))
+            throw new OcppFault(
+                "PropertyConstraintViolation",
+                "Connector 0 reports station availability or faults."
+            );
         var observed = payload.TryGetProperty("timestamp", out _)
             ? OcppPayload.Timestamp(payload)
             : clock.GetUtcNow();
-        var info = OcppPayload.OptionalText(payload, "info", 80);
+        var info = OcppPayload.OptionalText(payload, "info", 50);
         var vendorId = OcppPayload.OptionalText(payload, "vendorId", 255);
         var vendorError = OcppPayload.OptionalText(payload, "vendorErrorCode", 50);
         if (
@@ -154,7 +161,7 @@ public sealed class OcppActionHandler(
             foreach (var transaction in stopped)
                 transaction.PhysicalClosedAt = clock.GetUtcNow();
         }
-        await projection.SetConnectorAsync(device.Id, number, status, observed, ct);
+        await projection.SetConnectorAsync(device.Id, number, status, observed, ct, error, info);
         return new { };
     }
 }

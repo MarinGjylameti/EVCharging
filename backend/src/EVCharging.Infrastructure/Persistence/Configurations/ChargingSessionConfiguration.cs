@@ -25,6 +25,11 @@ internal sealed class ChargingConnectorConfiguration : IEntityTypeConfiguration<
             .HasForeignKey(x => x.StationId)
             .OnDelete(DeleteBehavior.Restrict);
         e.Property(x => x.Status).HasConversion<string>().HasMaxLength(24);
+        e.Property(x => x.FaultCode).HasMaxLength(50);
+        e.Property(x => x.FaultInfo).HasMaxLength(80);
+        e.Property(x => x.DeviceStatus).HasMaxLength(30);
+        e.Property(x => x.DeviceFaultCode).HasMaxLength(50);
+        e.Property(x => x.DeviceFaultInfo).HasMaxLength(80);
         e.Property(x => x.Version).IsConcurrencyToken();
     }
 }
@@ -81,6 +86,9 @@ internal sealed class ChargingSessionConfiguration : IEntityTypeConfiguration<Ch
         e.Property(x => x.Currency).HasMaxLength(3);
         e.Property(x => x.EnergyScope).HasMaxLength(20);
         e.Property(x => x.PowerScope).HasMaxLength(20);
+        e.Property(x => x.LatestReadingsJson).HasColumnType("jsonb");
+        e.Property(x => x.StopReason).HasMaxLength(40);
+        e.Property(x => x.CompletionWarning).HasMaxLength(40);
         e.Ignore(x => x.CalculatedCost);
     }
 }

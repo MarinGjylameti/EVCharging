@@ -58,6 +58,38 @@ internal sealed record OcppMeterReading(
         return null;
     }
 
+    public static decimal? Temperature(IEnumerable<OcppMeterSample> samples, bool simulator)
+    {
+        var candidates = samples
+            .Where(x =>
+                x.Measurand == "Temperature"
+                && x.NumericValue is not null
+                && x.Format != "SignedData"
+            )
+            .ToArray();
+        var totals = candidates.Where(x => x.Phase is null).ToArray();
+        var selected =
+            totals.Length > 0 ? totals
+            : simulator ? candidates.Where(x => x.Phase is "L1" or "L2" or "L3").ToArray()
+            : [];
+        var values = selected
+            .Select(x =>
+                x.Unit switch
+                {
+                    null or "Celsius" or "Celcius" => x.NumericValue,
+                    "Fahrenheit" => (x.NumericValue - 32) * 5 / 9,
+                    "K" => x.NumericValue - 273.15m,
+                    _ => null,
+                }
+            )
+            .Where(x => x is >= -273.15m and < 100000m)
+            .Select(x => decimal.Round(x!.Value, 3))
+            .Where(x => x <= 99999.999m)
+            .Distinct()
+            .ToArray();
+        return values.Length == 1 ? values[0] : null;
+    }
+
     public static IReadOnlyList<OcppMeterReading> FromSamples(
         IEnumerable<OcppMeterSample> samples,
         DateTimeOffset startedAt,
@@ -71,7 +103,7 @@ internal sealed record OcppMeterReading(
                 x.NumericValue is >= 0 and < 1_000_000_000_000m
                 && x.Format != "SignedData"
                 && x.Location is null or "Outlet"
-                && x.ObservedAt >= startedAt
+                && (simulationClock || x.ObservedAt >= startedAt)
                 && x.ObservedAt <= (simulationClock ? now.AddDays(1) : now.AddMinutes(5))
                 && x.Measurand is "Energy.Active.Import.Register" or "Power.Active.Import"
             )

@@ -249,10 +249,179 @@ test("a late completion cannot cancel waiting for the next charge and old statio
   const completed = { ...session, version: 8, status: "Completed", stoppedAt: "2026-10-02T12:05:00Z" };
   const waiting = { ...charging, session: completed };
   assert.equal(policyExports.chargingLivePolicy.event(waiting, event("SessionCompleted", { session: completed })), null);
+  const updatedCompletion = policyExports.chargingLivePolicy.event(waiting, event("SessionCompleted", {
+    session: { ...completed, version: 9 },
+  }));
+  assert.equal(updatedCompletion.snapshot.connectionRequest, waiting.connectionRequest);
+  assert.equal(updatedCompletion.snapshot.deviceConnected, waiting.deviceConnected);
   const initial = { stations: [station], history: [] };
   const h = mount(t, null, initial, policyExports.driverLivePolicy);
   await h.resolveData(initial);
   h.changed(event("StationRemoved", { entityType: "ChargingStation", entityId: station.id, entityVersion: 3 }));
   h.changed(event("StationChanged", { entityType: "ChargingStation", entityId: station.id, entityVersion: 2, station: { ...station, version: 2 } }));
   assert.deepEqual(h.state[0].stations, []);
+});
+
+test("all command acknowledgements patch the diagnostic result immediately without a fetch", async t => {
+  const initial = { ...charging, diagnostics: { externalSessionId: null, meterStartWh: null, stopReason: null, samples: [], lastCommand: null } };
+  const h = mount(t, "station-1", initial, policyExports.chargingLivePolicy);
+  await h.resolveData(initial);
+  for (const [index, action] of ["BootNotification", "Authorize", "Heartbeat", "StatusNotification", "MeterValues", "StartTransaction", "StopTransaction"].entries()) {
+    const command = { action, accepted: index % 2 === 0, failureCode: index % 2 ? "SecurityError" : null,
+      description: null, receivedAt: `2026-10-02T12:00:0${index}Z` };
+    h.changed(event("DeviceCommandChanged", { eventId: `command-${index}`, command }));
+    assert.deepEqual(h.state[0].diagnostics.lastCommand, command);
+  }
+  await h.advance(0);
+  assert.equal(h.requests.length, 1);
+});
+
+test("connector faults patch without a session and old recovery snapshots cannot erase them", async t => {
+  const initial = { ...charging, connector: { status: "Available", faultCode: null, faultInfo: null, version: 1 } };
+  const h = mount(t, "station-1", initial, policyExports.chargingLivePolicy);
+  const connector = { status: "Faulted", faultCode: "GroundFailure", faultInfo: "Safety check", version: 4 };
+  h.changed(event("ConnectorChanged", { entityType: "ChargingConnector", entityId: "connector-1", entityVersion: 4, connector }));
+  assert.deepEqual(h.state[0].connector, connector);
+  await h.resolveData(initial);
+  assert.deepEqual(h.state[0].connector, connector);
+  const restored = { status: "Available", faultCode: null, faultInfo: null, version: 5 };
+  h.changed(event("ConnectorChanged", { entityType: "ChargingConnector", entityId: "connector-1", entityVersion: 5, connector: restored }));
+  assert.deepEqual(h.state[0].connector, restored);
+  await h.advance(0);
+  assert.equal(h.requests.length, 1);
+});
+
+test("new readings and command rejections received during recovery survive its older response", async t => {
+  const initial = { ...charging, session, diagnostics: { externalSessionId: "1", meterStartWh: 0, stopReason: null, samples: [], lastCommand: null } };
+  const h = mount(t, "station-1", initial, policyExports.chargingLivePolicy);
+  const readings = [{ measurand: "Frequency", value: "50", unit: "Hz", phase: null, context: "Sample.Clock", location: "Outlet", format: "Raw", observedAt: "2026-10-02T12:00:00Z", receivedAt: "2026-10-02T12:00:01Z" }];
+  h.changed(event("SessionMeasured", { entityVersion: 2, session: { ...session, version: 2, readings } }));
+  const command = { action: "StopTransaction", accepted: false, failureCode: "PropertyConstraintViolation", description: "Unknown transaction", receivedAt: "2026-10-02T12:00:02Z" };
+  h.changed(event("DeviceCommandChanged", { command }));
+  await h.resolveData(initial);
+  assert.deepEqual(h.state[0].session.readings, readings);
+  assert.deepEqual(h.state[0].diagnostics.lastCommand, command);
+  await h.advance(0);
+  assert.equal(h.requests.length, 1);
+});
+
+test("a physical start fetches transaction metadata once and 1000 subsequent reading deltas need no fetch", async t => {
+  const h = mount(t, "station-1", charging, policyExports.chargingLivePolicy);
+  await h.resolveData(charging);
+  h.changed(event("SessionStarted", { entityVersion: 2, session: { ...session, version: 2 } }));
+  assert.equal(h.state[0].session.id, session.id);
+  await h.advance(0);
+  assert.equal(h.requests.length, 2);
+  await h.resolveData({ ...charging, session: { ...session, version: 2 }, diagnostics: { externalSessionId: "17", meterStartWh: 1000, stopReason: null, samples: [], lastCommand: null } });
+  for (let i = 3; i < 1003; i++) h.changed(event("SessionMeasured", { entityVersion: i,
+    session: { ...session, version: i, readings: [{ measurand: "Voltage", value: String(i), receivedAt: "2026-10-02T12:00:01Z" }] } }));
+  await h.advance(0);
+  assert.equal(h.requests.length, 2);
+  assert.equal(h.state[0].session.readings[0].value, "1002");
+});
+
+test("command sequence versions order equal timestamps and survive a stale recovery snapshot", async t => {
+  const accepted = { action: "StopTransaction", accepted: true, failureCode: null, description: null, receivedAt: "2026-10-02T12:00:00Z", version: 12 };
+  const rejected = { ...accepted, accepted: false, failureCode: "PropertyConstraintViolation", version: 13 };
+  const initial = { ...charging, diagnostics: { externalSessionId: null, meterStartWh: null, stopReason: null, samples: [], lastCommand: accepted } };
+  const h = mount(t, "station-1", initial, policyExports.chargingLivePolicy);
+  h.changed(event("DeviceCommandChanged", { eventId: "new-rejected", command: rejected }));
+  h.changed(event("DeviceCommandChanged", { eventId: "old-accepted", command: accepted }));
+  assert.deepEqual(h.state[0].diagnostics.lastCommand, rejected);
+  await h.resolveData(initial);
+  assert.deepEqual(h.state[0].diagnostics.lastCommand, rejected);
+});
+
+test("waiting owners receive raw measurements without a session and retain them through heartbeats", async t => {
+  const h = mount(t, "station-1", charging, policyExports.chargingLivePolicy);
+  await h.resolveData(charging);
+  const readings = [{ measurand: "Current.Export", value: "3.4", unit: "A", phase: "L3", context: "Other", format: "Raw", location: "Cable", observedAt: "2026-10-02T12:00:00Z", receivedAt: "2026-10-02T12:00:00Z" }];
+  const command = { action: "MeterValues", accepted: true, failureCode: null, description: null, receivedAt: "2026-10-02T12:00:00Z", version: 1, readings };
+  h.changed(event("DeviceCommandChanged", { eventId: "meter-without-session", command }));
+  assert.deepEqual(h.state[0].diagnostics.samples, readings);
+  h.changed(event("DeviceCommandChanged", { eventId: "heartbeat", command: { ...command, action: "Heartbeat", readings: undefined, version: 2 } }));
+  assert.deepEqual(h.state[0].diagnostics.samples, readings);
+  h.changed(event("SessionStarted", { session: { ...session, version: 2, readings: [] } }));
+  assert.deepEqual(h.state[0].diagnostics.samples, []);
+  assert.equal(h.state[0].diagnostics.lastCommand, null);
+  assert.equal(h.state[0].session.readings.length, 0);
+});
+
+test("unrelated accepted activity cannot dismiss a rejected start or stop", async t => {
+  const initial = { ...charging, session, diagnostics: { externalSessionId: "1", meterStartWh: 0, stopReason: null, samples: [], lastCommand: null, lastFailure: null } };
+  const h = mount(t, "station-1", initial, policyExports.chargingLivePolicy);
+  await h.resolveData(initial);
+  let version = 1;
+  const command = (action, accepted) => ({ action, accepted, failureCode: accepted ? null : "OccurrenceConstraintViolation", description: null,
+    version: version++, receivedAt: "2026-10-02T12:00:00Z" });
+  const change = command => h.changed(event("DeviceCommandChanged", { eventId: `command-failure-${command.version}`, command }));
+  const rejectedStart = command("StartTransaction", false);
+  change(rejectedStart);
+  for (const action of ["Heartbeat", "StatusNotification", "MeterValues", "Authorize"]) {
+    change(command(action, true));
+    assert.deepEqual(h.state[0].diagnostics.lastFailure, rejectedStart);
+  }
+  change(command("StartTransaction", true));
+  assert.equal(h.state[0].diagnostics.lastFailure, null);
+  const rejectedStop = command("StopTransaction", false);
+  change(rejectedStop);
+  change(command("StatusNotification", true));
+  assert.deepEqual(h.state[0].diagnostics.lastFailure, rejectedStop);
+  h.changed(event("SessionCompleted", { entityVersion: 2, session: { ...session, version: 2, status: "Completed", stoppedAt: "2026-10-02T12:05:00Z" } }));
+  assert.equal(h.state[0].diagnostics.lastFailure, null);
+});
+
+test("a successful new session clears its start rejection while retaining unrelated failures", () => {
+  const command = { action: "StartTransaction", accepted: false, failureCode: "SecurityError", description: null,
+    version: 10, receivedAt: "2026-10-02T12:00:00Z" };
+  const initial = { ...charging, diagnostics: { externalSessionId: null, meterStartWh: null, stopReason: null, samples: [], lastCommand: command, lastFailure: command } };
+  const start = event("SessionStarted", { entityVersion: 2, session: { ...session, version: 2 } });
+  assert.equal(policyExports.chargingLivePolicy.event(initial, start).snapshot.diagnostics.lastFailure, null);
+  const meterFailure = { ...command, action: "MeterValues" };
+  const unrelated = { ...initial, diagnostics: { ...initial.diagnostics, lastFailure: meterFailure } };
+  assert.deepEqual(policyExports.chargingLivePolicy.event(unrelated, start).snapshot.diagnostics.lastFailure, meterFailure);
+});
+
+test("an older active snapshot cannot revive a Stop rejection resolved by a completion delta", () => {
+  const rejection = { action: "StopTransaction", accepted: false, failureCode: "PropertyConstraintViolation", description: null,
+    version: 10, receivedAt: "2026-10-02T12:00:00Z" };
+  const old = { ...charging, session, diagnostics: { externalSessionId: "1", meterStartWh: 0, stopReason: null, samples: [], lastCommand: rejection, lastFailure: rejection } };
+  const completed = { ...old, session: { ...session, version: 3, status: "Completed", stoppedAt: "2026-10-02T12:05:00Z" },
+    diagnostics: { ...old.diagnostics, lastCommand: { ...rejection, accepted: true, action: "StatusNotification", version: 9 }, lastFailure: null } };
+  const result = policyExports.chargingLivePolicy.merge(completed, old);
+  assert.equal(result.session.status, "Completed");
+  assert.equal(result.diagnostics.lastFailure, null);
+});
+
+test("accepted raw measurement groups survive unrelated commands even when the session summary is older", async t => {
+  const oldReadings = [{ measurand: "Voltage", value: "230", receivedAt: "2026-10-02T12:00:00Z" }];
+  const latestReadings = [{ measurand: "Voltage", value: "240", observedAt: "2030-10-02T12:00:00Z", receivedAt: "2026-10-02T12:00:01Z" }];
+  const initial = { ...charging, session: { ...session, readings: oldReadings }, diagnostics: { externalSessionId: "1", meterStartWh: 0, stopReason: null, samples: oldReadings, lastCommand: null } };
+  const h = mount(t, "station-1", initial, policyExports.chargingLivePolicy);
+  await h.resolveData(initial);
+  const command = { action: "MeterValues", accepted: true, failureCode: null, description: null, receivedAt: "2026-10-02T12:00:01Z", version: 2, readings: latestReadings };
+  h.changed(event("DeviceCommandChanged", { eventId: "latest-unprojected-meter", command }));
+  h.changed(event("DeviceCommandChanged", { eventId: "following-heartbeat", command: { ...command, action: "Heartbeat", version: 3, readings: undefined } }));
+  h.changed(event("SessionStatusChanged", { entityVersion: 2, session: { ...session, version: 2, readings: oldReadings } }));
+  assert.deepEqual(h.state[0].diagnostics.samples, latestReadings);
+  assert.deepEqual(h.state[0].session.readings, oldReadings);
+});
+
+test("a public warning update patches one of ten points without merging private payloads", () => {
+  const stations = Array.from({ length: 10 }, (_, index) => ({ ...station, id: `station-${index + 1}`, warningCode: null }));
+  const initial = { stations, history: [{ id: "own-history" }] };
+  const warning = { ...stations[3], version: 2, warningCode: "HighTemperature" };
+  const publicUpdate = event("StationChanged", { entityType: "ChargingStation", entityId: warning.id, stationId: warning.id,
+    entityVersion: 2, station: warning, session: { ...session, id: "other-driver-session" },
+    command: { action: "StartTransaction", accepted: true } });
+  const map = policyExports.driverLivePolicy.event(initial, publicUpdate).snapshot;
+  assert.deepEqual(map.stations[3], warning);
+  assert.equal(map.stations[3].status, "Available");
+  assert.equal(map.history, initial.history);
+  for (let index = 0; index < 10; index++) if (index !== 3) assert.equal(map.stations[index], stations[index]);
+  const own = { ...charging, station: stations[3], session, diagnostics: null };
+  const detail = policyExports.chargingLivePolicy.event(own, publicUpdate).snapshot;
+  assert.equal(detail.station.warningCode, "HighTemperature");
+  assert.equal(detail.session.id, session.id);
+  assert.equal(detail.diagnostics, null);
 });

@@ -146,19 +146,33 @@ public sealed class OcppGateway(
                 await projection.ConnectedAsync(chargePointId, ct);
             if (previous is not null)
             {
-                var cached =
-                    previous.PayloadHash == hash && previous.ResponseJson is not null
-                        ? previous.ResponseJson
-                        : Error(
-                            callId,
+                var reused = previous.PayloadHash != hash || previous.ResponseJson is null;
+                var cached = !reused
+                    ? previous.ResponseJson
+                    : Error(
+                        callId,
+                        "ProtocolError",
+                        "The call ID was reused with different content."
+                    );
+                if (reused)
+                    await StageCommandAsync(
+                        chargePointId,
+                        root[3],
+                        previous,
+                        new(
+                            action,
+                            false,
                             "ProtocolError",
-                            "The call ID was reused with different content."
-                        );
+                            "The call ID was reused with different content.",
+                            clock.GetUtcNow()
+                        ),
+                        ct
+                    );
                 await db.SaveChangesAsync(ct);
                 if (transaction is not null)
                     await transaction.CommitAsync(ct);
                 events.Notify();
-                return cached;
+                return cached!;
             }
 
             var message = Message(chargePointId, connectionId, callId, action, frame, hash);
@@ -168,18 +182,11 @@ public sealed class OcppGateway(
             message.ResponseJson = response;
             message.ProcessingState = "Processed";
             message.ProcessedAt = clock.GetUtcNow();
+            await StageCommandAsync(chargePointId, root[3], message, CommandResult(message), ct);
             await db.SaveChangesAsync(ct);
             if (transaction is not null)
                 await transaction.CommitAsync(ct);
-            if (
-                action
-                is "BootNotification"
-                    or "StatusNotification"
-                    or "StartTransaction"
-                    or "StopTransaction"
-                    or "MeterValues"
-            )
-                events.Notify();
+            events.Notify();
             return response;
         }
         catch (OcppFault fault)
@@ -191,20 +198,180 @@ public sealed class OcppGateway(
                 transaction = null;
             }
             db.ChangeTracker.Clear();
+            transaction = await OcppDeviceUpdate.BeginAsync(db, chargePointId, ct);
             var response = Error(callId, fault.Code, fault.Message);
-            var message = Message(chargePointId, connectionId, callId, action, frame, hash);
-            message.ResponseJson = response;
-            message.ProcessingState = "Rejected";
-            message.FailureCode = fault.Code;
-            message.ProcessedAt = clock.GetUtcNow();
-            db.OcppInboundMessages.Add(message);
+            var existing = await db.OcppInboundMessages.SingleOrDefaultAsync(
+                x => x.ConnectionId == connectionId && x.CallId == callId,
+                ct
+            );
+            var message =
+                existing ?? Message(chargePointId, connectionId, callId, action, frame, hash);
+            if (existing is null)
+            {
+                message.ResponseJson = response;
+                message.ProcessingState = "Rejected";
+                message.FailureCode = fault.Code;
+                message.ProcessedAt = clock.GetUtcNow();
+                db.OcppInboundMessages.Add(message);
+            }
+            await StageCommandAsync(
+                chargePointId,
+                root[3],
+                message,
+                new(action, false, fault.Code, fault.Message, clock.GetUtcNow()),
+                ct
+            );
             await db.SaveChangesAsync(ct);
+            if (transaction is not null)
+                await transaction.CommitAsync(ct);
+            events.Notify();
             return response;
         }
         finally
         {
             if (transaction is not null)
                 await transaction.DisposeAsync();
+        }
+    }
+
+    internal static ChargingCommandResult CommandResult(OcppInboundMessage message)
+    {
+        using var response = JsonDocument.Parse(message.ResponseJson!);
+        var root = response.RootElement;
+        if (message.ProcessingState == "Rejected")
+            return new(
+                message.Action,
+                false,
+                message.FailureCode,
+                root[3].GetString(),
+                message.ReceivedAt,
+                message.CommandVersion
+            );
+        if (
+            root[2].TryGetProperty("idTagInfo", out var authorization)
+            && authorization.TryGetProperty("status", out var status)
+            && status.GetString() is { } value
+            && value != "Accepted"
+        )
+            return new(
+                message.Action,
+                false,
+                "Authorization" + value,
+                "The authorization tag was not accepted.",
+                message.ReceivedAt,
+                message.CommandVersion
+            );
+        return new(message.Action, true, null, null, message.ReceivedAt, message.CommandVersion);
+    }
+
+    private async Task StageCommandAsync(
+        Guid deviceId,
+        JsonElement payload,
+        OcppInboundMessage message,
+        ChargingCommandResult result,
+        CancellationToken ct
+    )
+    {
+        var device = await db.OcppChargePoints.SingleAsync(x => x.Id == deviceId, ct);
+        var version = ++device.CommandVersion;
+        // Cached original replies retain their original sequence. Conflicting retries
+        // still produce a fresh private diagnostic without replacing that reply.
+        if (message.CommandVersion == 0)
+            message.CommandVersion = version;
+        var connectors = await db
+            .OcppConnectors.Where(x =>
+                x.ChargePointId == deviceId && x.BusinessConnectorId != null && x.StationId != null
+            )
+            .ToListAsync(ct);
+        if (
+            payload.TryGetProperty("connectorId", out var connectorNumber)
+            && connectorNumber.ValueKind == JsonValueKind.Number
+            && connectorNumber.TryGetInt32(out var number)
+            && number > 0
+        )
+            connectors = connectors.Where(x => x.ConnectorNumber == number).ToList();
+        OcppChargingTransaction? targetTransaction = null;
+        if (
+            result.Action is "StopTransaction" or "MeterValues"
+            && payload.TryGetProperty("transactionId", out var transactionId)
+            && transactionId.ValueKind == JsonValueKind.Number
+            && transactionId.TryGetInt32(out var id)
+        )
+        {
+            var transaction = await db.OcppChargingTransactions.SingleOrDefaultAsync(
+                x => x.ChargePointId == deviceId && x.Ocpp16TransactionId == id,
+                ct
+            );
+            targetTransaction = transaction;
+            if (transaction is not null)
+                connectors = connectors
+                    .Where(x => x.ConnectorNumber == transaction.ConnectorNumber)
+                    .ToList();
+            else if (connectors.Count != 1)
+                return;
+        }
+        var readings = db
+            .OcppMeterSamples.Local.Where(x => x.MessageId == message.Id)
+            .OrderByDescending(x => x.MeterValueIndex)
+            .ThenBy(x => x.SampleIndex)
+            .Take(64)
+            .Select(x => new ChargingSampleDiagnostic(
+                x.Measurand,
+                x.ValueText,
+                x.Unit,
+                x.Phase,
+                x.Location,
+                x.Context,
+                x.Format,
+                x.ObservedAt,
+                x.ReceivedAt
+            ))
+            .ToArray();
+        foreach (var mapped in connectors)
+        {
+            var claim = await db.ChargingConnectionRequests.SingleOrDefaultAsync(
+                x =>
+                    x.StationId == mapped.StationId
+                    && x.ConnectorNumber == mapped.ConnectorNumber
+                    && (
+                        x.State == "Linked"
+                        || x.State == "Waiting" && x.ExpiresAt > result.ReceivedAt
+                    ),
+                ct
+            );
+            if (
+                claim is null
+                && result.Action == "StopTransaction"
+                && targetTransaction?.SessionId is { } stoppedSessionId
+            )
+                claim = await db.ChargingConnectionRequests.SingleOrDefaultAsync(
+                    x => x.SessionId == stoppedSessionId && x.State == "Completed",
+                    ct
+                );
+            if (claim is null)
+                continue;
+            if (targetTransaction is not null && claim.SessionId != targetTransaction.SessionId)
+                continue;
+            var connector = await db.ChargingConnectors.SingleAsync(
+                x => x.Id == mapped.BusinessConnectorId,
+                ct
+            );
+            ChargingRealtime.Stage(
+                db,
+                connector.StationId,
+                "DeviceCommandChanged",
+                "ChargingConnector",
+                connector.Id,
+                version,
+                result.ReceivedAt,
+                claim.DriverId,
+                connector: ChargingRealtime.ConnectorDto(connector),
+                command: result with
+                {
+                    Version = version,
+                    Readings = readings.Length > 0 ? readings : null,
+                }
+            );
         }
     }
 

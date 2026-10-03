@@ -165,8 +165,9 @@ varet nga pajisja dhe makina, siç ilustrojnë [testet zyrtare OCA](https://open
 
 Shiriti mbushet sipas SoC vetëm kur pajisja dërgon këtë matje. Pa SoC tregon
 aktivitet, pa përqindje të shpikur. Nuk ka formular objektivi kWh, kapaciteti
-baterie apo përqindjesh për ta simuluar këtë informacion. Koha e mbetur nuk
-shfaqet në faqen e karikimit: mesazhet aktuale nuk japin një ETA të verifikueshme.
+baterie apo përqindjesh për ta simuluar këtë informacion. Koha e mbetur shfaqet
+si e paraportuar kur mungojnë të dhënat: OCPP 1.6 nuk ka një measurand standard
+për kohën deri në bateri të plotë.
 Modeli i makinës vetëm nuk e përcakton nivelin aktual, objektivin apo ritmin real.
 
 ### Matjet dhe ora e simulatorit
@@ -186,13 +187,16 @@ Kjo nuk shpik matje: vlerat vijnë nga mesazhet e ruajtura. Një cikël i ri
 me orën aktuale rivendos renditjen e statusit pas ciklit të përfunduar.
 Një lidhje aktive pa
 status të freskët shfaqet në pritje të statusit; nuk quhet e shkëputur.
-Statuset e vjetra nuk e bëjnë pikën të lirë në hartë.
+Hardware real refuzon statuset e vjetra. Formularët manualë demo ndjekin
+rendin e marrjes, kështu që ndryshimet pas një simulimi të përshpejtuar
+reflektohen menjëherë.
 
 Snapshot-i privat lexon edhe matjet e fazave të ruajtura nga versioni i
 mëparshëm, pa ndryshuar inbox-in origjinal apo historikun përfundimtar.
 `StopTransaction.meterStop` mbetet burimi për energjinë finale dhe koston;
-nëse simulatori dërgon një vlerë ndryshe nga matja e fundit, shfaqet vlera
-finale që ai raportoi. Lidhja e re e pritjes kërkon migrimin shtues të përmendur
+nëse regjistri final bie nën nisjen ose energjinë e pranuar, sesioni mbyllet
+me paralajmërim verifikimi dhe pa kosto/histori financiare të gabuar.
+Lidhja e re e pritjes kërkon migrimin shtues të përmendur
 më sipër; interpretimi i matjeve të fazave nuk rishkruan historikun.
 
 Render e drejton trafikun HTTP dhe WebSocket në të njëjtin port të Web Service.

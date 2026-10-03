@@ -1,18 +1,38 @@
 using EVCharging.Application.Identity;
 using EVCharging.Domain.Auditing;
-using EVCharging.Domain.Charging;
 using EVCharging.Domain.Identity;
+using EVCharging.Infrastructure.Charging.Ocpp;
 using EVCharging.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
 namespace EVCharging.Api;
 
-// Explicit, idempotent demo setup. Never runs during a normal API start.
+// Explicit, idempotent demo setup. Preserves existing accounts and physical history.
 public static class DemoDataSeeder
 {
+    private static readonly string[] LegacyStationCodes =
+    [
+        "EV-TIR-001",
+        "EV-TIR-002",
+        "EV-TIR-003",
+        "EV-TIR-004",
+        "EV-TIR-005",
+        "EV-TIR-006",
+        "EV-DUR-001",
+        "EV-DUR-002",
+        "EV-DUR-003",
+        "EV-LUS-001",
+    ];
+
     public static async Task SeedAsync(IServiceProvider services, IConfiguration configuration)
     {
+        var environment = services.GetRequiredService<IHostEnvironment>();
+        if (!environment.IsDevelopment() && !environment.IsEnvironment("Testing"))
+            throw new InvalidOperationException(
+                "Demo seed is available only in Development or Testing."
+            );
+
         var email = configuration["Demo:DriverEmail"]?.Trim();
         var password = configuration["Demo:DriverPassword"];
         if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
@@ -48,199 +68,6 @@ public static class DemoDataSeeder
             throw new InvalidOperationException(
                 "The demo email already belongs to a non-Driver account."
             );
-
-        var stationDefinitions = new[]
-        {
-            Station(
-                "EV-TIR-001",
-                "Sheshi Skënderbej",
-                "Tiranë",
-                "Qendra e qytetit",
-                41.3275,
-                19.8187,
-                "CCS2",
-                2,
-                150,
-                0.35m,
-                PointState.Available
-            ),
-            Station(
-                "EV-TIR-002",
-                "Blloku",
-                "Tiranë",
-                "Rruga Ibrahim Rugova",
-                41.3211,
-                19.8174,
-                "CCS2",
-                2,
-                120,
-                0.35m,
-                PointState.Charging
-            ),
-            Station(
-                "EV-TIR-003",
-                "Pazari i Ri",
-                "Tiranë",
-                "Rruga Qemal Stafa",
-                41.3296,
-                19.8256,
-                "Type 2",
-                4,
-                22,
-                0.30m,
-                PointState.Available
-            ),
-            Station(
-                "EV-TIR-004",
-                "Parku i Liqenit",
-                "Tiranë",
-                "Rruga Sami Frashëri",
-                41.3134,
-                19.8133,
-                "CCS2",
-                2,
-                75,
-                0.32m,
-                PointState.Occupied
-            ),
-            Station(
-                "EV-TIR-005",
-                "Rruga e Kavajës",
-                "Tiranë",
-                "Rruga e Kavajës",
-                41.3244,
-                19.8089,
-                "CCS2",
-                2,
-                60,
-                0.34m,
-                PointState.Maintenance
-            ),
-            Station(
-                "EV-TIR-006",
-                "Stadiumi",
-                "Tiranë",
-                "Rruga Dervish Hima",
-                41.3181,
-                19.8241,
-                "CCS2",
-                2,
-                180,
-                0.38m,
-                PointState.Available
-            ),
-            Station(
-                "EV-DUR-001",
-                "Porti i Durrësit",
-                "Durrës",
-                "Lagjja 1, pranë portit",
-                41.3136,
-                19.4556,
-                "CCS2",
-                2,
-                120,
-                0.35m,
-                PointState.Available
-            ),
-            Station(
-                "EV-DUR-002",
-                "Vollga",
-                "Durrës",
-                "Shëtitorja Taulantia",
-                41.3128,
-                19.4487,
-                "CCS2",
-                2,
-                75,
-                0.36m,
-                PointState.Charging
-            ),
-            Station(
-                "EV-DUR-003",
-                "Stadiumi Niko Dovana",
-                "Durrës",
-                "Rruga e Stadiumit",
-                41.3185,
-                19.4593,
-                "Type 2",
-                2,
-                22,
-                0.29m,
-                PointState.OutOfService
-            ),
-            Station(
-                "EV-LUS-001",
-                "Qendra e Lushnjës",
-                "Lushnjë",
-                "Rruga Kongresi i Lushnjës",
-                40.9419,
-                19.7050,
-                "CCS2",
-                2,
-                100,
-                0.35m,
-                PointState.Charging
-            ),
-        };
-        var existing = await db.Stations.Where(x => x.IsDemo).ToDictionaryAsync(x => x.Code);
-        foreach (var station in stationDefinitions)
-        {
-            if (existing.TryGetValue(station.Code, out var saved))
-                continue;
-            if (station.Code == "EV-LUS-001")
-            {
-                var now = DateTimeOffset.UtcNow;
-                station.ForecastConnectorId = 1;
-                station.ForecastAvailableAt = now.AddMinutes(40);
-                station.ForecastObservedAt = now;
-                station.ForecastSource = "Demo";
-            }
-            db.Stations.Add(station);
-            existing.Add(station.Code, station);
-        }
-
-        if (!await db.ChargingHistory.AnyAsync(x => x.DriverId == driver.Id && x.IsDemo))
-        {
-            var now = DateTimeOffset.UtcNow;
-            var history = new (string Code, int DaysAgo, decimal KWh, int Minutes)[]
-            {
-                ("EV-TIR-001", 1, 26.4m, 48),
-                ("EV-DUR-001", 3, 18.7m, 37),
-                ("EV-TIR-003", 6, 12.8m, 72),
-                ("EV-TIR-006", 10, 31.6m, 34),
-                ("EV-TIR-002", 15, 21.2m, 43),
-                ("EV-DUR-002", 22, 16.5m, 39),
-            };
-            foreach (var item in history)
-            {
-                var station = existing[item.Code];
-                var end = new DateTimeOffset(
-                    now.AddDays(-item.DaysAgo)
-                        .UtcDateTime.Date.AddHours(18)
-                        .AddMinutes(item.Minutes),
-                    TimeSpan.Zero
-                );
-                db.ChargingHistory.Add(
-                    new ChargingHistory
-                    {
-                        DriverId = driver.Id,
-                        StationId = station.Id,
-                        Station = station,
-                        StartedAt = end.AddMinutes(-item.Minutes),
-                        EndedAt = end,
-                        EnergyKWh = item.KWh,
-                        UnitPriceSnapshot = station.PricePerKWh,
-                        TotalCost = decimal.Round(
-                            item.KWh * station.PricePerKWh,
-                            2,
-                            MidpointRounding.AwayFromZero
-                        ),
-                        Currency = "EUR",
-                        IsDemo = true,
-                    }
-                );
-            }
-        }
 
         var adminEmail = configuration["Bootstrap:Email"]?.Trim();
         var adminPassword = configuration["Bootstrap:Password"];
@@ -278,35 +105,40 @@ public static class DemoDataSeeder
         }
 
         await db.SaveChangesAsync();
+
+        var provisioner = scope.ServiceProvider.GetRequiredService<OcppSimulatorProvisioner>();
+        foreach (var identity in OcppOptions.DefaultSimulatorIdentities)
+            await provisioner.EnsureSimulatorAsync(identity, CancellationToken.None);
+        await ArchiveUnusedLegacyStationsAsync(db);
+        await DemoSimulatorScenario.PrepareAsync(services, configuration);
     }
 
-    private static ChargingStation Station(
-        string code,
-        string name,
-        string city,
-        string address,
-        double latitude,
-        double longitude,
-        string connector,
-        int count,
-        decimal power,
-        decimal price,
-        PointState status
-    ) =>
-        new()
+    public static async Task ArchiveUnusedLegacyStationsAsync(
+        ChargingDbContext db,
+        CancellationToken ct = default
+    )
+    {
+        var stations = await db
+            .Stations.Where(x => x.IsDemo && !x.IsArchived && LegacyStationCodes.Contains(x.Code))
+            .ToListAsync(ct);
+        foreach (var station in stations)
         {
-            Code = code,
-            Name = name,
-            City = city,
-            Address = address,
-            Latitude = latitude,
-            Longitude = longitude,
-            ConnectorType = connector,
-            ConnectorCount = count,
-            PowerKW = power,
-            PricePerKWh = price,
-            Currency = "EUR",
-            Status = status,
-            IsDemo = true,
-        };
+            // A mapped device or open association is operational data, even on a demo row.
+            if (
+                await db.OcppConnectors.AnyAsync(x => x.StationId == station.Id, ct)
+                || await db.ChargingSessions.AnyAsync(
+                    x => x.PointId == station.Id && x.EndedAt == null,
+                    ct
+                )
+                || await db.ChargingConnectionRequests.AnyAsync(
+                    x => x.StationId == station.Id && (x.State == "Waiting" || x.State == "Linked"),
+                    ct
+                )
+            )
+                continue;
+            station.IsArchived = true;
+            station.Version++;
+        }
+        await db.SaveChangesAsync(ct);
+    }
 }

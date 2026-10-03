@@ -135,7 +135,7 @@ public sealed partial class OcppWebSocketTests
                 },
             ]
         );
-        Assert.Null((await SnapshotAsync()).PowerKW); // A pre-resume sample is not current power.
+        Assert.Equal(21.8m, (await SnapshotAsync()).PowerKW); // A demo form can reuse its timestamp after resume.
         await MeterAsync(
             120,
             [
@@ -412,7 +412,7 @@ public sealed partial class OcppWebSocketTests
         );
         await StatusAsync(socket, "SuspendedEV", observed.AddSeconds(-1));
         Assert.Equal(
-            before + 1,
+            before + 2,
             await db.RealtimeOutbox.CountAsync(x => x.EventType == "ConnectorChanged")
         );
         await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);

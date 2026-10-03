@@ -23,6 +23,11 @@ public sealed class ChargingConnector
     public int Number { get; set; }
     public ChargingState Status { get; set; } = ChargingState.Unknown;
     public bool IsOnline { get; set; }
+    public string? FaultCode { get; set; }
+    public string? FaultInfo { get; set; }
+    public string? DeviceStatus { get; set; }
+    public string? DeviceFaultCode { get; set; }
+    public string? DeviceFaultInfo { get; set; }
     public DateTimeOffset? StatusObservedAt { get; set; }
     public DateTimeOffset? StatusReceivedAt { get; set; }
     public long Version { get; set; }

@@ -1,6 +1,6 @@
 # Sesionet e karikimit dhe përditësimi i menjëhershëm
 
-Gjendja: 2 tetor 2026. [Auditi fillestar](charging-architecture-audit.md) shpjegon vendimet mbi kodin ekzistues. Ndryshimet vazhdojnë monolitin modular, PostgreSQL, inbox-in OCPP, outbox-in dhe SSE.
+Gjendja: 3 tetor 2026. [Auditi fillestar](charging-architecture-audit.md) shpjegon vendimet mbi kodin ekzistues. Ndryshimet vazhdojnë monolitin modular, PostgreSQL, inbox-in OCPP, outbox-in dhe SSE. [Skenari me 10 simulatorë](demo-simulator-scenario.md) shpjegon provën me disa përdorues.
 
 ## Burimi autoritativ
 
@@ -47,13 +47,19 @@ Retry në të njëjtën pikë është i sigurt. Pritja mund të anulohet/skadoj�
 - `LinkedAt`: kur përdoruesi u lidh me sesionin. Mund të jetë disa minuta pas nisjes fizike.
 - Tarifa fiksohet kur përpunohet nisja fizike. Një ndryshim tarife para claim-it nuk ndryshon tarifën e sesionit ekzistues.
 
-Për simulatorin me orë të përshpejtuar/të vjetër, UI përdor kohën e marrjes së mesazheve vetëm kur `IsDemo` dhe devijimi i orës janë të konfirmuar. Kohët origjinale ruhen. Kjo përjashtim nuk zbatohet për hardware real.
+Për çdo sesion `IsDemo`, UI përdor marrjen e nisjes dhe ndalimit nga serveri për kohëzgjatjen reale. Shfaq orë, minuta, sekonda dhe ditë kur duhen. Adapteri pranon rendin e marrjes së formularëve manualë vetëm kur simulator mode dhe `IsDemo` janë aktivë: një timestamp i vjetër mund të vijë pas një simulimi të përshpejtuar. Kohët origjinale ruhen. Hardware real ruan renditjen sipas kohës së pajisjes.
 
 Përkthimi OCPP → gjendje semantike është i centralizuar. Për shembull, `Preparing` → `Connecting`, `SuspendedEV` → `PausedByVehicle`, `SuspendedEVSE` → `PausedByCharger`. Statuset bruto mbeten në historinë e integrimit. Kufizimet manuale Maintenance/OutOfService vazhdojnë të kenë përparësi në hartë.
+
+OCPP 1.6 §4.9 lejon kod gabimi me status jo-Faulted si paralajmërim. `Charging` + `HighTemperature` ruan Charging dhe fuqinë, por shfaq paralajmërim. `connectorId=0` raporton kontrolluesin qendror; gjendja/gabimi i tij shfaqen veçmas dhe nuk mbishkruajnë statuset individuale të lidhësve. Harta merr `warningCode` publik edhe kur gjendja e përgjithshme nuk ndryshon.
 
 Energjia vjen nga matësi. Fuqia shfaqet vetëm kur pajisja dërgon `Power.Active.Import` në W/kW; nuk nxirret nga energjia ose nga fuqia nominale e pikës. Matja e fuqisë ka afat freskie 120 sekonda nga marrja dhe pastrohet gjatë ndryshimit të gjendjes, pauzës ose humbjes së lidhjes. SoC shfaqet vetëm kur dërgohet një vlerë e vlefshme. `100%` nuk krijon StopTransaction dhe nuk është parashikim kohe.
 
 Mostrat normalizohen vetëm kur mbërrijnë. Energjia, fuqia, SoC dhe temperatura kanë kohët e tyre të renditjes, që një matje e një fushe të mos bllokojë një përditësim të vlefshëm të një fushe tjetër. Fuqia nga përpara rifillimit nuk paraqitet si fuqi aktuale. Përgjigjja e sesionit lexon projeksionin e ruajtur dhe lidhjen me pronarin me kërkesa të kufizuara; nuk skanon të gjitha matjet historike. Matjet bruto ruhen edhe kur janë të papërshtatshme për përmbledhjen.
+
+Çdo grup matjesh të pranuara mbart edhe vlerat, njësitë, fazat, vendndodhjet, kontekstin dhe formatin në delta private. Diagnostikimi shfaq edhe Voltage, Current, Frequency, matjet reactive/export/interval dhe SignedData; këto nuk paraqiten si energji aktive e importuar ose fuqi e verifikuar. Vlerat numerike jashtë precision-it ruhen si tekst pa shkaktuar overflow në PostgreSQL.
+
+StopTransaction i vlefshëm mbyll sesionin fizik edhe nëse regjistri final bie nën nisjen ose energjinë e pranuar. Në atë rast `completionWarning=FinalMeterRegression`, energjia/kostoja finale mbeten null dhe nuk krijohet përmbledhje financiare e gabuar. `meterStop` origjinal ruhet për verifikim. Një pauzë ose animacioni i përfunduar në simulator nuk krijon përfundim fizik.
 
 ## Realtime publik dhe privat
 
@@ -61,6 +67,7 @@ Envelope përmban `eventId`, `eventType`, `entityType`, `entityId`, `entityVersi
 
 - **Harta:** merr vetëm projeksionin publik të pikës. Statusi/çmimi/koordinatat përditësohen lokalisht sipas versionit. Nuk dërgohen ID Driver-i, email, idTag ose matje personale.
 - **Karikimi personal:** eventet mbajnë DTO-n e sesionit dhe filtrohen sipas pronarit. Matja/statusi ndryshojnë drejtpërdrejt UI-në, pa GET për çdo matje.
+- **Komandat:** Boot, Heartbeat, Authorize, Status, Start, Meter dhe Stop dërgojnë `DeviceCommandChanged` privat për pronarin ose pritjen aktive. Authorize Invalid shfaqet i refuzuar edhe kur transporti kthen CALLRESULT. Sekuenca e persistuar shmang humbjen e dy komandave me të njëjtën kohë marrjeje. Refuzimi mbetet i dukshëm deri në suksesin përkatës; Heartbeat nuk e fshin. Diagnostikimi nuk bën polling.
 - **Historiku:** kërkohet veçmas kur vjen `SessionCompleted`; nuk ringarkohet nga matjet.
 - **Rikuperimi:** snapshot i plotë në hyrje, rilidhje dhe rikthim te tab-i/rrjeti. Ndryshimet gjatë snapshot-it riaplikohen me mbrojtje nga versionet e vjetra. EventId-të e përsëritura injorohen në një cache të kufizuar.
 
@@ -95,9 +102,13 @@ Korrigjimi është brenda `ChargingBusinessSessions`, sepse një migrim i ri pas
 
 `20261002180835_ChargingMeasurementClocks` është migrim shtues për kohën e veçantë të energjisë, me backfill nga matjet ekzistuese. Skema përfundimtare dhe snapshot-i nuk ndryshojnë nga korrigjimi i caktimeve demo.
 
+`20261003113430_ChargerFaultDiagnostics` është shtues: ruan kodet/mesazhet e lidhësit dhe kontrolluesit, paralajmërimin publik, sekuencën e komandave, grupin e fundit të matjeve dhe arsyen/verifikimin e ndalimit. Kopjon arsyen ekzistuese të ndalimit nga rekordi i protokollit. Aplikohet përpara nisjes së API-së së përditësuar.
+
 Migrimet dhe indekset janë kontrolluar nga modeli dhe SQL i gjeneruar offline. Zbatimi real në PostgreSQL mbetet i paprovuar në këtë laptop.
 
 ## Provat
+
+Verifikimi i rrjedhës së simulatorit më 3 tetor: **98 teste backend të kaluara, 9 PostgreSQL të paekzekutuara; 66 teste web, TypeScript dhe build production të kaluara.** Provat e reja përfshijnë HTTP/WebSocket/SSE real brenda host-it lokal të testit, 10 simulatorë/disa përdorues, të gjitha enum-et MeterValues, 11 arsyet e ndalimit, paralajmërimet dhe izolimin e transaksioneve. Aksesi ndërveprues te simulatori i jashtëm u refuzua nga mjeti, ndaj nuk pretendohet provë live pas deploy-it. Standardi i përdorur është PDF-ja OCPP 1.6 edition 2 që dërgoi përdoruesi, sidomos §4.9, §7.6, §7.16–7.17 dhe §7.32. Dokumenti bazë nuk zëvendëson specifikimin JSON/errata ose certifikimin.
 
 Verifikimi i korrigjimit të migrimit më 3 tetor 2026: **79 teste backend të kaluara, 9 prova PostgreSQL të paekzekutuara.** SQL-ja e përditësimit u gjenerua offline me EF dhe kontrolli i modelit/snapshot-it kaloi. Docker-i lokal refuzoi aksesin; migrimi nuk u ekzekutua mbi një databazë PostgreSQL. Në verifikimin e mëparshëm kaluan 45 teste web, typecheck dhe build production; replay offline dha 20 kWh, 7.00 EUR dhe një dublikatë të injoruar. Web-i dhe replay nuk u ndryshuan nga ky korrigjim.
 

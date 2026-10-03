@@ -14,6 +14,7 @@ export type Station = {
   powerKW: number; pricePerKWh: number; currency: string;
   status: "Available" | "Occupied" | "Charging" | "OutOfService" | "Maintenance" | "Unknown";
   statusSource?: string;
+  warningCode?: string | null;
   statusObservedAt?: string | null;
   statusReceivedAt?: string | null;
   availabilityForecast?: {
@@ -37,11 +38,33 @@ export type DriverChargingSession = {
   deviceClockSkewed?: boolean; energyScope?: string | null; powerScope?: string | null;
   unitPricePerKWh?: number | null;
   powerSource?: "Reported" | null; powerValidUntil?: string | null; version?: number;
+  faultCode?: string | null; faultInfo?: string | null;
+  readings?: ChargingSampleDiagnostic[]; stopReason?: string | null; completionWarning?: string | null;
+};
+export type ChargingSampleDiagnostic = {
+  measurand: string; value: string; unit: string | null; phase: string | null;
+  location: string | null; context: string | null; format: string | null;
+  observedAt: string; receivedAt: string;
+};
+export type ChargingCommandResult = {
+  action: string; accepted: boolean; failureCode: string | null;
+  description: string | null; receivedAt: string; version?: number; readings?: ChargingSampleDiagnostic[];
+};
+export type ChargingDiagnostics = {
+  externalSessionId: string | null; meterStartWh: number | null; stopReason: string | null;
+  lastCommand: ChargingCommandResult | null; lastFailure?: ChargingCommandResult | null;
+  samples: ChargingSampleDiagnostic[];
+};
+export type DriverConnectorState = {
+  status: string; faultCode: string | null; faultInfo: string | null; version?: number;
+  deviceStatus?: string | null; deviceFaultCode?: string | null; deviceFaultInfo?: string | null;
 };
 export type StationCharging = {
   station: Station; canConnect: boolean; deviceConnected: boolean; inUse: boolean;
   connectionRequest: { id: string; state: string; expiresAt: string } | null;
   session: DriverChargingSession | null;
+  connector?: DriverConnectorState | null;
+  diagnostics?: ChargingDiagnostics | null;
 };
 export type DriverChargingState = { canTestSimulator: boolean; sessions: DriverChargingSession[] };
 export type DriverLiveSnapshot = {
@@ -51,4 +74,6 @@ export type ChargingRealtimeEvent = {
   eventId: string; eventType: string; entityType: string; entityId: string;
   entityVersion: number; occurredAt: string; stationId: string; version: number;
   station?: Station | null; session?: DriverChargingSession | null;
+  connector?: DriverConnectorState | null;
+  command?: ChargingCommandResult | null;
 };

@@ -13,6 +13,7 @@ public static class StartupCommands
         await scope
             .ServiceProvider.GetRequiredService<OcppSimulatorProvisioner>()
             .InitializeAsync();
+        await DemoSimulatorScenario.PrepareAsync(app.Services, app.Configuration);
     }
 
     public static async Task<bool> TryRunStartupCommandAsync(this WebApplication app, string[] args)

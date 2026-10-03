@@ -218,14 +218,26 @@
 .is-paused .charge-progress-fill, .is-paused .charge-progress-indeterminate { background: #c5a562; }
 .is-complete .charge-progress-indeterminate { width: 100%; opacity: .65; }
 .charge-progress-caption { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; margin: 13px 0 30px; color: #7d8e81; font-size: 11px; line-height: 1.7; }
-.charge-process-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; border-top: 1px solid #e5ede1; padding-top: 24px; }
+.charge-process-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 24px; border-top: 1px solid #e5ede1; padding-top: 24px; }
 .charge-process-metrics > div { display: grid; align-content: start; gap: 11px; }
 .charge-process-metrics > div > span { font-size: 9px; font-weight: 700; letter-spacing: 1.2px; color: #85998b; line-height: 1.5; }
-.charge-process-metrics strong { font-size: 26px; font-weight: 600; letter-spacing: -.6px; font-variant-numeric: tabular-nums; }
+.charge-process-metrics strong { font-size: 26px; font-weight: 600; letter-spacing: -.6px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .charge-process-metrics strong small { font-size: 12px; font-weight: 400; letter-spacing: 0; }
 .charge-process-metrics > div > small { color: #7e9384; font-size: 11px; line-height: 1.6; }
 .charge-reading-details { margin-top: 24px; padding-top: 18px; border-top: 1px solid #e5ede1; color: #7a8f80; font-size: 12px; line-height: 1.7; }
 .charge-reading-details summary { cursor: pointer; width: fit-content; }
+.charge-session-start { color: #62766a; font-size: 12px; line-height: 1.7; margin: 16px 0 24px; }
+.charge-fault-notice { display: grid; gap: 5px; border: 1px solid #efcdc7; border-radius: 9px; background: #fff4f1; color: #a3372b; padding: 14px 16px; margin: 16px 0; font-size: 13px; overflow-wrap: anywhere; }
+.charge-fault-notice span { font-size: 12px; }
+.charge-fault-notice.is-warning { border-color: #ecd4aa; background: #fff9e8; color: #785814; }
+.station-warning-badge { display: inline-block; margin: 7px 0; padding: 4px 7px; border: 1px solid #ecd4aa; border-radius: 6px; background: #fff9e8; color: #785814; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.map-pin.has-warning::after { content: "!"; position: absolute; top: -6px; right: -6px; display: grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; background: #fff0bf; color: #785814; border: 1px solid #c7a148; font-size: 12px; font-weight: 700; }
+.simulator-diagnostics { margin-top: 20px; }
+.charge-samples-scroll { max-width: 100%; overflow-x: auto; margin-top: 14px; }
+.charge-samples-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 12px; }
+.charge-samples-table caption { text-align: left; font-weight: 600; padding-bottom: 10px; }
+.charge-samples-table th, .charge-samples-table td { padding: 8px 12px; border-bottom: 1px solid #e5ede1; vertical-align: top; }
+.charge-samples-table td:first-child { overflow-wrap: anywhere; min-width: 150px; }
 .charge-reading-details p { margin: 10px 0 0; max-width: 760px; }
 .charge-session-end { font-size: 12px; color: #36765b; background: #f0f7ec; padding: 14px; border-radius: 8px; margin: 22px 0 0; line-height: 1.7; }
 .charge-waiting-card { padding: 40px 28px; text-align: center; background: #fff; border: 1px solid #dce6dc; border-radius: 18px; }

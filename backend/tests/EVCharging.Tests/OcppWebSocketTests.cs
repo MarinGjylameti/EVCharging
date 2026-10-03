@@ -258,7 +258,7 @@ public sealed partial class OcppWebSocketTests : IDisposable
     }
 
     [Fact]
-    public async Task MultipleSimulatorsKeepIndependentStatesAndIgnoreOldStatus()
+    public async Task MultipleSimulatorsKeepIndependentStatesAndAcceptManualDemoStatus()
     {
         using var driver = await DriverAsync();
         await ClaimAsync(driver);
@@ -278,7 +278,7 @@ public sealed partial class OcppWebSocketTests : IDisposable
         await StatusAsync(second, "Preparing");
         await StatusAsync(third, "Faulted");
         await StatusAsync(first, "Available", DateTimeOffset.UtcNow.AddMinutes(-10));
-        Assert.Equal("Charging", await StationStatusAsync(driver, "SIM-001"));
+        Assert.Equal("Occupied", await StationStatusAsync(driver, "SIM-001")); // The session is still open.
         Assert.Equal("Occupied", await StationStatusAsync(driver, "SIM-002"));
         Assert.Equal("OutOfService", await StationStatusAsync(driver, "SIM-003"));
         Assert.Single(

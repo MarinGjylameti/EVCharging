@@ -131,6 +131,7 @@ export function useLiveSnapshot<T>(initial: T, url: string, stationId?: string, 
                 duringRequest.push(change);
                 if (duringRequest.length > 256) { overflow = true; duringRequest = []; }
               }
+              if (update.refreshUrl) schedule(update.refreshUrl);
             }
             else if (update) schedule(update.refreshUrl);
           } else schedule(url);

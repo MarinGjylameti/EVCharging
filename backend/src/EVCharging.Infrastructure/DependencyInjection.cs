@@ -35,6 +35,7 @@ public static class DependencyInjection
         services.AddScoped<IChargerEventReceiver, ChargerEventReceiver>();
         services.AddScoped<StationProjection>();
         services.AddScoped<IChargingClaimVerification, DemoClaimVerification>();
+        services.AddScoped<IChargingDiagnostics, OcppChargingDiagnostics>();
         services
             .AddOptions<OcppOptions>()
             .BindConfiguration("Ocpp")

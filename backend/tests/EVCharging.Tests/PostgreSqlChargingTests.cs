@@ -73,7 +73,11 @@ public sealed partial class PostgreSqlChargingTests
             };
             db.Accounts.Add(driver);
             db.Stations.Add(station);
-            db.OcppChargePoints.Add(device);
+            // Seed the old schema without columns introduced by later migrations.
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO ocpp_charge_points (id, identity, protocol_version, is_enabled)
+                VALUES ({device.Id}, {device.Identity}, '1.6J', true);
+                """);
             db.OcppConnections.Add(connection);
             db.OcppInboundMessages.Add(message);
             await db.SaveChangesAsync();
