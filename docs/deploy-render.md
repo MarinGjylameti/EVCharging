@@ -44,6 +44,7 @@ Vendos këto **Environment Variables** në shërbimin API:
 | --- | --- |
 | `DATABASE_URL` | **Internal Database URL** nga Postgres |
 | `ASPNETCORE_ENVIRONMENT` | `Development`, vetëm për këtë shërbim demo |
+| `DOTNET_ENVIRONMENT` | `Development`, njësoj si ASPNETCORE_ENVIRONMENT |
 | `EVCHARGING_MIGRATE_ON_START` | `true` |
 | `EVCHARGING_SEED_DEMO_ON_START` | `true` vetëm për këtë demo |
 | `EVCHARGING_Demo__DriverEmail` | Email demonstrues që e zgjedh ti |
@@ -54,6 +55,10 @@ Vendos këto **Environment Variables** në shërbimin API:
 | `EVCHARGING_Push__Enabled` | `false` |
 
 Fjalëkalimet nuk kanë vlera parazgjedhje në shërbimin real. Mbaji vetëm në Render Environment; mos i shkruaj në repo ose chat. Seed-i përgatit SIM-001…010 dhe llogaritë demo në mënyrë idempotente, pa krijuar karikime apo histori imagjinare. Ai ruan llogaritë, fjalëkalimet dhe historikun ekzistues. Migrimi i ri `ChargerFaultDiagnostics` duhet të përfundojë para nisjes së API-së. Pas krijimit, hap `https://<api-url>/health/ready`: pritet HTTP 200. Shiko log-et nëse merr 503. Pas verifikimit të parë, hiq `EVCHARGING_SEED_DEMO_ON_START` dhe fjalëkalimet e seed-it nga mjedisi i shërbimit; llogaritë e krijuara mbeten në databazë.
+
+Kur seed-i ose simulator mode aktivizohet dhe të dyja variablat e mjedisit mungojnë, entrypoint-i zgjedh Development për këtë demo. Një mjedis eksplicit ruhet: DOTNET_ENVIRONMENT ka përparësi ndaj ASPNETCORE_ENVIRONMENT. Nëse seed-i është aktiv në Production/Staging, nisja ndalet me udhëzim për konfigurimin përpara migrimit. Në shërbimin real përdor Production dhe çaktivizo seed-in demo.
+
+Logu `Demo seed is available only in Development or Testing` pas një migrimi të suksesshëm tregon konflikt konfigurimi; vendos të dyja variablat më sipër dhe bëj redeploy. Mesazhi `libgssapi_krb5.so.2` është tentativa opsionale GSSAPI e Npgsql 10, jo dështimi i migrimit. Për URL-të PostgreSQL me fjalëkalim, normalizimi përdor GSS Encryption Mode=Disable; SSL Mode ruhet dhe `gssencmode` eksplicit respektohet. [Dokumentacioni Npgsql](https://www.npgsql.org/doc/security.html).
 
 ## 4. Web-i
 

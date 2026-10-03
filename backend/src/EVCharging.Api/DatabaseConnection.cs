@@ -30,6 +30,9 @@ public static class DatabaseConnection
             Database = Uri.UnescapeDataString(uri.AbsolutePath[1..]),
             Username = Uri.UnescapeDataString(credentials[0]),
             Password = Uri.UnescapeDataString(credentials[1]),
+            // Password URLs do not require Kerberos. Avoid Npgsql's optional
+            // GSSAPI probe in the Linux container; SSL settings stay independent.
+            GssEncryptionMode = GssEncryptionMode.Disable,
         };
 
         if (!string.IsNullOrEmpty(uri.Query))
@@ -39,19 +42,27 @@ public static class DatabaseConnection
             )
             {
                 var pair = parameter.Split('=', 2);
-                if (
-                    !pair[0].Equals("sslmode", StringComparison.OrdinalIgnoreCase)
-                    || pair.Length != 2
-                    || !Enum.TryParse<SslMode>(
-                        Uri.UnescapeDataString(pair[1]),
-                        true,
-                        out var sslMode
-                    )
-                )
+                if (pair.Length != 2)
                     throw new InvalidOperationException(
                         "The PostgreSQL URL has an unsupported query parameter."
                     );
-                builder.SslMode = sslMode;
+                var value = Uri.UnescapeDataString(pair[1]);
+                if (
+                    pair[0].Equals("sslmode", StringComparison.OrdinalIgnoreCase)
+                    && Enum.TryParse<SslMode>(value, true, out var sslMode)
+                    && Enum.IsDefined(sslMode)
+                )
+                    builder.SslMode = sslMode;
+                else if (
+                    pair[0].Equals("gssencmode", StringComparison.OrdinalIgnoreCase)
+                    && Enum.TryParse<GssEncryptionMode>(value, true, out var gssMode)
+                    && Enum.IsDefined(gssMode)
+                )
+                    builder.GssEncryptionMode = gssMode;
+                else
+                    throw new InvalidOperationException(
+                        "The PostgreSQL URL has an unsupported query parameter."
+                    );
             }
         }
 

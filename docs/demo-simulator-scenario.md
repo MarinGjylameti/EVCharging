@@ -21,6 +21,7 @@ Përdor këto cilësime vetëm në mjedisin e demonstrimit:
 
 ```dotenv
 ASPNETCORE_ENVIRONMENT=Development
+DOTNET_ENVIRONMENT=Development
 EVCHARGING_Ocpp__SimulatorEnabled=true
 EVCHARGING_Ocpp__AllowAnonymousSimulators=true
 EVCHARGING_Demo__PrepareOtherDrivers=true
