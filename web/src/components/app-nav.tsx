@@ -10,8 +10,7 @@ const links = {
   driver: [
     {href:"/driver", icon:"⌖", sq:"Harta e pikave", en:"Charging map", shortSq:"Harta", shortEn:"Map"},
     {href:"/driver/history", icon:"◷", sq:"Historiku im", en:"My history", shortSq:"Historiku", shortEn:"History"},
-    {href:"/driver/account", icon:"◇", sq:"Profili dhe makina", en:"Profile and vehicle", shortSq:"Profili", shortEn:"Profile"},
-    {href:"/driver/settings", icon:"⚙", sq:"Cilësimet", en:"Settings", shortSq:"Cilësime", shortEn:"Settings"}
+    {href:"/driver/account", icon:"◇", sq:"Profili dhe makina", en:"Profile and vehicle", shortSq:"Profili", shortEn:"Profile"}
   ],
   dashboard: [
     {href:"/dashboard", icon:"▦", sq:"Përmbledhje", en:"Overview", shortSq:"Paneli", shortEn:"Home"},

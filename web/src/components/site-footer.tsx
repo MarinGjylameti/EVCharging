@@ -8,7 +8,7 @@ export function SiteFooter({area, language}: {area: FooterArea; language: "sq" |
     ? [
         {href: "/driver", label: sq ? "Harta e pikave" : "Charging map"},
         {href: "/driver/history", label: sq ? "Historiku im" : "My history"},
-        {href: "/driver/settings", label: sq ? "Cilësimet" : "Settings"},
+        {href: "/driver/account", label: sq ? "Profili dhe makina" : "Profile and vehicle"},
       ]
     : [
         {href: "/dashboard", label: sq ? "Përmbledhje" : "Overview"},

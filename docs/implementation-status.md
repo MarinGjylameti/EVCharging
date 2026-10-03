@@ -1,5 +1,7 @@
 # Gjendja e implementimit — 2 tetor 2026
 
+**Për plotësimin e kërkesave të klientit, më 3 tetor 2026, përdor [kontrollin aktual](client-requirements-audit.md).** Ky raport ruan gjendjen e një hapi të mëparshëm; disa funksione dhe numra testesh kanë ndryshuar.
+
 Prioriteti i konfirmuar: **backend dhe web përpara mobile**. Pas avancimit të web-it, përdoruesi kërkoi nisjen edhe të aplikacionit iOS/Android.
 
 ## Çfarë funksionon në kod

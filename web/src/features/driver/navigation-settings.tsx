@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import type { Language } from "../../../../contracts/account";
 import { mapProviderFromPreference, mapProviderStorageKey, type MapProvider } from "@/lib/map-directions";
 
@@ -25,10 +24,7 @@ export function NavigationSettings({language}: {language: Language}) {
     }
   }
 
-  return <div className="driver-content driver-preferences">
-    <span className="driver-eyebrow">{sq ? "PREFERENCAT E MIA" : "MY PREFERENCES"}</span>
-    <h1>{sq ? "Cilësimet" : "Settings"}</h1>
-    <section className="navigation-settings-card" aria-labelledby="navigation-settings-title">
+  return <section id="map-preferences" className="navigation-settings-card" aria-labelledby="navigation-settings-title">
       <h2 id="navigation-settings-title">{sq ? "Aplikacioni i navigimit" : "Navigation app"}</h2>
       <p>{sq ? "Kur hap udhëzimet nga një pikë karikimi, përdor këtë aplikacion. Google Maps është parazgjedhja." :
         "Use this app when opening directions to a charging station. Google Maps is the default."}</p>
@@ -49,7 +45,5 @@ export function NavigationSettings({language}: {language: Language}) {
       <p className="navigation-settings-note">{sq ? "Kjo preferencë ruhet në këtë shfletues. Në një pajisje tjetër, parazgjedhja është Google Maps." :
         "This preference is saved in this browser. Google Maps is the default on another device."}</p>
       {message && <p className="navigation-settings-message" role="status">{message}</p>}
-    </section>
-    <Link href="/driver" className="driver-history-link">{sq ? "← Kthehu te harta" : "← Back to map"}</Link>
-  </div>;
+  </section>;
 }

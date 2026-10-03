@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { User } from "../../../../contracts/account";
 
-export function AccountForm({ initial }: { initial: User }) {
+export function AccountForm({ initial, children }: { initial: User; children?: ReactNode }) {
   const [user, setUser] = useState(initial);
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
@@ -74,6 +74,7 @@ export function AccountForm({ initial }: { initial: User }) {
       <p id="battery-capacity-help">{sq ? "Fushë opsionale. Vendos kapacitetin e përdorshëm nga specifikimet e makinës. E përdorim me përqindjen dhe fuqinë e raportuar për të vlerësuar kohën deri në 100%." : "Optional. Enter the usable capacity from your vehicle specifications. We use it with reported battery percentage and power to estimate the time to 100%."}</p>
       <button className="button-primary">{busy === "profile" ? (sq ? "Duke ruajtur…" : "Saving…") : (sq ? "Ruaj profilin" : "Save profile")}</button></fieldset>
     </form>
+    {children}
     <form className="settings-card" onSubmit={password}><h2>{sq ? "Ndrysho fjalëkalimin" : "Change password"}</h2>
       <p>{sq ? "Përdor 12–128 karaktere. Pas ndryshimit do të hysh përsëri në të gjitha pajisjet." : "Use 12–128 characters. You will need to sign in again on all devices."}</p>
       <fieldset disabled={Boolean(busy)}><label>{sq ? "Fjalëkalimi aktual" : "Current password"}<input name="currentPassword" type="password" autoComplete="current-password" required maxLength={128}/></label>

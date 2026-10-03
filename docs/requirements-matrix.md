@@ -1,5 +1,7 @@
 # Matrica e kërkesave dhe përgjegjësive
 
+**Kontrolli aktual, 3 tetor 2026:** shih [krahasimin me kodin](client-requirements-audit.md). Gjendjet në këtë matricë pasqyrojnë hapa më të hershëm dhe nuk përbëjnë konfirmim të përfundimit të Fazës 1.
+
 Burimi funksional është [specifikimi Word i nxjerrë](reference/mvp-source.txt). `§` është seksioni i dokumentit, `P` numri i paragrafit në XML, përfshirë paragrafët bosh. Brief-i shoqërues përcakton mënyrën e punës dhe kufijtë teknikë. Propozimi QR vjen nga mesazhi pasues i përdoruesit, jo nga Word-i.
 
 **Gjendja e përgjithshme: implementimi ka nisur; backend dhe web kanë përparësi.** `Partial` = pjesë e kërkesës në kod, me kufij në kolonën e fundit; `Domain tested` = vetëm rregulla domeni, jo rrjedhë fund më fund; `API tested / web built` = API e testuar in-process dhe web i kompiluar, pa provë vizuale. `Planned`, `Clarify`, `Proposed` dhe `Excluded` ruajnë kuptimin e tyre. Shih [evidencën konkrete](implementation-status.md).
