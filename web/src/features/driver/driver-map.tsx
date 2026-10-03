@@ -2,7 +2,6 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useDriverLiveData } from "./use-driver-live-data";
 import { chargingFaultLabel, StationWarning } from "./charging-fault";
 import type { ChargingHistory, Language, Station } from "../../../../contracts/account";
@@ -53,7 +52,6 @@ function AvailabilityCard({station,language,nowMs}: {
 
 export function DriverMap({stations: initialStations, history: initialHistory, language, firstName}: Props) {
   const sq = language === "sq";
-  const router = useRouter();
   const { stations, history, connected, unavailable } = useDriverLiveData(initialStations, initialHistory);
   const stationCities = useMemo(() => [...new Set(stations.map(x => x.city))].sort((a,b)=>a.localeCompare(b,"sq")), [stations]);
   const cityOptions = useMemo(() => [...new Set([...albanianCities,...stationCities])].sort((a,b)=>a.localeCompare(b,"sq")), [stationCities]);
@@ -258,10 +256,7 @@ export function DriverMap({stations: initialStations, history: initialHistory, l
             const remaining=nowMs===null?null:remainingChargingMinutes(station.availabilityForecast,nowMs);
             const warning = station.warningCode && station.warningCode !== "NoError";
             return <Fragment key={station.id}><button type="button" className={`map-pin status-${station.status.toLowerCase()}${selected?" selected":""}${warning?" has-warning":""}`}
-              style={{left:at.left,top:at.top}} onClick={()=>{
-                if (station.statusSource === "Device") router.push(`/driver/stations/${station.id}`);
-                else setSelectedId(station.id);
-              }}
+              style={{left:at.left,top:at.top}} onClick={()=>setSelectedId(station.id)}
               aria-label={`${station.name}, ${(sq?statusSq:statusEn)[station.status]}${warning?`, ${sq?"paralajmërim":"warning"}: ${chargingFaultLabel(station.warningCode!, language)}`:""}${remaining!==null?`, ${remaining} ${sq?"min të mbetura":"min remaining"}`:""}`}
               aria-pressed={selected} title={station.name}><span aria-hidden="true">ϟ</span></button>
               {station.status==="Charging"&&remaining!==null&&<span className="map-eta-badge" aria-hidden="true"
@@ -317,7 +312,6 @@ export function DriverMap({stations: initialStations, history: initialHistory, l
             (sq ? "Nuk ka pika që përputhen me filtrin." : "No stations match this filter.")}</p>}
           <div className="station-list" aria-label={sq ? "Lista e pikave" : "Station list"}>
             {shown.map(station=><button type="button" key={station.id} onClick={()=>{
-              if (station.statusSource === "Device") { router.push(`/driver/stations/${station.id}`); return; }
               setSelectedId(station.id);
               setView(previous=>({...previous,center:{latitude:station.latitude,longitude:station.longitude},zoom:Math.max(previous.zoom,13)}));
             }} aria-pressed={active?.id===station.id}>
