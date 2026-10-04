@@ -1,12 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import ts from "typescript";
+import { loadTypescript } from "./helpers/load-typescript.mjs";
 
-const exports = {};
-new Function("exports", ts.transpileModule(readFileSync(new URL("../src/features/driver/charging-estimate.ts", import.meta.url), "utf8"), {
-  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-}).outputText)(exports);
+const exports = loadTypescript(new URL("../src/features/driver/charging-estimate.ts", import.meta.url));
 const { chargingEstimate, formatChargingEstimate } = exports;
 const now = Date.parse("2026-10-03T14:00:00Z");
 const session = { status: "Charging", stoppedAt: null, batteryCapacityKWh: 60, stateOfCharge: 45,

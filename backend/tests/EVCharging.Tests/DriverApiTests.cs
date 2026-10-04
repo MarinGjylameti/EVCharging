@@ -23,6 +23,7 @@ public sealed class DriverApiTests : IDisposable
             {
                 email,
                 password = "long-demo-passphrase",
+                phone = "+355691234567",
                 firstName = "Demo",
                 lastName = "Driver",
                 language = "sq",

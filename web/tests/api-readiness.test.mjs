@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import ts from "typescript";
+import { loadTypescript } from "./helpers/load-typescript.mjs";
 import { waitForApi } from "../src/features/auth/wait-for-api.ts";
 
 function options(responses, budgetMs = 10_000) {
@@ -56,14 +55,9 @@ test("leaving the form aborts a pending readiness request", async () => {
 });
 
 test("BFF probes reject the platform loading page and confirm the database readiness endpoint", async () => {
-  const compiled = ts.transpileModule(readFileSync(new URL("../src/app/api/auth/ready/route.ts", import.meta.url), "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-  }).outputText;
-  const exports = {};
-  new Function("require", "exports", compiled)(name => {
-    assert.equal(name, "@/lib/backend");
-    return { apiOrigin: () => "https://api.example.test" };
-  }, exports);
+  const exports = loadTypescript(new URL("../src/app/api/auth/ready/route.ts", import.meta.url), {
+    "@/lib/backend": { apiOrigin: () => "https://api.example.test" },
+  });
   const original = globalThis.fetch;
   try {
     for (const [response, expected] of [

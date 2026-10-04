@@ -24,6 +24,7 @@ public sealed class StationManagementTests : IDisposable
             {
                 email,
                 password = "a-long-demo-passphrase",
+                phone = "+355691234567",
                 firstName = "Demo",
                 lastName = "User",
                 language = "sq",
@@ -242,6 +243,58 @@ public sealed class StationManagementTests : IDisposable
         }
         rows = await driver.GetFromJsonAsync<JsonElement>("/api/v1/driver/stations");
         Assert.Equal(JsonValueKind.Null, rows[0].GetProperty("availabilityForecast").ValueKind);
+    }
+
+    [Theory]
+    [InlineData("Maintenance", "Physical")]
+    [InlineData("OutOfService", "Physical")]
+    [InlineData("Unknown", "Linked")]
+    [InlineData("Available", "Waiting")]
+    public async Task ArchiveChecksPhysicalSessionsAndClaimsEvenWhenPublicStatusIsNotBusy(
+        string status,
+        string occupancy
+    )
+    {
+        var (admin, userId) = await Login("archive-operator@test.com", UserRole.Superadmin);
+        var created = await admin.PostAsJsonAsync("/api/v1/admin/stations", Input(status: status));
+        created.EnsureSuccessStatusCode();
+        var id = (await created.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("id")
+            .GetGuid();
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ChargingDbContext>();
+            if (occupancy == "Physical")
+                db.ChargingSessions.Add(
+                    new ChargingSession(id, .35m, "EUR", DateTimeOffset.UtcNow)
+                );
+            else
+                db.ChargingConnectionRequests.Add(
+                    new ChargingConnectionRequest
+                    {
+                        DriverId = userId,
+                        StationId = id,
+                        State = occupancy,
+                        ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(10),
+                    }
+                );
+            await db.SaveChangesAsync();
+        }
+        using var response = await admin.PostAsJsonAsync(
+            $"/api/v1/admin/stations/{id}/archive",
+            new { version = 0 }
+        );
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal(
+            "station_busy",
+            (await response.Content.ReadFromJsonAsync<JsonElement>())
+                .GetProperty("code")
+                .GetString()
+        );
+        using var check = factory.Services.CreateScope();
+        var stored = check.ServiceProvider.GetRequiredService<ChargingDbContext>();
+        Assert.False((await stored.Stations.SingleAsync(x => x.Id == id)).IsArchived);
+        Assert.DoesNotContain(await stored.Audit.ToListAsync(), x => x.Action == "StationArchived");
     }
 
     public void Dispose() => factory.Dispose();

@@ -17,6 +17,39 @@ public sealed partial class OcppWebSocketTests : IDisposable
     private readonly ApiFactory factory = new(simulator: true);
     private readonly CancellationTokenSource timeout = new(TimeSpan.FromSeconds(30));
 
+    [Fact]
+    public async Task ArchivedStationCannotStartOnAnAlreadyOpenConnectionOrBreakNextStartup()
+    {
+        using var socket = await ConnectAsync();
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ChargingDbContext>();
+            (await db.Stations.SingleAsync(x => x.Code == "SIM-001")).IsArchived = true;
+            await db.SaveChangesAsync();
+        }
+        var reply = await CallAsync(
+            socket,
+            "StartTransaction",
+            new
+            {
+                connectorId = 1,
+                idTag = "TAG-001",
+                meterStart = 0,
+                timestamp = DateTimeOffset.UtcNow,
+            }
+        );
+        Assert.Equal(4, reply[0].GetInt32());
+        Assert.Equal("PropertyConstraintViolation", reply[2].GetString());
+        using var check = factory.Services.CreateScope();
+        var stored = check.ServiceProvider.GetRequiredService<ChargingDbContext>();
+        Assert.False(await stored.ChargingSessions.AnyAsync());
+        await check
+            .ServiceProvider.GetRequiredService<EVCharging.Infrastructure.Charging.Ocpp.OcppSimulatorProvisioner>()
+            .InitializeAsync();
+        Assert.True((await stored.Stations.SingleAsync(x => x.Code == "SIM-001")).IsArchived);
+        Assert.Equal(1, await stored.Stations.CountAsync(x => x.Code == "SIM-001"));
+    }
+
     private async Task<HttpClient> DriverAsync(string email = "driver@test.com")
     {
         var client = factory.CreateClient();
@@ -28,6 +61,7 @@ public sealed partial class OcppWebSocketTests : IDisposable
             {
                 email,
                 password = "driver-test-passphrase",
+                phone = "+355691234567",
                 firstName = "Test",
                 lastName = "Driver",
                 language = "sq",

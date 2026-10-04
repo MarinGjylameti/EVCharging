@@ -99,6 +99,9 @@ public sealed class DriverChargingService(
                 driverId,
                 ct
             );
+            // Verification happened before waiting for the device lock. An
+            // archive may have committed meanwhile; check its evidence again.
+            connector = await verification.VerifyAsync(stationId, ct);
             var now = clock.GetUtcNow();
             var expired = await db
                 .ChargingConnectionRequests.Where(x =>

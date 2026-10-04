@@ -40,6 +40,7 @@ public sealed class AccountService(
             NormalizedEmail = email,
             FirstName = AccountRules.Name(request.FirstName),
             LastName = AccountRules.Name(request.LastName),
+            Phone = AccountRules.Phone(request.Phone),
             Language = AccountRules.Language(request.Language),
             Role = UserRole.Driver,
             CreatedAt = clock.GetUtcNow(),

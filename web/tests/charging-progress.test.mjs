@@ -1,20 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
-import ts from "typescript";
+import { loadTypescript } from "./helpers/load-typescript.mjs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-const require = createRequire(import.meta.url);
 function compile(path, dependencies = {}) {
-  const compiled = ts.transpileModule(readFileSync(new URL(path, import.meta.url), "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 },
-  }).outputText;
-  const exports = {};
-  new Function("require", "exports", compiled)(name => dependencies[name] ?? require(name), exports);
-  return exports;
+  return loadTypescript(new URL(path, import.meta.url), dependencies);
 }
+
 const fault = compile("../src/features/driver/charging-fault.tsx");
 const diagnostics = compile("../src/features/driver/simulator-diagnostics.tsx");
 const report = compile("../src/features/driver/charging-test-report.ts");

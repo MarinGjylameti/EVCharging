@@ -16,7 +16,7 @@ export async function POST(request: Request, context: { params: Promise<{ action
   try { body = await boundedJson(request); }
   catch { return NextResponse.json({code:"invalid_body"}, {status:400}); }
   try {
-    const response = await backend(target.path, {method:target.method, body:JSON.stringify(body)});
+    const response = await backend(target.path, {method:target.method, body:JSON.stringify(body), signal: request.signal});
     const result = response.status === 204 ? new NextResponse(null, {status:204}) :
       NextResponse.json(await response.json().catch(() => ({code:"request_failed"})), {status:response.status});
     result.headers.set("Cache-Control", "no-store");

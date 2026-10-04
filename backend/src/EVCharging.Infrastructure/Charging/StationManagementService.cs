@@ -87,12 +87,25 @@ public sealed class StationManagementService(
         CancellationToken ct
     )
     {
+        await using var transaction = await StationMutationLock.BeginAsync(db, id, ct);
         var station = await GetAsync(id, ct);
         CheckVersion(station, input.Version);
         if (station.IsArchived)
             throw new RequestFailure(409, "station_archived", "Station is already archived.");
 
-        if (station.Status is PointState.Charging or PointState.Occupied)
+        if (
+            station.Status is PointState.Charging or PointState.Occupied
+            || await db.ChargingSessions.AnyAsync(x => x.PointId == id && x.EndedAt == null, ct)
+            || await db.ChargingConnectionRequests.AnyAsync(
+                x =>
+                    x.StationId == id
+                    && (
+                        x.State == "Linked"
+                        || x.State == "Waiting" && x.ExpiresAt > clock.GetUtcNow()
+                    ),
+                ct
+            )
+        )
             throw new RequestFailure(409, "station_busy", "A busy station cannot be archived.");
 
         station.IsArchived = true;
@@ -100,6 +113,8 @@ public sealed class StationManagementService(
         AddAudit(actorId, station.Id, "StationArchived");
         StageChange(station);
         await db.SaveChangesAsync(ct);
+        if (transaction is not null)
+            await transaction.CommitAsync(ct);
         events.Notify();
 
         return StationDto.From(station);

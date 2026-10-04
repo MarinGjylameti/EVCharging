@@ -42,6 +42,11 @@ public sealed class OcppTransactionHandler(
                 "PropertyConstraintViolation",
                 "Connector has no business mapping."
             );
+        if (!await db.Stations.AnyAsync(x => x.Id == connector.StationId && !x.IsArchived, ct))
+            throw new OcppFault(
+                "PropertyConstraintViolation",
+                "The station is archived or unavailable."
+            );
         var active = await db.OcppChargingTransactions.SingleOrDefaultAsync(
             x =>
                 x.ChargePointId == device.Id

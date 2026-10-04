@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { apiOrigin, apiTimeoutMs, sameOrigin, sessionCookie } from "@/lib/backend";
-import type { AuthResult } from "../../../../../../contracts/account";
+import { apiOrigin, apiTimeoutMs, sameOrigin } from "@/lib/backend";
+import { authResponse } from "@/lib/auth-response";
 import { boundedJson } from "@/lib/request-body";
 
 export async function POST(request: Request) {
@@ -15,20 +15,9 @@ export async function POST(request: Request) {
     const response = await fetch(`${apiOrigin()}/api/v1/auth/login`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: payload.email, password: payload.password }),
-      cache: "no-store", signal: AbortSignal.timeout(apiTimeoutMs)
+      cache: "no-store", signal: AbortSignal.any([request.signal, AbortSignal.timeout(apiTimeoutMs)])
     });
-    if (!response.ok) return NextResponse.json(await response.json().catch(() => ({ code: "login_failed" })), { status: response.status });
-    const auth = await response.json() as AuthResult;
-    if (!["DRIVER", "ADMIN", "SUPERADMIN"].includes(auth.user.role)) {
-      await fetch(`${apiOrigin()}/api/v1/auth/logout`, { method: "POST", headers: { Authorization: `Bearer ${auth.accessToken}` }, signal: AbortSignal.timeout(10000) });
-      return NextResponse.json({ code: "unsupported_role" }, { status: 403 });
-    }
-    const result = NextResponse.json({ user: auth.user }, { headers: { "Cache-Control": "no-store" } });
-    result.cookies.set(sessionCookie, auth.accessToken, {
-      httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "strict",
-      path: "/", expires: new Date(auth.expiresAt)
-    });
-    return result;
+    return await authResponse(response, ["DRIVER", "ADMIN", "SUPERADMIN"]);
   } catch {
     return NextResponse.json({ code: "service_unavailable" }, { status: 503 });
   }

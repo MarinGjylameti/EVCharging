@@ -1,12 +1,10 @@
 using System.Text.Json;
 using EVCharging.Application.Charging;
-using EVCharging.Infrastructure.Charging.Ocpp;
 using EVCharging.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace EVCharging.Infrastructure.Charging;
 
@@ -37,9 +35,37 @@ public sealed class StationEventWorker(
                     .ToListAsync(stoppingToken);
                 foreach (var entry in events)
                 {
-                    var change =
-                        JsonSerializer.Deserialize<StationChanged>(entry.PayloadJson)
-                        ?? throw new JsonException("Invalid station event.");
+                    StationChanged change;
+                    try
+                    {
+                        change =
+                            JsonSerializer.Deserialize<StationChanged>(entry.PayloadJson)
+                            ?? throw new JsonException("Invalid station event.");
+                        if (
+                            change.StationId == Guid.Empty
+                            || entry.Audience == "Driver" && entry.RecipientAccountId is null
+                            || entry.Audience == "PublicStation"
+                                && (
+                                    entry.RecipientAccountId is not null
+                                    || change.Session is not null
+                                    || change.Command is not null
+                                )
+                        )
+                            throw new JsonException("Invalid event audience or station identity.");
+                    }
+                    catch (JsonException)
+                    {
+                        // Retain the failed row for diagnosis, while later committed
+                        // events continue. A malformed payload cannot repair itself.
+                        entry.Attempts++;
+                        entry.LastFailureCode = "invalid_event";
+                        entry.AvailableAt = clock.GetUtcNow().AddMinutes(5);
+                        logger.LogError(
+                            "Realtime event {EventId} has an invalid payload or audience; retry deferred.",
+                            entry.Id
+                        );
+                        continue;
+                    }
                     bus.Publish(
                         change with
                         {

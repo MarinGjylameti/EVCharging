@@ -18,7 +18,9 @@ export async function backend(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);
   if (init.body) headers.set("Content-Type", "application/json");
-  return fetch(`${apiOrigin()}/api/v1${path}`, { ...init, headers, cache: "no-store", signal: AbortSignal.timeout(apiTimeoutMs) });
+  const timeout = AbortSignal.timeout(apiTimeoutMs);
+  return fetch(`${apiOrigin()}/api/v1${path}`, { ...init, headers, cache: "no-store",
+    signal: init.signal ? AbortSignal.any([init.signal, timeout]) : timeout });
 }
 
 export const currentUser = cache(async (): Promise<User | null> => {

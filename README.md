@@ -18,11 +18,15 @@ Platformë për menaxhimin e karikimit elektrik, në një projekt të ri pranë 
 
 ## Verifikimi lokal
 
-98 teste backend dhe 66 teste web kaluan në verifikimin e rrjedhës së simulatorit më 3 tetor 2026. TypeScript dhe build-i Next kaluan. Nëntë prova PostgreSQL mbeten të paekzekutuara; testet API me InMemory nuk provojnë kufizimet/transaksionet e PostgreSQL. Testet me 10 pika provojnë HTTP/WebSocket/SSE dhe privatësinë mes përdoruesve. Detajet dhe kufijtë: [sesionet live](docs/charging-session-realtime.md).
+Më 4 tetor 2026 kaluan 161 teste backend, 114 teste web, TypeScript dhe build-i Next. Dymbëdhjetë prova PostgreSQL mbeten të paekzekutuara lokalisht; workflow i ri CI përgatit një databazë të posaçme për to. Backend-i ka 87.41% mbulim rreshtash dhe 78.95% degësh. Web-i ka 89.28%/78.67% vetëm në 28 nga 62 skedarë production të ngarkuar nga testet. [Rezultatet, kufijtë dhe punët e mbetura](docs/release-readiness-audit.md).
+
+Regjistrimi web gjendet te `/register`, nga lidhja **Nuk ke llogari? Regjistrohu**. Kërkon emër, mbiemër, email, celular me kod shteti dhe fjalëkalim; krijon llogari Driver dhe hap hapësirën personale.
 
 Komandat e kontrollit janë te [scripts/verify-local.ps1](scripts/verify-local.ps1). Ato përdorin paketat lokale dhe nuk shkarkojnë nga interneti. [Udhëzimet backend](backend/README.md) dhe [udhëzimet web](web/README.md) përshkruajnë nisjen dhe konfigurimin.
 
 ## Burimet dhe dokumentacioni
+
+- [Kontrolli i projektit dhe testimit, 4 tetor](docs/release-readiness-audit.md)
 
 - [Sesionet, pronësia dhe përditësimet live](docs/charging-session-realtime.md)
 - [Dhjetë simulatorë dhe prova me disa përdorues](docs/demo-simulator-scenario.md)

@@ -1,5 +1,7 @@
 # Kontrolli i kërkesave të klientit
 
+Për përditësimet e 4 tetorit në regjistrim, arkitekturë dhe testim shiko [kontrollin e projektit dhe mbulimit](release-readiness-audit.md). Matrica më poshtë ruan gjendjen e 3 tetorit; në vijim janë lidhur njoftimet operative Completion dhe UnexpectedDisconnect.
+
 Kontrolluar më 3 tetor 2026 mbi kodin lokal, me bazë commit-in `f9702ec`. Raporti përfshin edhe zhvendosjen e preferencës së hartës te Profili dhe makina në këtë hap.
 
 **Dokumenti i klientit është përdorur si bazë, por funksionalitetet e Fazës 1 nuk janë përfunduar të gjitha.** Portali web i drejtuesit dhe rrjedha me simulatorë janë pjesët më të zhvilluara. Administrimi, caktimet, njoftimet operative dhe historiku i veprimeve mbeten të paplota.

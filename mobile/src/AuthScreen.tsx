@@ -9,6 +9,7 @@ export function AuthScreen({ language, setLanguage, onAuthenticated }: { languag
   const [register, setRegister] = useState(false);
   const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
   const [firstName, setFirstName] = useState(""); const [lastName, setLastName] = useState("");
+  const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false); const [error, setError] = useState("");
   const t = messages[language];
   async function submit() {
@@ -16,7 +17,7 @@ export function AuthScreen({ language, setLanguage, onAuthenticated }: { languag
     setBusy(true); setError("");
     try {
       const result = await request<AuthResult>(register ? "/auth/register" : "/auth/login", null, "POST",
-        register ? { email, password, firstName, lastName, language } : { email, password });
+        register ? { email, password, firstName, lastName, phone, language } : { email, password });
       await onAuthenticated(result);
       setPassword("");
     } catch (e) { setError(errorText(e, language)); }
@@ -28,6 +29,7 @@ export function AuthScreen({ language, setLanguage, onAuthenticated }: { languag
     <View style={styles.row}><Button title={t.signIn} secondary={register} onPress={() => { setRegister(false); setError(""); }} disabled={busy}/><Button title={t.register} secondary={!register} onPress={() => { setRegister(true); setError(""); }} disabled={busy}/></View>
     {register ? <><Field label={t.firstName} value={firstName} onChangeText={setFirstName} autoComplete="given-name" maxLength={80} editable={!busy}/><Field label={t.lastName} value={lastName} onChangeText={setLastName} autoComplete="family-name" maxLength={80} editable={!busy}/></> : null}
     <Field label={t.email} value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" autoComplete="email" maxLength={254} editable={!busy}/>
+    {register ? <Field label={t.phone} value={phone} onChangeText={setPhone} keyboardType="phone-pad" autoComplete="tel" placeholder="+355691234567" maxLength={32} editable={!busy}/> : null}
     <Field label={t.password} value={password} onChangeText={setPassword} secureTextEntry autoComplete={register ? "new-password" : "current-password"} maxLength={128} editable={!busy}/>
     {register ? <Text style={styles.body}>{t.passwordHint}</Text> : null}<Notice text={error}/>
     <Button title={busy ? t.working : register ? t.create : t.signIn} disabled={busy} onPress={submit}/>

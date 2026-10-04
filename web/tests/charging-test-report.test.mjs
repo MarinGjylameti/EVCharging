@@ -1,15 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import ts from "typescript";
+import { loadTypescript } from "./helpers/load-typescript.mjs";
 
-function compile(path) {
-  const exports = {};
-  new Function("exports", ts.transpileModule(readFileSync(new URL(path, import.meta.url), "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-  }).outputText)(exports);
-  return exports;
-}
+const compile = path => loadTypescript(new URL(path, import.meta.url));
 const { SimulatorTestJournal, createChargingTestReport, reportSimulatorConfig } = compile("../src/features/driver/charging-test-report.ts");
 const { prepareSimulatorAccount, SimulatorAccountError } = compile("../src/features/driver/simulator-account.ts");
 const station = { id: "station-one", code: "SIM-001", status: "Charging", version: 12 };

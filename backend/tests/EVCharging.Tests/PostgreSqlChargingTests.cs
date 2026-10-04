@@ -325,6 +325,57 @@ public sealed partial class PostgreSqlChargingTests
         Assert.False(db.Database.HasPendingModelChanges());
     }
 
+    [PostgreSqlFact]
+    public async Task PhysicalStartAndArchiveCannotBothSucceed()
+    {
+        await using var test = await DatabaseTest.CreateAsync();
+        var (actor, _) = await test.DriversAsync();
+        var station = (await test.StationsAsync())[0];
+        var connection = await test.OpenAsync("SIM-001");
+        long version;
+        await using (var setup = test.Context())
+        {
+            var point = await setup.Stations.SingleAsync(x => x.Id == station);
+            // A manual restriction masks Charging in the public projection. The
+            // physical session invariant must still prevent an archive.
+            point.Status = PointState.Maintenance;
+            point.ManualRestriction = ManualRestriction.Maintenance;
+            point.Version++;
+            version = point.Version;
+            await setup.SaveChangesAsync();
+        }
+        var results = await RaceAsync(
+            () => test.TryStartAsync(connection),
+            () => test.TryArchiveAsync(station, actor, version)
+        );
+        Assert.Single(results, x => x is null);
+        Assert.True(
+            results[0] == "PropertyConstraintViolation"
+                || results[1] is "station_busy" or "version_conflict"
+        );
+        await using var db = test.Context();
+        var archived = (await db.Stations.SingleAsync(x => x.Id == station)).IsArchived;
+        Assert.Equal(archived ? 0 : 1, await db.ChargingSessions.CountAsync());
+        Assert.Equal(archived, results[1] is null);
+    }
+
+    [PostgreSqlFact]
+    public async Task DriverClaimAndArchiveCannotBothSucceed()
+    {
+        await using var test = await DatabaseTest.CreateAsync();
+        var (driver, actor) = await test.DriversAsync();
+        var station = (await test.StationsAsync())[0];
+        var results = await RaceAsync(
+            () => test.ClaimAsync(driver, station),
+            () => test.TryArchiveAsync(station, actor)
+        );
+        Assert.Single(results, x => x is null);
+        Assert.True(results[0] == "test_connection_unavailable" || results[1] == "station_busy");
+        await using var db = test.Context();
+        var archived = (await db.Stations.SingleAsync(x => x.Id == station)).IsArchived;
+        Assert.Equal(archived ? 0 : 1, await db.ChargingConnectionRequests.CountAsync());
+    }
+
     private sealed class DatabaseTest : IAsyncDisposable
     {
         private readonly string connectionString;
@@ -479,6 +530,51 @@ public sealed partial class PostgreSqlChargingTests
                     timestamp = started,
                 }
             );
+
+        public async Task<string?> TryStartAsync((Guid Device, Guid Connection) connection)
+        {
+            using var scope = factory!.Services.CreateScope();
+            var reply = await scope
+                .ServiceProvider.GetRequiredService<IOcppGateway>()
+                .ProcessAsync(
+                    connection.Device,
+                    connection.Connection,
+                    JsonSerializer.Serialize(
+                        new object[]
+                        {
+                            2,
+                            Guid.NewGuid().ToString(),
+                            "StartTransaction",
+                            new
+                            {
+                                connectorId = 1,
+                                idTag = "TAG-001",
+                                meterStart = 0,
+                                timestamp = DateTimeOffset.UtcNow,
+                            },
+                        }
+                    ),
+                    default
+                );
+            using var json = JsonDocument.Parse(reply);
+            return json.RootElement[0].GetInt32() == 3 ? null : json.RootElement[2].GetString();
+        }
+
+        public async Task<string?> TryArchiveAsync(Guid station, Guid actor, long version = 0)
+        {
+            using var scope = factory!.Services.CreateScope();
+            try
+            {
+                await scope
+                    .ServiceProvider.GetRequiredService<IStationManagement>()
+                    .ArchiveAsync(station, new ArchiveStationInput(version), actor, default);
+                return null;
+            }
+            catch (RequestFailure failure)
+            {
+                return failure.Code;
+            }
+        }
 
         public async Task StopAsync((Guid Device, Guid Connection) connection)
         {

@@ -9,7 +9,8 @@ public sealed record RegisterRequest(
     string Password,
     string FirstName,
     string LastName,
-    string Language
+    string Language,
+    string? Phone = null
 );
 
 public sealed record LoginRequest(string Email, string Password);
@@ -87,6 +88,27 @@ public static class AccountRules
         if (name.Length is < 1 or > 80)
             throw new RequestFailure(400, "invalid_name", "Names must contain 1 to 80 characters.");
         return name;
+    }
+
+    public static string Phone(string? value)
+    {
+        var number = string.Concat(
+            (value?.Trim() ?? "").Where(c => c is not (' ' or '-' or '(' or ')'))
+        );
+        if (number.StartsWith("00", StringComparison.Ordinal))
+            number = "+" + number[2..];
+        if (
+            number.Length is < 9 or > 16
+            || number[0] != '+'
+            || number[1] is < '1' or > '9'
+            || number[1..].Any(c => c is < '0' or > '9')
+        )
+            throw new RequestFailure(
+                400,
+                "invalid_phone",
+                "Enter a phone number with its country code, for example +355691234567."
+            );
+        return number;
     }
 
     public static AppLanguage Language(string? language) =>

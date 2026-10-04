@@ -1,16 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import ts from "typescript";
+import { loadTypescript } from "./helpers/load-typescript.mjs";
 
-const compiled = ts.transpileModule(readFileSync(new URL("../src/features/driver/use-live-snapshot.ts", import.meta.url), "utf8"), {
-  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-}).outputText;
-
-const policyExports = {};
-new Function("exports", ts.transpileModule(readFileSync(new URL("../src/features/driver/live-update-policy.ts", import.meta.url), "utf8"), {
-  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-}).outputText)(policyExports);
+const policyExports = loadTypescript(new URL("../src/features/driver/live-update-policy.ts", import.meta.url));
 
 test("private vehicle updates change the active session without refetching or overwriting newer meter data", () => {
   const session = { id: "session-1", version: 10, status: "Charging", stoppedAt: null, energyKWh: 1,
@@ -84,8 +76,7 @@ function mount(t, stationId = "station-1", initial = { value: "initial" }, polic
     useRef: value => ({ current: value }), useCallback: fn => fn,
     useEffect: fn => { cleanup = fn(); },
   };
-  const exports = {};
-  new Function("require", "exports", compiled)(name => { assert.equal(name, "react"); return react; }, exports);
+  const exports = loadTypescript(new URL("../src/features/driver/use-live-snapshot.ts", import.meta.url), { react });
   const view = exports.useLiveSnapshot(initial, "/snapshot", stationId, policy);
   t.after(async () => {
     cleanup(); await flush(); Date.now = realNow;

@@ -1,5 +1,7 @@
 # Arkitektura e propozuar
 
+Gjendja konkrete e 4 tetorit: API-ja dhe web-i përdorin SSE, inbox/outbox dhe sesione të persistuara, me supozimin e një instance backend. Dokumenti më poshtë përshkruan edhe modulet e synuara që nuk janë implementuar plotësisht. [Kontrolli aktual, testimi dhe punët e mbetura](release-readiness-audit.md).
+
 Rekomandohet një monolit modular .NET me një databazë PostgreSQL të pavarur, një panel Next.js dhe një aplikacion Expo për Drejtuesin. Ky dokument përshkruan arkitekturën e synuar. Baza .NET/Next dhe identiteti janë implementuar pjesërisht; gjendja konkrete dhe verifikimet janë te [implementation-status.md](implementation-status.md). Mobile është shtyrë për t’i dhënë përparësi web-it.
 
 ## Kufijtë dhe rrjedha

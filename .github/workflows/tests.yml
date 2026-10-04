@@ -1,0 +1,67 @@
+name: Verification
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: evcharging_test_ci
+          POSTGRES_USER: evcharging_test
+          POSTGRES_PASSWORD: disposable-ci-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U evcharging_test -d evcharging_test_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      NUGET_PACKAGES: ${{ github.workspace }}/.local/nuget
+      NEXT_TELEMETRY_DISABLED: '1'
+      NEXT_IGNORE_INCORRECT_LOCKFILE: '1'
+      EVCHARGING_TEST_POSTGRES_ENABLED: '1'
+      EVCHARGING_TEST_POSTGRES: Host=127.0.0.1;Port=5432;Database=evcharging_test_ci;Username=evcharging_test;Password=disposable-ci-password;Include Error Detail=true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: backend/**/packages.lock.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Restore backend
+        run: dotnet restore backend/EVCharging.slnx --locked-mode
+      - name: Backend HTTP, WebSocket, PostgreSQL and coverage
+        shell: pwsh
+        run: ./scripts/test-backend-coverage.ps1
+      - name: OCPP replay
+        run: dotnet run --project backend/tools/EVCharging.OcppReplay --no-restore
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+      - name: Web integration tests and coverage
+        working-directory: web
+        run: npm run test:coverage
+      - name: Web types and production build
+        working-directory: web
+        run: |
+          npm run typecheck
+          npm run build
+      - name: Startup shell regression
+        run: bash scripts/test-render-entrypoint.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-reports
+          path: .local/coverage/
+          retention-days: 14

@@ -23,6 +23,7 @@ public sealed class AccountApiTests : IDisposable
         {
             email,
             password = "a-long-driver-passphrase",
+            phone = "+355691234567",
             firstName = "Arta",
             lastName = "Deda",
             language,
@@ -75,6 +76,7 @@ public sealed class AccountApiTests : IDisposable
             {
                 email = "attacker@example.com",
                 password = "a-long-driver-passphrase",
+                phone = "+355691234567",
                 firstName = "A",
                 lastName = "B",
                 language = "en",
@@ -252,6 +254,114 @@ public sealed class AccountApiTests : IDisposable
     }
 
     public void Dispose() => factory.Dispose();
+
+    [Theory]
+    [InlineData(" +355 (69) 123-4567 ", "+355691234567")]
+    [InlineData("00355 69 1234567", "+355691234567")]
+    [InlineData("+4915112345678", "+4915112345678")]
+    public async Task RegistrationPersistsContactDetailsAndCreatesAnIndependentDriver(
+        string phone,
+        string expected
+    )
+    {
+        var client = Client();
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/auth/register",
+            new RegisterRequest(
+                " new@example.com ",
+                "a-long-driver-passphrase",
+                " Arta ",
+                " Deda ",
+                "en",
+                phone
+            )
+        );
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var auth = (await response.Content.ReadFromJsonAsync<AuthResult>())!;
+        Assert.Equal("Arta", auth.User.FirstName);
+        Assert.Equal("Deda", auth.User.LastName);
+        Assert.Equal("new@example.com", auth.User.Email);
+        Assert.Equal(expected, auth.User.Phone);
+        Assert.Equal("DRIVER", auth.User.Role);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            auth.AccessToken
+        );
+        Assert.Equal(expected, (await client.GetFromJsonAsync<UserDto>("/api/v1/me"))!.Phone);
+        Assert.Equal("[]", await client.GetStringAsync("/api/v1/driver/history"));
+        var login = await client.PostAsJsonAsync(
+            "/api/v1/auth/login",
+            new LoginRequest("NEW@EXAMPLE.COM", "a-long-driver-passphrase")
+        );
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+        Assert.Equal(auth.User.Id, (await login.Content.ReadFromJsonAsync<AuthResult>())!.User.Id);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("0691234567")]
+    [InlineData("+0355691234567")]
+    [InlineData("+35569abc4567")]
+    [InlineData("+123")]
+    [InlineData("+1234567890123456")]
+    public async Task InvalidPhoneCannotCreateAnAccountOrSession(string? phone)
+    {
+        var response = await Client()
+            .PostAsJsonAsync(
+                "/api/v1/auth/register",
+                new RegisterRequest(
+                    "new@example.com",
+                    "a-long-driver-passphrase",
+                    "Arta",
+                    "Deda",
+                    "sq",
+                    phone
+                )
+            );
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("invalid_phone", await response.Content.ReadAsStringAsync());
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ChargingDbContext>();
+        Assert.False(await db.Accounts.AnyAsync());
+        Assert.False(await db.Sessions.AnyAsync());
+        Assert.False(await db.Audit.AnyAsync());
+    }
+
+    [Theory]
+    [InlineData("invalid", "a-long-driver-passphrase", "Arta", "Deda", "sq", "invalid_email")]
+    [InlineData("new@example.com", "short", "Arta", "Deda", "sq", "invalid_password")]
+    [InlineData("new@example.com", "a-long-driver-passphrase", " ", "Deda", "sq", "invalid_name")]
+    [InlineData("new@example.com", "a-long-driver-passphrase", "Arta", " ", "sq", "invalid_name")]
+    [InlineData(
+        "new@example.com",
+        "a-long-driver-passphrase",
+        "Arta",
+        "Deda",
+        "de",
+        "invalid_language"
+    )]
+    public async Task InvalidRegistrationFieldsAreRejected(
+        string email,
+        string password,
+        string first,
+        string last,
+        string language,
+        string code
+    )
+    {
+        var response = await Client()
+            .PostAsJsonAsync(
+                "/api/v1/auth/register",
+                new RegisterRequest(email, password, first, last, language, "+355691234567")
+            );
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains(code, await response.Content.ReadAsStringAsync());
+        using var scope = factory.Services.CreateScope();
+        Assert.False(
+            await scope.ServiceProvider.GetRequiredService<ChargingDbContext>().Accounts.AnyAsync()
+        );
+    }
 
     [Fact]
     public async Task UsableBatteryCapacityPersistsAndCanBeClearedWithoutInventingADefault()

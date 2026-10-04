@@ -17,7 +17,18 @@ public sealed class OcppSimulatorProvisioner(
         var settings = options.Value;
         if (settings.SimulatorEnabled)
             foreach (var identity in settings.SimulatorIdentities)
+            {
+                // An operator may archive a configured demo station. Preserve that
+                // choice across restarts without recreating it or failing startup.
+                if (
+                    await db.Stations.AnyAsync(
+                        x => x.Code == identity && x.IsDemo && x.IsArchived,
+                        ct
+                    )
+                )
+                    continue;
                 await EnsureSimulatorAsync(identity, ct);
+            }
         var deviceIds = await db.OcppChargePoints.AsNoTracking().Select(x => x.Id).ToListAsync(ct);
         foreach (var deviceId in deviceIds)
             await ReconcileStartupAsync(deviceId, ct);

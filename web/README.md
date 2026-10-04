@@ -6,8 +6,11 @@ Te formulari i pikës, Superadmin hap hartën OpenStreetMap, lëviz/zmadho pamje
 
 ## Kontrolli
 
+Regjistrimi i drejtuesit është te `/register`, i lidhur nga faqja e hyrjes. Emri, mbiemri, email-i dhe celulari kërkohen bashkë me fjalëkalimin. Numri përfshin kodin e shtetit, p.sh. `+355691234567`; ruhet në profil. Pas regjistrimit hapet `/driver`.
+
 ```powershell
 npm run test
+npm run test:coverage
 npm run typecheck
 npm run build
 ```
@@ -34,4 +37,4 @@ Cookie është HttpOnly/SameSite strict dhe Secure në production. Origin duhet 
 
 ## Verifikimi i kryer
 
-Typecheck, build dhe 16 teste web kalojnë. Testimi me klikime në shfletues mbeti i pakryer: mjeti refuzoi hapjen e localhost-it. [Kufijtë e verifikimit](../docs/implementation-status.md).
+Më 4 tetor kaluan 114 teste, typecheck dhe build-i production. Testet përfshijnë handler-at BFF dhe formularin e regjistrimit; nuk provojnë rrjedhën në shfletues me API/DB reale. Mbulimi production është 89.28% rreshta/78.67% degë vetëm në 28 nga 62 skedarë. `test:coverage` liston edhe skedarët jashtë matjes. [Rezultatet dhe kufijtë](../docs/release-readiness-audit.md).

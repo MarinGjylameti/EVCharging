@@ -1,5 +1,6 @@
 using EVCharging.Infrastructure.Charging.Ocpp;
 using EVCharging.Infrastructure.Persistence;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -7,6 +8,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 
 namespace EVCharging.Tests;
 
@@ -23,6 +25,8 @@ public sealed class ApiFactory(
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+        // Tests must not read the workstation's key ring or write Windows Event Log.
+        builder.ConfigureLogging(logging => logging.ClearProviders().AddConsole());
         builder.UseContentRoot(
             Path.GetFullPath(
                 Path.Combine(AppContext.BaseDirectory, "../../../../../src/EVCharging.Api")
@@ -30,6 +34,7 @@ public sealed class ApiFactory(
         );
         builder.ConfigureServices(services =>
         {
+            services.AddDataProtection().UseEphemeralDataProtectionProvider();
             if (simulator)
             {
                 services.PostConfigure<OcppOptions>(options =>

@@ -274,3 +274,6 @@
 .charging-waiting{display:flex;justify-content:space-between;gap:12px;padding:14px;margin:10px 0;border-radius:8px;background:#edf4e8;font-size:13px;line-height:1.6}
 .station-dot.status-unknown{background:#a1aba5}.status-text-unknown{color:#68766d}.map-pin.status-unknown{background:#778880}
 @media(max-width:650px){.charging-panel{padding:18px;margin-bottom:20px}.charging-panel .driver-section-heading{align-items:flex-start;gap:12px;flex-wrap:wrap}.charging-session{padding:16px}.charging-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.charging-test-controls button{width:100%}.charging-waiting{align-items:flex-start}.charging-state{line-height:1.5}}
+
+/* Public account registration */
+.auth-register{max-width:440px}.auth-register .form-intro p{margin-bottom:16px}.auth-register label{margin-top:16px}.auth-names{display:grid;grid-template-columns:1fr 1fr;gap:16px;min-width:0}.auth-names>div{min-width:0}.auth-hint{font-size:11px;color:var(--muted);line-height:1.6;margin:7px 0 0}.auth-link{text-align:center;font-size:13px;line-height:1.6;margin-top:24px}.auth-link a{color:var(--green);text-underline-offset:3px}@media(max-width:400px){.auth-names{grid-template-columns:1fr;gap:0}}

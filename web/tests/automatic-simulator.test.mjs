@@ -1,12 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import ts from "typescript";
+import { loadTypescript } from "./helpers/load-typescript.mjs";
 
-const exports = {};
-new Function("exports", ts.transpileModule(readFileSync(new URL("../src/features/driver/automatic-simulator.ts", import.meta.url), "utf8"), {
-  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-}).outputText)(exports);
+const exports = loadTypescript(new URL("../src/features/driver/automatic-simulator.ts", import.meta.url));
 const { AutomaticSimulator, validateSimulatorConfig, simulatorErrors } = exports;
 const config = { url: "ws://localhost/ws/cs/SIM-001", stationCode: "SIM-001", capacityKWh: 60, initialSoc: 20, targetSoc: 100,
   powerKW: 22, meterStartWh: 1000, intervalSeconds: 5, speed: 1 };
