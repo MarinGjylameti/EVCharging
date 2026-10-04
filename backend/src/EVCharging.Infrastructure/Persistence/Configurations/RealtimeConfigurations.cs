@@ -19,7 +19,7 @@ internal sealed class RealtimeOutboxEventConfiguration
                 );
                 table.HasCheckConstraint(
                     "ck_realtime_outbox_audience",
-                    "audience IN ('PublicStation', 'Driver', 'Admin') AND (audience <> 'Driver' OR recipient_account_id IS NOT NULL)"
+                    "audience IN ('PublicStation', 'Driver', 'Admin', 'Operations') AND (audience <> 'Driver' OR recipient_account_id IS NOT NULL)"
                 );
             }
         );

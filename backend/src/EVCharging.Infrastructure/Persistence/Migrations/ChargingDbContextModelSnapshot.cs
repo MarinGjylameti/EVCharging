@@ -1696,7 +1696,7 @@ namespace EVCharging.Infrastructure.Persistence.Migrations
 
                     b.ToTable("realtime_outbox", null, t =>
                         {
-                            t.HasCheckConstraint("ck_realtime_outbox_audience", "audience IN ('PublicStation', 'Driver', 'Admin') AND (audience <> 'Driver' OR recipient_account_id IS NOT NULL)");
+                            t.HasCheckConstraint("ck_realtime_outbox_audience", "audience IN ('PublicStation', 'Driver', 'Admin', 'Operations') AND (audience <> 'Driver' OR recipient_account_id IS NOT NULL)");
 
                             t.HasCheckConstraint("ck_realtime_outbox_version_attempts", "entity_version >= 0 AND attempts >= 0");
                         });

@@ -36,6 +36,19 @@ public static class ApiSecurityRegistration
         {
             options.RejectionStatusCode = 429;
             options.AddPolicy(
+                "device-connect",
+                context =>
+                    RateLimitPartition.GetFixedWindowLimiter(
+                        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                        _ => new FixedWindowRateLimiterOptions
+                        {
+                            PermitLimit = 60,
+                            Window = TimeSpan.FromMinutes(1),
+                            QueueLimit = 0,
+                        }
+                    )
+            );
+            options.AddPolicy(
                 "auth",
                 context =>
                     RateLimitPartition.GetFixedWindowLimiter(

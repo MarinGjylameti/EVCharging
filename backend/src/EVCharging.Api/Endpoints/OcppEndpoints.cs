@@ -13,7 +13,9 @@ public static class OcppEndpoints
     private static readonly UTF8Encoding Utf8 = new(false, true);
 
     public static void MapOcppEndpoints(this WebApplication app) =>
-        app.MapGet("/ws/cs/{identity}", ConnectAsync).AllowAnonymous();
+        app.MapGet("/ws/cs/{identity}", ConnectAsync)
+            .AllowAnonymous()
+            .RequireRateLimiting("device-connect");
 
     private static async Task ConnectAsync(
         HttpContext context,

@@ -175,5 +175,11 @@ public sealed class RealtimePlatformTests
             Assert.True(index.IsUnique);
             Assert.Equal("state IN ('Waiting', 'Linked')", index.GetFilter());
         }
+        var audience = Assert.Single(
+            model.FindEntityType(typeof(RealtimeOutboxEvent))!.GetCheckConstraints(),
+            x => x.Name == "ck_realtime_outbox_audience"
+        );
+        Assert.Contains("'Operations'", audience.Sql);
+        Assert.Contains("audience <> 'Driver' OR recipient_account_id IS NOT NULL", audience.Sql);
     }
 }

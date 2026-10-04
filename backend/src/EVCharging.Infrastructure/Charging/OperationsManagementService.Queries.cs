@@ -78,6 +78,11 @@ public sealed partial class OperationsManagementService
             query = query.Where(x => x.EndedAt == null);
         else if (filter.Status == "Completed")
             query = query.Where(x => x.EndedAt != null);
+        else if (filter.Status == "ConnectionLost")
+            query = query.Where(x =>
+                x.EndedAt == null
+                && db.ChargingConnectors.Any(c => c.Id == x.ConnectorId && !c.IsOnline)
+            );
         else if (!string.IsNullOrWhiteSpace(filter.Status))
         {
             if (

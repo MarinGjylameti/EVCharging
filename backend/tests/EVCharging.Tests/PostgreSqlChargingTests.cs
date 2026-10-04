@@ -335,6 +335,7 @@ public sealed partial class PostgreSqlChargingTests
         long version;
         await using (var setup = test.Context())
         {
+            (await setup.Accounts.SingleAsync(x => x.Id == actor)).Role = UserRole.Superadmin;
             var point = await setup.Stations.SingleAsync(x => x.Id == station);
             // A manual restriction masks Charging in the public projection. The
             // physical session invariant must still prevent an archive.
@@ -364,9 +365,9 @@ public sealed partial class PostgreSqlChargingTests
     {
         await using var test = await DatabaseTest.CreateAsync();
         var (driver, actor) = await test.DriversAsync();
-        await using(var setup=test.Context())
+        await using (var setup = test.Context())
         {
-            (await setup.Accounts.SingleAsync(x=>x.Id==actor)).Role=UserRole.Superadmin;
+            (await setup.Accounts.SingleAsync(x => x.Id == actor)).Role = UserRole.Superadmin;
             await setup.SaveChangesAsync();
         }
         var station = (await test.StationsAsync())[0];
