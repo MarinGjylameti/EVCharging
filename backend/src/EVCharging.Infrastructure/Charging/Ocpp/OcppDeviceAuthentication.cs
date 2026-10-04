@@ -1,19 +1,23 @@
 using System.Security.Cryptography;
 using System.Text;
 using EVCharging.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace EVCharging.Infrastructure.Charging.Ocpp;
 
-// Explicit demo policy. Real charger credentials/profiles require a separate
-// implementation once the hardware contract is supplied; disabled by default.
+// Physical devices use individual credentials and explicit connector mappings.
+// The allowlisted demo policy stays independent of physical charger admission.
 public sealed class OcppDeviceAuthentication(
     ChargingDbContext db,
     OcppSimulatorProvisioner provisioner,
-    IOptions<OcppOptions> options
+    IOptions<OcppOptions> options,
+    IPasswordHasher<OcppChargePoint> hasher
 )
 {
+    public long? AuthenticatedCredentialVersion { get; private set; }
+
     public async Task<Guid?> AuthenticateAsync(
         string identity,
         string username,
@@ -22,6 +26,42 @@ public sealed class OcppDeviceAuthentication(
     )
     {
         var settings = options.Value;
+        AuthenticatedCredentialVersion = null;
+        if (
+            !System.Text.RegularExpressions.Regex.IsMatch(identity, "^[A-Za-z0-9_-]{1,40}$")
+            || password.Length > 128
+        )
+            return null;
+        var physical = await db
+            .OcppChargePoints.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Identity == identity && x.PasswordHash != null, ct);
+        if (physical is not null)
+        {
+            if (
+                !physical.IsEnabled
+                || physical.ProtocolVersion != "1.6J"
+                || username != identity
+                || hasher.VerifyHashedPassword(physical, physical.PasswordHash!, password)
+                    == PasswordVerificationResult.Failed
+            )
+                return null;
+            var mappings = await db
+                .OcppConnectors.AsNoTracking()
+                .Where(x => x.ChargePointId == physical.Id)
+                .ToListAsync(ct);
+            var stationIds = mappings.Select(x => x.StationId).Distinct().ToArray();
+            if (
+                mappings.Count == 0
+                || mappings.Any(x => x.BusinessConnectorId == null || x.StationId == null)
+                || await db.Stations.CountAsync(
+                    x => stationIds.Contains(x.Id) && !x.IsArchived && !x.IsDemo,
+                    ct
+                ) != stationIds.Length
+            )
+                return null;
+            AuthenticatedCredentialVersion = physical.CredentialVersion;
+            return physical.Id;
+        }
         if (
             !settings.SimulatorEnabled
             || !settings.SimulatorIdentities.Contains(identity, StringComparer.Ordinal)
@@ -56,6 +96,7 @@ public sealed class OcppDeviceAuthentication(
                 x => stationIds.Contains(x.Id) && x.IsDemo && !x.IsArchived,
                 ct
             );
+            AuthenticatedCredentialVersion = device.CredentialVersion;
             return
                 device.IsEnabled
                 && mapped.Count > 0
@@ -63,6 +104,8 @@ public sealed class OcppDeviceAuthentication(
                 ? device.Id
                 : null;
         }
-        return (await provisioner.EnsureSimulatorAsync(identity, ct)).Id;
+        var created = await provisioner.EnsureSimulatorAsync(identity, ct);
+        AuthenticatedCredentialVersion = created.CredentialVersion;
+        return created.Id;
     }
 }

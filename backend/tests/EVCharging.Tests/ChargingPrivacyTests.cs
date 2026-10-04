@@ -203,7 +203,11 @@ public sealed partial class OcppWebSocketTests
             var db = scope.ServiceProvider.GetRequiredService<ChargingDbContext>();
             Assert.Equal("Linked", (await db.ChargingConnectionRequests.SingleAsync()).State);
             Assert.Null((await db.ChargingSessions.SingleAsync()).EndedAt);
-            var warning = Assert.Single(await db.Notifications.ToListAsync());
+            var warning = Assert.Single(
+                await db
+                    .Notifications.Where(x => x.Kind == NotificationKind.UnexpectedDisconnect)
+                    .ToListAsync()
+            );
             Assert.Equal(NotificationKind.UnexpectedDisconnect, warning.Kind);
             Assert.Equal(ownerUser.Id, warning.UserId);
             var text = NotificationTemplates.Get(warning.Kind, AppLanguage.En);
@@ -225,7 +229,7 @@ public sealed partial class OcppWebSocketTests
         using var finalScope = factory.Services.CreateScope();
         var final = finalScope.ServiceProvider.GetRequiredService<ChargingDbContext>();
         Assert.Equal("Completed", (await final.ChargingConnectionRequests.SingleAsync()).State);
-        Assert.Equal(2, await final.Notifications.CountAsync());
+        Assert.Equal(3, await final.Notifications.CountAsync());
         Assert.All(
             await final.Notifications.ToListAsync(),
             x => Assert.Equal(ownerUser.Id, x.UserId)

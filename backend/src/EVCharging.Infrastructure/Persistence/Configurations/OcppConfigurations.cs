@@ -12,6 +12,9 @@ internal sealed class OcppChargePointConfiguration : IEntityTypeConfiguration<Oc
         e.ToTable("ocpp_charge_points");
         e.HasKey(x => x.Id);
         e.Property(x => x.Identity).HasMaxLength(100);
+        e.Property(x => x.PasswordHash).HasMaxLength(512);
+        e.Property(x => x.ProvisionedSerialNumber).HasMaxLength(64);
+        e.Property(x => x.ManagementVersion).IsConcurrencyToken();
         e.Property(x => x.ProtocolVersion).HasMaxLength(12);
         e.Property(x => x.Vendor).HasMaxLength(64);
         e.Property(x => x.Model).HasMaxLength(64);

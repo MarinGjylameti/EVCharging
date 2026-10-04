@@ -64,6 +64,7 @@ public sealed class StationManagementTests : IDisposable
             pricePerKWh = price,
             status,
             version,
+            reason = "Operator test change",
         };
 
     [Fact]
@@ -158,7 +159,7 @@ public sealed class StationManagementTests : IDisposable
     }
 
     [Fact]
-    public async Task OperatorCanReadButOnlySuperadminCanMutate()
+    public async Task OperatorWithoutAssignmentsCannotCreateStations()
     {
         var (operatorClient, _) = await Login("admin@example.test", UserRole.Admin);
         var (driver, _) = await Login("driver@example.test", UserRole.Driver);

@@ -3,11 +3,15 @@
 import { useRef, useState } from "react";
 import type { Language, Station } from "../../../../contracts/account";
 import { StationMapPicker } from "./station-map-picker";
+import type { Location } from "../../../../contracts/operations";
+import { DeviceManager } from "../operations/device-manager";
+import { useOperationsLive } from "../operations/use-operations-live";
+import { operations } from "../operations/api";
 
-type Draft = Pick<Station, "code"|"name"|"city"|"address"|"latitude"|"longitude"|"connectorType"|"connectorCount"|"powerKW"|"pricePerKWh"|"status"|"version">;
+type Draft = Pick<Station, "code"|"name"|"city"|"address"|"latitude"|"longitude"|"connectorType"|"connectorCount"|"powerKW"|"pricePerKWh"|"status"|"version"> & {locationId:string|null;reason:string};
 const blank: Draft = {code:"",name:"",city:"",address:"",latitude:41.3275,longitude:19.8187,
-  connectorType:"CCS2",connectorCount:2,powerKW:50,pricePerKWh:0.35,status:"OutOfService",version:0};
-const statuses: Station["status"][] = ["Available","Occupied","Charging","OutOfService","Maintenance"];
+  connectorType:"CCS2",connectorCount:1,powerKW:50,pricePerKWh:0.35,status:"Available",version:0,locationId:null,reason:""};
+const statuses: Station["status"][] = ["Available","Occupied","Charging","OutOfService","Maintenance","Unknown"];
 const labels: Record<Station["status"],{sq:string;en:string}> = {
   Available:{sq:"E lirë",en:"Available"}, Occupied:{sq:"E zënë",en:"Occupied"},
   Charging:{sq:"Në karikim",en:"Charging"}, OutOfService:{sq:"Jashtë funksionit",en:"Out of service"},
@@ -16,11 +20,13 @@ const labels: Record<Station["status"],{sq:string;en:string}> = {
 const formOf = (station: Station): Draft => ({code:station.code,name:station.name,city:station.city,
   address:station.address,latitude:station.latitude,longitude:station.longitude,connectorType:station.connectorType,
   connectorCount:station.connectorCount,powerKW:station.powerKW,pricePerKWh:station.pricePerKWh,
-  status:station.status,version:station.version});
+  status:station.status,version:station.version,locationId:station.locationId??null,reason:""});
 
-export function StationManager({initial, language, canEdit}: {initial:Station[];language:Language;canEdit:boolean}) {
+export function StationManager({initial, language, canEdit, locations:initialLocations=[], superadmin=false, webSocketBaseUrl=""}: {initial:Station[];language:Language;canEdit:boolean;locations?:Location[];superadmin?:boolean;webSocketBaseUrl?:string}) {
   const sq = language === "sq";
   const [stations,setStations] = useState(initial);
+  const [locations,setLocations] = useState(initialLocations);
+  const live=useOperationsLive(async signal=>{const [points,places]=await Promise.all([operations<Station[]>("stations",signal),operations<Location[]>("locations",signal)]);if(!signal.aborted){setStations(points);setLocations(places);}});
   const [selectedId,setSelectedId] = useState<string|null>(initial[0]?.id ?? null);
   const [draft,setDraft] = useState<Draft>(initial[0] ? formOf(initial[0]) : blank);
   const [busy,setBusy] = useState(false);
@@ -36,7 +42,7 @@ export function StationManager({initial, language, canEdit}: {initial:Station[];
   const available = stations.filter(x=>!x.isArchived&&x.status==="Available").length;
   const setField = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft(previous=>({...previous,[key]:value}));
   function select(station: Station) { setSelectedId(station.id); setDraft(formOf(station)); setLocationChosen(true); setMapOpen(false); setError(""); setMessage(""); }
-  function create() { setSelectedId(null); setDraft({...blank}); setLocationChosen(false); setMapOpen(false); setError(""); setMessage(""); }
+  function create() { setSelectedId(null); setDraft({...blank,locationId:locations.find(x=>!x.isArchived)?.id??null}); setLocationChosen(false); setMapOpen(false); setError(""); setMessage(""); }
   function closeMap() { setMapOpen(false); requestAnimationFrame(()=>mapButtonRef.current?.focus()); }
   async function send(operation:"create"|"update"|"archive") {
     if (busy || !canEdit) return;
@@ -72,8 +78,7 @@ export function StationManager({initial, language, canEdit}: {initial:Station[];
     <div className="station-summary"><article><span>{sq?"PIKA AKTIVE":"ACTIVE STATIONS"}</span><strong>{active}</strong></article>
       <article><span>{sq?"TË LIRA":"AVAILABLE"}</span><strong>{available}</strong></article>
       <article><span>{sq?"QYTETE":"CITIES"}</span><strong>{new Set(stations.filter(x=>!x.isArchived).map(x=>x.city)).size}</strong></article></div>
-    <p className="station-disclaimer">{sq?"Gjendja këtu është e vendosur manualisht derisa të lidhet telemetria OCPP. Pikat demo janë ilustrime.":
-      "Status is entered manually until OCPP telemetry is connected. Demo stations are illustrative."}</p>
+    <p className="station-disclaimer" role="status">{live?(sq?"Përditësime aktive nga karikuesit.":"Live charger updates."):(sq?"Duke lidhur përditësimet…":"Connecting live updates…")}</p>
     <div className="station-admin-grid"><section className="station-table-card">
       <div className="station-table-top"><h2>{sq?"Lista e pikave":"Station list"}</h2><input aria-label={sq?"Kërko pikë":"Search stations"}
         placeholder={sq?"Kërko sipas emrit, kodit, qytetit":"Search name, code or city"} value={filter} onChange={e=>setFilter(e.target.value)}/></div>
@@ -89,6 +94,7 @@ export function StationManager({initial, language, canEdit}: {initial:Station[];
       {error&&<p role="alert" className="form-error">{error}</p>}{message&&<p role="status" className="form-success">{message}</p>}
       {(canEdit || selected) ? <form onSubmit={event=>{event.preventDefault();void send(selectedId?"update":"create");}}>
         <fieldset disabled={busy||!canEdit||selected?.isArchived} className="station-form-fields">
+          <label>{sq?"Vendndodhja":"Location"}<select required={!superadmin&&!selectedId} value={draft.locationId??""} onChange={e=>setField("locationId",e.target.value||null)}><option value="">{sq?"Zgjidh vendndodhjen":"Choose location"}</option>{draft.locationId&&!locations.some(x=>x.id===draft.locationId)&&<option value={draft.locationId}>{sq?"Vendndodhja ekzistuese":"Current location"}</option>}{locations.filter(x=>!x.isArchived||x.id===draft.locationId).map(x=><option key={x.id} value={x.id}>{x.name} · {x.city}</option>)}</select></label>
           <label>{sq?"Kodi":"Code"}<input required minLength={2} maxLength={40} value={draft.code} onChange={e=>setField("code",e.target.value)}/></label>
           <label>{sq?"Emri":"Name"}<input required minLength={2} maxLength={120} value={draft.name} onChange={e=>setField("name",e.target.value)}/></label>
           <div className="station-form-pair"><label>{sq?"Qyteti":"City"}<input required value={draft.city} onChange={e=>setField("city",e.target.value)}/></label>
@@ -104,12 +110,15 @@ export function StationManager({initial, language, canEdit}: {initial:Station[];
           <div className="station-form-pair"><label>{sq?"Çmimi (EUR/kWh)":"Price (EUR/kWh)"}<input required type="number" min="0" step="0.0001" value={draft.pricePerKWh} onChange={e=>setField("pricePerKWh",Number(e.target.value))}/></label>
             <label>{sq?"Gjendja":"Status"}<select value={draft.status} onChange={e=>setField("status",e.target.value as Station["status"])}>
               {statuses.map(status=><option value={status} key={status}>{labels[status][language]}</option>)}</select></label></div>
+          <label>{sq?"Arsyeja e ndryshimit të gjendjes/çmimit":"Reason for status/price change"}<textarea required={!!selected&&(draft.status!==selected.status||draft.pricePerKWh!==selected.pricePerKWh)} minLength={3} maxLength={500} value={draft.reason} onChange={e=>setField("reason",e.target.value)}/></label>
+          {selected&&selected.version!==draft.version&&<p className="form-error">{sq?"Pika ka ndryshuar. Klikoje sërish në listë për të marrë versionin e ri para ruajtjes.":"The station changed. Select it again in the list before saving."}</p>}
           {canEdit&&!selected?.isArchived&&<button className="button-primary" type="submit" disabled={!selectedId&&!locationChosen}>{busy?(sq?"Duke ruajtur…":"Saving…"):(sq?"Ruaj pikën":"Save station")}</button>}
         </fieldset>
       </form> : <p className="lead">{sq?"Zgjidh një pikë nga lista.":"Choose a station from the list."}</p>}
       {canEdit&&selected&&!selected.isArchived&&<button type="button" className="station-archive" disabled={busy||["Charging","Occupied"].includes(selected.status)} onClick={()=>void send("archive")}>
         {sq?"Arkivo pikën":"Archive station"}</button>}
       {!canEdit&&<p className="station-readonly">{sq?"Vetëm Superadmin mund të ndryshojë pikat.":"Only Superadmin can change stations."}</p>}
+      {selected&&!selected.isDemo&&<DeviceManager key={selected.id} stationId={selected.id} language={language} webSocketBaseUrl={webSocketBaseUrl} disabled={!canEdit||!!selected.isArchived}/>}
     </section></div>
     {mapOpen&&<StationMapPicker initial={{latitude:draft.latitude,longitude:draft.longitude}} language={language}
       requireClick={!selectedId} onClose={closeMap} onConfirm={point=>{

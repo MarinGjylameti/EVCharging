@@ -35,8 +35,11 @@ public sealed class OcppActionHandler(
                 {
                     idTagInfo = new
                     {
-                        status = OcppPayload.Text(payload, "idTag", 20)
-                        == options.Value.SimulatorTagId
+                        status = DeviceTagAuthorization.Accepted(
+                            device,
+                            OcppPayload.Text(payload, "idTag", 20),
+                            options.Value
+                        )
                             ? "Accepted"
                             : "Invalid",
                     },

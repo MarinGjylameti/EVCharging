@@ -29,6 +29,18 @@ public static class StartupCommands
         if (args.Contains("--bootstrap-superadmin"))
         {
             await using var scope = app.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<ChargingDbContext>();
+            if (
+                await db.Accounts.AnyAsync(a =>
+                    a.Role == EVCharging.Domain.Identity.UserRole.Superadmin
+                )
+            )
+            {
+                app.Logger.LogInformation(
+                    "Superadmin already exists; bootstrap kept the existing account."
+                );
+                return true;
+            }
             var bootstrapper = scope.ServiceProvider.GetRequiredService<SuperadminBootstrapper>();
             await bootstrapper.BootstrapAsync(
                 app.Configuration["Bootstrap:Email"],

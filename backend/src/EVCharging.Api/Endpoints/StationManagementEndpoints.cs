@@ -12,50 +12,44 @@ public static class StationManagementEndpoints
 
         stations.MapGet(
             "",
-            async (IStationManagement service, CancellationToken ct) =>
-                Results.Ok(await service.ListAsync(ct))
+            async (ClaimsPrincipal user, IStationManagement service, CancellationToken ct) =>
+                Results.Ok(await service.ListAsync(user.UserId(), ct))
         );
 
-        stations
-            .MapPost(
-                "",
-                async (
-                    StationInput input,
-                    ClaimsPrincipal user,
-                    IStationManagement service,
-                    CancellationToken ct
-                ) =>
-                {
-                    var station = await service.CreateAsync(input, user.UserId(), ct);
-                    return Results.Created($"/api/v1/admin/stations/{station.Id}", station);
-                }
-            )
-            .RequireAuthorization("Superadmin");
+        stations.MapPost(
+            "",
+            async (
+                StationInput input,
+                ClaimsPrincipal user,
+                IStationManagement service,
+                CancellationToken ct
+            ) =>
+            {
+                var station = await service.CreateAsync(input, user.UserId(), ct);
+                return Results.Created($"/api/v1/admin/stations/{station.Id}", station);
+            }
+        );
 
-        stations
-            .MapPatch(
-                "/{id:guid}",
-                async (
-                    Guid id,
-                    StationInput input,
-                    ClaimsPrincipal user,
-                    IStationManagement service,
-                    CancellationToken ct
-                ) => Results.Ok(await service.UpdateAsync(id, input, user.UserId(), ct))
-            )
-            .RequireAuthorization("Superadmin");
+        stations.MapPatch(
+            "/{id:guid}",
+            async (
+                Guid id,
+                StationInput input,
+                ClaimsPrincipal user,
+                IStationManagement service,
+                CancellationToken ct
+            ) => Results.Ok(await service.UpdateAsync(id, input, user.UserId(), ct))
+        );
 
-        stations
-            .MapPost(
-                "/{id:guid}/archive",
-                async (
-                    Guid id,
-                    ArchiveStationInput input,
-                    ClaimsPrincipal user,
-                    IStationManagement service,
-                    CancellationToken ct
-                ) => Results.Ok(await service.ArchiveAsync(id, input, user.UserId(), ct))
-            )
-            .RequireAuthorization("Superadmin");
+        stations.MapPost(
+            "/{id:guid}/archive",
+            async (
+                Guid id,
+                ArchiveStationInput input,
+                ClaimsPrincipal user,
+                IStationManagement service,
+                CancellationToken ct
+            ) => Results.Ok(await service.ArchiveAsync(id, input, user.UserId(), ct))
+        );
     }
 }

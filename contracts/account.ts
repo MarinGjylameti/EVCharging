@@ -23,6 +23,7 @@ export type Station = {
     source: "Device" | "Demo" | "Calculated" | "Simulator"; validUntil?: string | null;
   } | null;
   isDemo: boolean; isArchived?: boolean; version: number;
+  locationId?: string | null;
 };
 export type ChargingHistory = {
   id: string; startedAt: string; endedAt: string; energyKWh: number;

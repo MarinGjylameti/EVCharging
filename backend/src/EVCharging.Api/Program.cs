@@ -20,6 +20,7 @@ app.MapHealthEndpoints();
 app.MapAccountEndpoints();
 app.MapDriverEndpoints();
 app.MapStationManagementEndpoints();
+app.MapOperationsEndpoints();
 app.MapOcppEndpoints();
 app.MapStationEventsEndpoints();
 

@@ -15,7 +15,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     return <main className="simple-page"><Brand/><h1>{sq ? "Akses i kufizuar" : "Restricted access"}</h1><p>{sq ? "Kjo hapësirë kërkon një llogari administrative." : "This workspace requires an administrator account."}</p><LogoutButton language={user.language}/></main>;
   return <main className="workspace" lang={user.language}>
     <aside className="sidebar"><Brand/><div className="sidebar-caption">{sq ? "HAPËSIRA E PUNËS" : "WORKSPACE"}</div>
-      <AppNav area="dashboard" language={user.language}/>
+      <AppNav area="dashboard" language={user.language} superadmin={user.role==="SUPERADMIN"}/>
       <div className="sidebar-bottom"><span className="avatar">{user.firstName[0]}{user.lastName[0]}</span><div>{user.firstName} {user.lastName}<small>{user.role}</small></div></div>
     </aside>
     <section className="workspace-main"><header><span>{sq ? "Rrjeti i karikimit" : "Charging network"}</span><UserMenu initial={user}/></header><div className="app-page-content">{children}</div><SiteFooter area="dashboard" language={user.language}/></section>

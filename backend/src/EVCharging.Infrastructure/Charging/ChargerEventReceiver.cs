@@ -15,7 +15,8 @@ public sealed class ChargerEventReceiver(
     ChargingDbContext db,
     StationProjection projection,
     TimeProvider clock,
-    NotificationService notifications
+    NotificationService notifications,
+    OperationsNotifications operators
 ) : IChargerEventReceiver
 {
     public async Task ReceiveAsync(ChargerEvent change, CancellationToken ct)
@@ -51,6 +52,51 @@ public sealed class ChargerEventReceiver(
             connector.StatusObservedAt = change.ObservedAt;
             connector.StatusReceivedAt = now;
             connector.Version++;
+            if (priorStatus != connector.Status || priorOnline != connector.IsOnline)
+            {
+                DeviceAudit(
+                    connector.StationId,
+                    change.Kind == ChargerEventKind.Disconnected ? "ChargerDisconnected"
+                        : !priorOnline ? "ChargerConnected"
+                        : "ChargerStatusChanged",
+                    new
+                    {
+                        Connector = connector.Number,
+                        Before = priorStatus.ToString(),
+                        After = connector.Status.ToString(),
+                        connector.IsOnline,
+                        connector.FaultCode,
+                    },
+                    now
+                );
+                if (change.Kind == ChargerEventKind.Disconnected && priorOnline)
+                    await operators.EnqueueAsync(
+                        connector.StationId,
+                        $"connection-lost:{connector.Id}:{connector.Version}",
+                        NotificationKind.UnexpectedDisconnect,
+                        ct
+                    );
+                if (
+                    connector.Status == ChargingState.Faulted
+                    && priorStatus != ChargingState.Faulted
+                )
+                    await operators.EnqueueAsync(
+                        connector.StationId,
+                        $"charger-fault:{connector.Id}:{connector.Version}",
+                        NotificationKind.ChargerFaulted,
+                        ct
+                    );
+                if (
+                    connector.Status == ChargingState.Unavailable
+                    && priorStatus != ChargingState.Unavailable
+                )
+                    await operators.EnqueueAsync(
+                        connector.StationId,
+                        $"charger-unavailable:{connector.Id}:{connector.Version}",
+                        NotificationKind.PointOutOfService,
+                        ct
+                    );
+            }
             var active = await db.ChargingSessions.SingleOrDefaultAsync(
                 x => x.ConnectorId == connector.Id && x.EndedAt == null,
                 ct
@@ -121,6 +167,26 @@ public sealed class ChargerEventReceiver(
                 Version = 1,
             };
             db.ChargingSessions.Add(session);
+            ChargingRealtime.StageOperations(
+                db,
+                station.Id,
+                "SessionStarted",
+                "ChargingSession",
+                session.Id,
+                session.Version,
+                now
+            );
+            DeviceAudit(
+                station.Id,
+                "ChargingStarted",
+                new
+                {
+                    session.Id,
+                    Connector = connector.Number,
+                    session.StartedAt,
+                },
+                now
+            );
             var waiting = await db.ChargingConnectionRequests.SingleOrDefaultAsync(
                 x =>
                     x.StationId == station.Id
@@ -156,6 +222,12 @@ public sealed class ChargerEventReceiver(
                     waiting.SessionId = session.Id;
                     waiting.LinkedAt = now;
                     session.BatteryCapacityKWh = driver.BatteryCapacityKWh;
+                    await notifications.EnqueueAsync(
+                        driver.Id,
+                        $"charging-started:{session.Id}",
+                        NotificationKind.ChargingStarted,
+                        ct
+                    );
                     ChargingRealtime.Stage(
                         db,
                         station.Id,
@@ -170,6 +242,12 @@ public sealed class ChargerEventReceiver(
                 }
             }
             // Also notify open, currently unclaimed charger views without private data.
+            await operators.EnqueueAsync(
+                station.Id,
+                $"charging-started:{session.Id}",
+                NotificationKind.ChargingStarted,
+                ct
+            );
             await projection.RefreshAsync(station.Id, ct);
             ChargingRealtime.Stage(
                 db,
@@ -281,6 +359,34 @@ public sealed class ChargerEventReceiver(
                 x => x.SessionId == session.Id,
                 ct
             );
+            ChargingRealtime.StageOperations(
+                db,
+                session.PointId,
+                "SessionCompleted",
+                "ChargingSession",
+                session.Id,
+                session.Version,
+                now
+            );
+            DeviceAudit(
+                session.PointId,
+                "ChargingCompleted",
+                new
+                {
+                    session.Id,
+                    session.EndedAt,
+                    session.EnergyKWh,
+                    session.CalculatedCost,
+                    session.StopReason,
+                },
+                now
+            );
+            await operators.EnqueueAsync(
+                session.PointId,
+                $"charging-completed:{session.Id}",
+                NotificationKind.ChargingCompleted,
+                ct
+            );
             if (claim is not null)
             {
                 claim.State = "Completed";
@@ -333,6 +439,15 @@ public sealed class ChargerEventReceiver(
         CancellationToken ct
     )
     {
+        ChargingRealtime.StageOperations(
+            db,
+            session.PointId,
+            eventType,
+            "ChargingSession",
+            session.Id,
+            session.Version,
+            now
+        );
         var claim =
             db.ChargingConnectionRequests.Local.SingleOrDefault(x => x.SessionId == session.Id)
             ?? await db.ChargingConnectionRequests.SingleOrDefaultAsync(
@@ -360,4 +475,20 @@ public sealed class ChargerEventReceiver(
             );
         }
     }
+
+    private void DeviceAudit(Guid stationId, string action, object after, DateTimeOffset now) =>
+        db.Audit.Add(
+            new EVCharging.Domain.Auditing.AuditEntry
+            {
+                ActorId = Guid.Empty,
+                ActorRole = "Device",
+                EntityId = stationId,
+                Action = action,
+                ChangesJson = JsonSerializer.Serialize(
+                    new { after },
+                    new JsonSerializerOptions(JsonSerializerDefaults.Web)
+                ),
+                RecordedAt = now,
+            }
+        );
 }

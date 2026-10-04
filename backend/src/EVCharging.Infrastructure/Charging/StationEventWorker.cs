@@ -28,7 +28,11 @@ public sealed class StationEventWorker(
                     .RealtimeOutbox.Where(x =>
                         x.PublishedAt == null
                         && x.AvailableAt <= clock.GetUtcNow()
-                        && (x.Audience == "PublicStation" || x.Audience == "Driver")
+                        && (
+                            x.Audience == "PublicStation"
+                            || x.Audience == "Driver"
+                            || x.Audience == "Operations"
+                        )
                     )
                     .OrderBy(x => x.CreatedAt)
                     .Take(100)
@@ -43,8 +47,13 @@ public sealed class StationEventWorker(
                             ?? throw new JsonException("Invalid station event.");
                         if (
                             change.StationId == Guid.Empty
+                                && (
+                                    entry.Audience != "Operations"
+                                    || change.EntityType is not ("Administrator" or "Location")
+                                    || change.EntityId == Guid.Empty
+                                )
                             || entry.Audience == "Driver" && entry.RecipientAccountId is null
-                            || entry.Audience == "PublicStation"
+                            || (entry.Audience == "PublicStation" || entry.Audience == "Operations")
                                 && (
                                     entry.RecipientAccountId is not null
                                     || change.Session is not null
@@ -76,7 +85,8 @@ public sealed class StationEventWorker(
                             EntityId = entry.EntityId,
                             EntityVersion = entry.EntityVersion,
                             OccurredAt = entry.CreatedAt,
-                        }
+                        },
+                        entry.Audience == "Operations"
                     );
                     entry.PublishedAt = clock.GetUtcNow();
                 }

@@ -1,6 +1,5 @@
 using EVCharging.Application.Charging;
 using EVCharging.Application.Common;
-using EVCharging.Domain.Auditing;
 using EVCharging.Domain.Charging;
 using EVCharging.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -11,13 +10,17 @@ public sealed class StationManagementService(
     ChargingDbContext db,
     TimeProvider clock,
     StationEventSignal events,
-    StationProjection projection
+    StationProjection projection,
+    OperationsAccess access,
+    OperationsNotifications notifications
 ) : IStationManagement
 {
-    public async Task<IReadOnlyList<StationDto>> ListAsync(CancellationToken ct)
+    public async Task<IReadOnlyList<StationDto>> ListAsync(Guid actorId, CancellationToken ct)
     {
-        var stations = await db
-            .Stations.AsNoTracking()
+        var actor = await access.ActorAsync(actorId, ct);
+        var stations = await access
+            .Stations(actor)
+            .AsNoTracking()
             .OrderBy(station => station.City)
             .ThenBy(station => station.Name)
             .ToListAsync(ct);
@@ -32,15 +35,33 @@ public sealed class StationManagementService(
     )
     {
         var data = StationRules.Validate(input);
+        var actor = await access.ActorAsync(actorId, ct);
+        await using var transaction = await LocationMutationLock.BeginAsync(
+            db,
+            input.LocationId,
+            ct
+        );
+        await access.DestinationAsync(actor, input.LocationId, ct);
         if (await db.Stations.AnyAsync(station => station.Code == data.Code, ct))
             throw new RequestFailure(409, "station_code_taken", "The station code already exists.");
 
         var station = new ChargingStation();
         Apply(station, data);
+        station.LocationId = input.LocationId;
         db.Stations.Add(station);
-        AddAudit(actorId, station.Id, "StationCreated");
+        access.Audit(
+            actor,
+            station.Id,
+            "StationCreated",
+            null,
+            StationDto.From(station),
+            input.Reason
+        );
+        AddPrice(actorId, station, null, input.Reason ?? "Station created");
         StageChange(station);
         await db.SaveChangesAsync(ct);
+        if (transaction is not null)
+            await transaction.CommitAsync(ct);
         events.Notify();
 
         return StationDto.From(station);
@@ -53,7 +74,9 @@ public sealed class StationManagementService(
         CancellationToken ct
     )
     {
-        var station = await GetAsync(id, ct);
+        var actor = await access.ActorAsync(actorId, ct);
+        await using var transaction = await StationMutationLock.BeginAsync(db, id, ct);
+        var station = await access.StationAsync(actor, id, ct);
         if (station.IsArchived)
             throw new RequestFailure(
                 409,
@@ -63,18 +86,70 @@ public sealed class StationManagementService(
 
         CheckVersion(station, input.Version);
         var data = StationRules.Validate(input);
+        if (input.LocationId != station.LocationId)
+            await access.DestinationAsync(actor, input.LocationId, ct);
+        var before = StationDto.From(station);
+        if (
+            (data.PricePerKWh != station.PricePerKWh || data.Status != station.Status)
+            && input.Reason?.Trim().Length is not (>= 3 and <= 500)
+        )
+            throw new RequestFailure(
+                400,
+                "change_reason_required",
+                "Enter a reason for a status or price change (3–500 characters)."
+            );
+        if (input.Reason?.Length > 500)
+            throw new RequestFailure(400, "invalid_reason", "Use up to 500 characters.");
+        if (
+            data.ConnectorCount != station.ConnectorCount
+            && await db.OcppConnectors.AnyAsync(x => x.StationId == id, ct)
+        )
+            throw new RequestFailure(
+                409,
+                "device_connectors_locked",
+                "The provisioned connector count cannot be changed. Register a separate device for a topology change."
+            );
         if (await db.Stations.AnyAsync(other => other.Code == data.Code && other.Id != id, ct))
             throw new RequestFailure(409, "station_code_taken", "The station code already exists.");
 
         Apply(station, data);
+        station.LocationId = input.LocationId;
         station.Version++;
-        AddAudit(actorId, station.Id, "StationUpdated");
+        if (before.PricePerKWh != station.PricePerKWh)
+            AddPrice(actorId, station, before.PricePerKWh, input.Reason!.Trim());
         // Keep device availability and manual restrictions in the same projection.
         if (await db.ChargingConnectors.AnyAsync(x => x.StationId == station.Id, ct))
             await projection.RefreshAsync(station.Id, ct);
         else
             StageChange(station);
+        access.Audit(
+            actor,
+            station.Id,
+            "StationUpdated",
+            before,
+            StationDto.From(station),
+            input.Reason?.Trim()
+        );
+        if (before.PricePerKWh != station.PricePerKWh)
+            await notifications.EnqueueAsync(
+                id,
+                $"price-changed:{id}:{station.Version}",
+                EVCharging.Domain.Notifications.NotificationKind.PriceChanged,
+                ct
+            );
+        if (
+            before.Status != station.Status.ToString()
+            || before.ManualRestriction != station.ManualRestriction?.ToString()
+        )
+            await notifications.EnqueueAsync(
+                id,
+                $"manual-status:{id}:{station.Version}",
+                EVCharging.Domain.Notifications.NotificationKind.ManualStatusChanged,
+                ct
+            );
         await db.SaveChangesAsync(ct);
+        if (transaction is not null)
+            await transaction.CommitAsync(ct);
         events.Notify();
 
         return StationDto.From(station);
@@ -88,7 +163,8 @@ public sealed class StationManagementService(
     )
     {
         await using var transaction = await StationMutationLock.BeginAsync(db, id, ct);
-        var station = await GetAsync(id, ct);
+        var actor = await access.ActorAsync(actorId, ct);
+        var station = await access.StationAsync(actor, id, ct);
         CheckVersion(station, input.Version);
         if (station.IsArchived)
             throw new RequestFailure(409, "station_archived", "Station is already archived.");
@@ -108,9 +184,10 @@ public sealed class StationManagementService(
         )
             throw new RequestFailure(409, "station_busy", "A busy station cannot be archived.");
 
+        var before = StationDto.From(station);
         station.IsArchived = true;
         station.Version++;
-        AddAudit(actorId, station.Id, "StationArchived");
+        access.Audit(actor, station.Id, "StationArchived", before, StationDto.From(station));
         StageChange(station);
         await db.SaveChangesAsync(ct);
         if (transaction is not null)
@@ -119,10 +196,6 @@ public sealed class StationManagementService(
 
         return StationDto.From(station);
     }
-
-    private async Task<ChargingStation> GetAsync(Guid id, CancellationToken ct) =>
-        await db.Stations.SingleOrDefaultAsync(station => station.Id == id, ct)
-        ?? throw new RequestFailure(404, "station_not_found", "Station not found.");
 
     private static void CheckVersion(ChargingStation station, long version)
     {
@@ -173,14 +246,16 @@ public sealed class StationManagementService(
                 : ChargingRealtime.StationDto(station, clock.GetUtcNow())
         );
 
-    private void AddAudit(Guid actorId, Guid stationId, string action) =>
-        db.Audit.Add(
-            new AuditEntry
+    private void AddPrice(Guid actorId, ChargingStation station, decimal? before, string reason) =>
+        db.PriceRevisions.Add(
+            new PriceRevision
             {
+                StationId = station.Id,
                 ActorId = actorId,
-                ActorRole = "Superadmin",
-                EntityId = stationId,
-                Action = action,
+                PreviousPrice = before,
+                PricePerKWh = station.PricePerKWh,
+                Currency = station.Currency,
+                Reason = reason,
                 RecordedAt = clock.GetUtcNow(),
             }
         );

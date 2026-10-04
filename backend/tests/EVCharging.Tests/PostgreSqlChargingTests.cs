@@ -364,6 +364,11 @@ public sealed partial class PostgreSqlChargingTests
     {
         await using var test = await DatabaseTest.CreateAsync();
         var (driver, actor) = await test.DriversAsync();
+        await using(var setup=test.Context())
+        {
+            (await setup.Accounts.SingleAsync(x=>x.Id==actor)).Role=UserRole.Superadmin;
+            await setup.SaveChangesAsync();
+        }
         var station = (await test.StationsAsync())[0];
         var results = await RaceAsync(
             () => test.ClaimAsync(driver, station),
@@ -392,6 +397,8 @@ public sealed partial class PostgreSqlChargingTests
             new(
                 new DbContextOptionsBuilder<ChargingDbContext>().UseNpgsql(connectionString).Options
             );
+
+        public IServiceScope Scope() => factory!.Services.CreateScope();
 
         public static async Task<DatabaseTest> CreateAsync(
             Func<ChargingDbContext, Task>? seedLegacy = null,

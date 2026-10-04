@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using EVCharging.Application.Charging;
+using EVCharging.Application.Common;
 using EVCharging.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -19,6 +20,26 @@ public sealed class OcppGateway(
     IOptions<OcppOptions> options
 ) : IOcppGateway
 {
+    public Task<bool> IsConnectionCurrentAsync(
+        Guid chargePointId,
+        Guid connectionId,
+        CancellationToken ct
+    ) =>
+        db
+            .OcppConnections.AsNoTracking()
+            .AnyAsync(
+                c =>
+                    c.Id == connectionId
+                    && c.ChargePointId == chargePointId
+                    && c.DisconnectedAt == null
+                    && db.OcppChargePoints.Any(d =>
+                        d.Id == chargePointId
+                        && d.IsEnabled
+                        && d.CredentialVersion == c.CredentialVersion
+                    ),
+                ct
+            );
+
     public Task<Guid?> AuthenticateAsync(
         string identity,
         string username,
@@ -30,6 +51,18 @@ public sealed class OcppGateway(
     {
         await using var transaction = await OcppDeviceUpdate.BeginAsync(db, chargePointId, ct);
         var device = await db.OcppChargePoints.SingleAsync(x => x.Id == chargePointId, ct);
+        if (
+            !device.IsEnabled
+            || authentication.AuthenticatedCredentialVersion is { } admission
+                && admission != device.CredentialVersion
+            || device.PasswordHash is not null
+                && authentication.AuthenticatedCredentialVersion is null
+        )
+            throw new RequestFailure(
+                401,
+                "device_credentials_changed",
+                "The device credentials changed. Reconnect with current credentials."
+            );
         device.LastSeenAt = clock.GetUtcNow();
         var abandoned = await db
             .OcppConnections.Where(x =>
@@ -45,6 +78,7 @@ public sealed class OcppGateway(
         {
             ChargePointId = chargePointId,
             ConnectedAt = clock.GetUtcNow(),
+            CredentialVersion = device.CredentialVersion,
         };
         db.OcppConnections.Add(connection);
         await projection.InvalidateDeviceAsync(chargePointId, ct);
@@ -140,6 +174,8 @@ public sealed class OcppGateway(
                 ct
             );
             connection.LastFrameAt = clock.GetUtcNow();
+            if (connection.CredentialVersion != device.CredentialVersion)
+                throw new OcppFault("SecurityError", "The device credentials were revoked.");
             if (connection.DisconnectedAt is not null)
                 throw new OcppFault("SecurityError", "The connection was superseded.");
             if (wasOffline)

@@ -7,6 +7,42 @@ namespace EVCharging.Infrastructure.Charging;
 
 internal static class ChargingRealtime
 {
+    public static void StageOperations(
+        ChargingDbContext db,
+        Guid stationId,
+        string eventType,
+        string entityType,
+        Guid entityId,
+        long version,
+        DateTimeOffset now
+    )
+    {
+        var entry = new RealtimeOutboxEvent
+        {
+            EventType = eventType,
+            EntityType = entityType,
+            EntityId = entityId,
+            EntityVersion = version,
+            Audience = "Operations",
+            CreatedAt = now,
+            AvailableAt = now,
+        };
+        entry.PayloadJson = JsonSerializer.Serialize(
+            new StationChanged(
+                stationId,
+                0,
+                "Changed",
+                EventId: entry.Id,
+                EventType: eventType,
+                EntityType: entityType,
+                EntityId: entityId,
+                EntityVersion: version,
+                OccurredAt: now
+            )
+        );
+        db.RealtimeOutbox.Add(entry);
+    }
+
     public static void Stage(
         ChargingDbContext db,
         Guid stationId,

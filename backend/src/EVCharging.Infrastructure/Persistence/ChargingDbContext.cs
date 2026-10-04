@@ -17,6 +17,9 @@ public sealed class ChargingDbContext(DbContextOptions<ChargingDbContext> option
     public DbSet<PushDelivery> PushDeliveries => Set<PushDelivery>();
     public DbSet<AuditEntry> Audit => Set<AuditEntry>();
     public DbSet<ChargingStation> Stations => Set<ChargingStation>();
+    public DbSet<ChargingLocation> Locations => Set<ChargingLocation>();
+    public DbSet<AdministratorGrant> AdministratorGrants => Set<AdministratorGrant>();
+    public DbSet<PriceRevision> PriceRevisions => Set<PriceRevision>();
     public DbSet<ChargingHistory> ChargingHistory => Set<ChargingHistory>();
     public DbSet<ChargingSession> ChargingSessions => Set<ChargingSession>();
     public DbSet<ChargingConnector> ChargingConnectors => Set<ChargingConnector>();
@@ -41,6 +44,9 @@ public sealed class ChargingDbContext(DbContextOptions<ChargingDbContext> option
         model.ApplyConfiguration(new PushDeliveryConfiguration());
         model.ApplyConfiguration(new AuditEntryConfiguration());
         model.ApplyConfiguration(new ChargingStationConfiguration());
+        model.ApplyConfiguration(new ChargingLocationConfiguration());
+        model.ApplyConfiguration(new AdministratorGrantConfiguration());
+        model.ApplyConfiguration(new PriceRevisionConfiguration());
         model.ApplyConfiguration(new ChargingHistoryConfiguration());
         model.ApplyConfiguration(new ChargingSessionConfiguration());
         model.ApplyConfiguration(new ChargingConnectorConfiguration());
@@ -72,8 +78,11 @@ public sealed class ChargingDbContext(DbContextOptions<ChargingDbContext> option
             ChangeTracker
                 .Entries<AuditEntry>()
                 .Any(e => e.State is EntityState.Modified or EntityState.Deleted)
+            || ChangeTracker
+                .Entries<PriceRevision>()
+                .Any(e => e.State is EntityState.Modified or EntityState.Deleted)
         )
-            throw new InvalidOperationException("Audit entries are append-only.");
+            throw new InvalidOperationException("Audit and price history entries are append-only.");
         return base.SaveChangesAsync(cancellationToken);
     }
 }

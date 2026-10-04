@@ -16,6 +16,11 @@ public interface IOcppGateway
         CancellationToken ct
     );
     Task CloseAsync(Guid chargePointId, Guid connectionId, int? closeCode, CancellationToken ct);
+    Task<bool> IsConnectionCurrentAsync(
+        Guid chargePointId,
+        Guid connectionId,
+        CancellationToken ct
+    );
 }
 
 public sealed record StationChanged(

@@ -8,6 +8,11 @@ public sealed class OcppChargePoint
     public string Identity { get; set; } = "";
     public string ProtocolVersion { get; set; } = "1.6J";
     public bool IsEnabled { get; set; }
+    public string? PasswordHash { get; set; }
+    public string? ProvisionedSerialNumber { get; set; }
+    public string AuthorizedTagHashesJson { get; set; } = "[]";
+    public long CredentialVersion { get; set; }
+    public long ManagementVersion { get; set; }
     public long CommandVersion { get; set; }
     public string? Vendor { get; set; }
     public string? Model { get; set; }
@@ -49,6 +54,7 @@ public sealed class OcppConnection
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid ChargePointId { get; set; }
     public string Subprotocol { get; set; } = "ocpp1.6";
+    public long CredentialVersion { get; set; }
     public DateTimeOffset ConnectedAt { get; set; }
     public DateTimeOffset? DisconnectedAt { get; set; }
     public DateTimeOffset? LastFrameAt { get; set; }

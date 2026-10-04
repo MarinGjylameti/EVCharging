@@ -26,10 +26,10 @@ public sealed class OcppTransactionHandler(
         var idTag = OcppPayload.Text(payload, "idTag", 20);
         var meter = OcppPayload.Integer(payload, "meterStart");
         var started = OcppPayload.Timestamp(payload);
-        if (idTag != options.Value.SimulatorTagId)
+        if (!DeviceTagAuthorization.Accepted(device, idTag, options.Value))
             throw new OcppFault(
                 "SecurityError",
-                "The authorization tag is not registered for this simulator."
+                "The authorization tag is not registered for this charge point."
             );
         var connector =
             await db.OcppConnectors.SingleOrDefaultAsync(

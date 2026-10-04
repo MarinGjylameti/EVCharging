@@ -29,6 +29,10 @@ if [ "${EVCHARGING_MIGRATE_ON_START:-false}" = "true" ]; then
   dotnet EVCharging.Api.dll --migrate
 fi
 
+if [ "${EVCHARGING_BOOTSTRAP_SUPERADMIN_ON_START:-false}" = "true" ]; then
+  dotnet EVCharging.Api.dll --bootstrap-superadmin
+fi
+
 if [ "${EVCHARGING_SEED_DEMO_ON_START:-false}" = "true" ]; then
   dotnet EVCharging.Api.dll --seed-demo
 fi

@@ -116,6 +116,21 @@ public static class OcppEndpoints
 
                 await using var scope = scopes.CreateAsyncScope();
                 var processor = scope.ServiceProvider.GetRequiredService<IOcppGateway>();
+                if (
+                    !await processor.IsConnectionCurrentAsync(
+                        deviceId.Value,
+                        connectionId.Value,
+                        idle.Token
+                    )
+                )
+                {
+                    await socket.CloseOutputAsync(
+                        WebSocketCloseStatus.PolicyViolation,
+                        "Device access revoked; reconnect with current credentials.",
+                        idle.Token
+                    );
+                    return;
+                }
                 var reply = await processor.ProcessAsync(
                     deviceId.Value,
                     connectionId.Value,

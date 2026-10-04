@@ -64,6 +64,45 @@ namespace EVCharging.Infrastructure.Persistence.Migrations
                     b.ToTable("audit_entries", (string)null);
                 });
 
+            modelBuilder.Entity("EVCharging.Domain.Charging.AdministratorGrant", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AdministratorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("administrator_id");
+
+                    b.Property<Guid?>("LocationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("location_id");
+
+                    b.Property<Guid?>("StationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("station_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LocationId");
+
+                    b.HasIndex("StationId");
+
+                    b.HasIndex("AdministratorId", "LocationId")
+                        .IsUnique()
+                        .HasFilter("location_id IS NOT NULL");
+
+                    b.HasIndex("AdministratorId", "StationId")
+                        .IsUnique()
+                        .HasFilter("station_id IS NOT NULL");
+
+                    b.ToTable("administrator_grants", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_grant_one_resource", "(location_id IS NULL) <> (station_id IS NULL)");
+                        });
+                });
+
             modelBuilder.Entity("EVCharging.Domain.Charging.ChargingConnectionRequest", b =>
                 {
                     b.Property<Guid>("Id")
@@ -266,6 +305,58 @@ namespace EVCharging.Infrastructure.Persistence.Migrations
                     b.ToTable("charging_history", null, t =>
                         {
                             t.HasCheckConstraint("ck_history_measurement", "energy_kwh >= 0 AND unit_price_snapshot >= 0 AND total_cost >= 0 AND ended_at >= started_at");
+                        });
+                });
+
+            modelBuilder.Entity("EVCharging.Domain.Charging.ChargingLocation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Address")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("address");
+
+                    b.Property<string>("City")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("city");
+
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_archived");
+
+                    b.Property<double>("Latitude")
+                        .HasColumnType("double precision")
+                        .HasColumnName("latitude");
+
+                    b.Property<double>("Longitude")
+                        .HasColumnType("double precision")
+                        .HasColumnName("longitude");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("name");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsArchived", "Name");
+
+                    b.ToTable("charging_locations", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_location_coordinates", "latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180");
                         });
                 });
 
@@ -505,6 +596,10 @@ namespace EVCharging.Infrastructure.Persistence.Migrations
                         .HasColumnType("double precision")
                         .HasColumnName("latitude");
 
+                    b.Property<Guid?>("LocationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("location_id");
+
                     b.Property<double>("Longitude")
                         .HasColumnType("double precision")
                         .HasColumnName("longitude");
@@ -564,6 +659,8 @@ namespace EVCharging.Infrastructure.Persistence.Migrations
                     b.HasIndex("Code")
                         .IsUnique();
 
+                    b.HasIndex("LocationId");
+
                     b.HasIndex("City", "IsArchived");
 
                     b.ToTable("charging_stations", null, t =>
@@ -573,6 +670,59 @@ namespace EVCharging.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_station_coordinates", "latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180");
 
                             t.HasCheckConstraint("ck_station_manual_restriction", "manual_restriction IS NULL OR manual_restriction IN ('OutOfService', 'Maintenance')");
+                        });
+                });
+
+            modelBuilder.Entity("EVCharging.Domain.Charging.PriceRevision", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ActorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_id");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<decimal?>("PreviousPrice")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("numeric(10,4)")
+                        .HasColumnName("previous_price");
+
+                    b.Property<decimal>("PricePerKWh")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("numeric(10,4)")
+                        .HasColumnName("price_per_kwh");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reason");
+
+                    b.Property<DateTimeOffset>("RecordedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("recorded_at");
+
+                    b.Property<Guid>("StationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("station_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorId");
+
+                    b.HasIndex("StationId", "RecordedAt");
+
+                    b.ToTable("price_revisions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_revision_price", "price_per_kwh >= 0 AND (previous_price IS NULL OR previous_price >= 0)");
                         });
                 });
 
@@ -869,6 +1019,11 @@ namespace EVCharging.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("AuthorizedTagHashesJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("authorized_tag_hashes_json");
+
                     b.Property<string>("ChargeBoxSerialNumber")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
@@ -882,6 +1037,10 @@ namespace EVCharging.Infrastructure.Persistence.Migrations
                     b.Property<long>("CommandVersion")
                         .HasColumnType("bigint")
                         .HasColumnName("command_version");
+
+                    b.Property<long>("CredentialVersion")
+                        .HasColumnType("bigint")
+                        .HasColumnName("credential_version");
 
                     b.Property<string>("ErrorCode")
                         .HasMaxLength(50)
@@ -930,6 +1089,11 @@ namespace EVCharging.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_seen_at");
 
+                    b.Property<long>("ManagementVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("management_version");
+
                     b.Property<string>("MeterSerialNumber")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
@@ -945,11 +1109,21 @@ namespace EVCharging.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("model");
 
+                    b.Property<string>("PasswordHash")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("password_hash");
+
                     b.Property<string>("ProtocolVersion")
                         .IsRequired()
                         .HasMaxLength(12)
                         .HasColumnType("character varying(12)")
                         .HasColumnName("protocol_version");
+
+                    b.Property<string>("ProvisionedSerialNumber")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("provisioned_serial_number");
 
                     b.Property<string>("ReportedStatus")
                         .HasMaxLength(30)
@@ -1112,6 +1286,10 @@ namespace EVCharging.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("ConnectedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("connected_at");
+
+                    b.Property<long>("CredentialVersion")
+                        .HasColumnType("bigint")
+                        .HasColumnName("credential_version");
 
                     b.Property<DateTimeOffset?>("DisconnectedAt")
                         .HasColumnType("timestamp with time zone")
@@ -1524,6 +1702,25 @@ namespace EVCharging.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("EVCharging.Domain.Charging.AdministratorGrant", b =>
+                {
+                    b.HasOne("EVCharging.Domain.Identity.Account", null)
+                        .WithMany()
+                        .HasForeignKey("AdministratorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EVCharging.Domain.Charging.ChargingLocation", null)
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("EVCharging.Domain.Charging.ChargingStation", null)
+                        .WithMany()
+                        .HasForeignKey("StationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
             modelBuilder.Entity("EVCharging.Domain.Charging.ChargingConnectionRequest", b =>
                 {
                     b.HasOne("EVCharging.Domain.Identity.Account", null)
@@ -1577,6 +1774,29 @@ namespace EVCharging.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("ConnectorId", "PointId", "ConnectorNumber")
                         .HasPrincipalKey("Id", "StationId", "Number")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("EVCharging.Domain.Charging.ChargingStation", b =>
+                {
+                    b.HasOne("EVCharging.Domain.Charging.ChargingLocation", null)
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("EVCharging.Domain.Charging.PriceRevision", b =>
+                {
+                    b.HasOne("EVCharging.Domain.Identity.Account", null)
+                        .WithMany()
+                        .HasForeignKey("ActorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EVCharging.Domain.Charging.ChargingStation", null)
+                        .WithMany()
+                        .HasForeignKey("StationId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

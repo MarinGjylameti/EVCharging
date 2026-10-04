@@ -24,6 +24,7 @@ run_case() {
   status=0
   env -u DOTNET_ENVIRONMENT -u ASPNETCORE_ENVIRONMENT -u PORT \
     -u EVCHARGING_MIGRATE_ON_START -u EVCHARGING_SEED_DEMO_ON_START \
+    -u EVCHARGING_BOOTSTRAP_SUPERADMIN_ON_START \
     -u EVCHARGING_Ocpp__SimulatorEnabled -u FAIL_ACTION \
     PATH="$test_dir/bin:$PATH" CASE_LOG="$log" "$@" \
     sh "$project_root/backend/render-entrypoint.sh" > "$test_dir/$name.stdout" 2> "$test_dir/$name.stderr" || status=$?
@@ -39,6 +40,9 @@ run_case() {
 
 run_case production_default 0 1 'unset|unset|http://0.0.0.0:10000|EVCharging.Api.dll'
 run_case migration_only 0 2 'unset|unset|' EVCHARGING_MIGRATE_ON_START=true
+run_case bootstrap_only 0 2 'unset|unset|' EVCHARGING_BOOTSTRAP_SUPERADMIN_ON_START=true
+run_case migrate_and_bootstrap 0 3 'unset|unset|' EVCHARGING_MIGRATE_ON_START=true EVCHARGING_BOOTSTRAP_SUPERADMIN_ON_START=true
+run_case bootstrap_failure 17 1 '--bootstrap-superadmin' EVCHARGING_BOOTSTRAP_SUPERADMIN_ON_START=true FAIL_ACTION='EVCharging.Api.dll --bootstrap-superadmin'
 run_case seed_default 0 3 'Development|Development|http://0.0.0.0:10000|' EVCHARGING_MIGRATE_ON_START=true EVCHARGING_SEED_DEMO_ON_START=true
 run_case simulator_default 0 1 'Development|Development|' EVCHARGING_Ocpp__SimulatorEnabled=true
 run_case explicit_dotnet_production 1 0 '' DOTNET_ENVIRONMENT=Production EVCHARGING_MIGRATE_ON_START=true EVCHARGING_SEED_DEMO_ON_START=true

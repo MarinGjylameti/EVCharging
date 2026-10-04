@@ -28,6 +28,10 @@ internal sealed class ChargingStationConfiguration : IEntityTypeConfiguration<Ch
             }
         );
         e.HasKey(x => x.Id);
+        e.HasOne<ChargingLocation>()
+            .WithMany()
+            .HasForeignKey(x => x.LocationId)
+            .OnDelete(DeleteBehavior.Restrict);
         e.Property(x => x.Code).HasMaxLength(40);
         e.HasIndex(x => x.Code).IsUnique();
         e.Property(x => x.Name).HasMaxLength(120);

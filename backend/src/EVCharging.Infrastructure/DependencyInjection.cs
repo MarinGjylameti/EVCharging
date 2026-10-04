@@ -30,6 +30,10 @@ public static class DependencyInjection
         AddIdentity(services);
         AddNotifications(services);
         services.AddScoped<IStationManagement, StationManagementService>();
+        services.AddScoped<OperationsAccess>();
+        services.AddScoped<OperationsNotifications>();
+        services.AddScoped<IOperationsManagement, OperationsManagementService>();
+        services.AddScoped<IPasswordHasher<OcppChargePoint>, PasswordHasher<OcppChargePoint>>();
         services.AddScoped<IDriverQueries, DriverQueries>();
         services.AddScoped<IDriverCharging, DriverChargingService>();
         services.AddScoped<IChargerEventReceiver, ChargerEventReceiver>();

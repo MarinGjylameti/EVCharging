@@ -15,7 +15,9 @@ public sealed record StationInput(
     decimal PowerKW,
     decimal PricePerKWh,
     string? Status,
-    long Version = 0
+    long Version = 0,
+    Guid? LocationId = null,
+    string? Reason = null
 );
 
 public sealed record ArchiveStationInput(long Version);
@@ -40,7 +42,8 @@ public sealed record StationDto(
     long Version,
     string? StatusSource,
     DateTimeOffset? StatusObservedAt,
-    DateTimeOffset? StatusReceivedAt
+    DateTimeOffset? StatusReceivedAt,
+    Guid? LocationId = null
 )
 {
     public static StationDto From(ChargingStation station) =>
@@ -64,13 +67,14 @@ public sealed record StationDto(
             station.Version,
             station.StatusSource,
             station.StatusObservedAt,
-            station.StatusReceivedAt
+            station.StatusReceivedAt,
+            station.LocationId
         );
 }
 
 public interface IStationManagement
 {
-    Task<IReadOnlyList<StationDto>> ListAsync(CancellationToken ct);
+    Task<IReadOnlyList<StationDto>> ListAsync(Guid actorId, CancellationToken ct);
     Task<StationDto> CreateAsync(StationInput input, Guid actorId, CancellationToken ct);
     Task<StationDto> UpdateAsync(Guid id, StationInput input, Guid actorId, CancellationToken ct);
     Task<StationDto> ArchiveAsync(
@@ -138,7 +142,9 @@ public static class StationRules
         if (
             input.ConnectorCount is < 1 or > 100
             || input.PowerKW is <= 0 or > 99999999m
-            || input.PricePerKWh is < 0 or > 999999m
+            || input.PricePerKWh is < 0 or > 10000m
+            || decimal.Round(input.PowerKW, 2) != input.PowerKW
+            || decimal.Round(input.PricePerKWh, 4) != input.PricePerKWh
         )
             throw new RequestFailure(
                 400,
