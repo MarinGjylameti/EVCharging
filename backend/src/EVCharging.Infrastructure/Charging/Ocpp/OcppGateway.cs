@@ -55,13 +55,13 @@ public sealed class OcppGateway(
             !device.IsEnabled
             || authentication.AuthenticatedCredentialVersion is { } admission
                 && admission != device.CredentialVersion
-            || device.PasswordHash is not null
+            || device.ProvisionedSerialNumber is not null
                 && authentication.AuthenticatedCredentialVersion is null
         )
             throw new RequestFailure(
                 401,
-                "device_credentials_changed",
-                "The device credentials changed. Reconnect with current credentials."
+                "device_access_changed",
+                "The device connection permission changed. Reconnect if enabled."
             );
         device.LastSeenAt = clock.GetUtcNow();
         var abandoned = await db
@@ -175,7 +175,10 @@ public sealed class OcppGateway(
             );
             connection.LastFrameAt = clock.GetUtcNow();
             if (connection.CredentialVersion != device.CredentialVersion)
-                throw new OcppFault("SecurityError", "The device credentials were revoked.");
+                throw new OcppFault(
+                    "SecurityError",
+                    "The device connection permission was revoked."
+                );
             if (connection.DisconnectedAt is not null)
                 throw new OcppFault("SecurityError", "The connection was superseded.");
             if (wasOffline)

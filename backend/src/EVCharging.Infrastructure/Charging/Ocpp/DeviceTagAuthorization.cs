@@ -16,7 +16,7 @@ internal static class DeviceTagAuthorization
             : JsonSerializer.Deserialize<string[]>(device.AuthorizedTagHashesJson) ?? [];
 
     public static bool Accepted(OcppChargePoint device, string tag, OcppOptions options) =>
-        device.PasswordHash is not null
+        device.ProvisionedSerialNumber is not null
             ? Hashes(device).Contains(Hash(tag), StringComparer.Ordinal)
             : options.SimulatorEnabled
                 && options.SimulatorIdentities.Contains(device.Identity, StringComparer.Ordinal)

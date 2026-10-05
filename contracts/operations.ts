@@ -2,7 +2,7 @@ import type { Station } from "./account";
 export type Location = {id:string;name:string;city:string;address:string;latitude:number;longitude:number;isArchived:boolean;version:number};
 export type Administrator = {id:string;email:string;firstName:string;lastName:string;phone:string|null;isActive:boolean;archivedAt:string|null;version:number;locationIds:string[];stationIds:string[]};
 export type Device = {id:string;identity:string;serialNumber:string;vendor:string|null;model:string|null;protocol:string;isEnabled:boolean;isOnline:boolean;lastSeenAt:string|null;lastBootAt:string|null;connectors:number[];authorizedTagCount:number;version:number};
-export type Credentials = {device:Device;username:string;password:string;webSocketPath:string};
+export type DeviceConnectionDetails = {device:Device;webSocketPath:string};
 export type OperationsSession = {id:string;stationId:string;stationName:string;stationCode:string;locationId:string|null;connectorNumber:number;driverId:string|null;driverName:string|null;driverEmail:string|null;status:string;startedAt:string;endedAt:string|null;energyKWh:number|null;powerKW:number|null;stateOfCharge:number|null;unitPriceSnapshot:number;cost:number|null;currency:string;isDemo:boolean};
 export type SessionPage = {items:OperationsSession[];total:number;page:number;pageSize:number};
 export type Summary = {stations:number;statusCounts:Record<Station["status"],number>;locations:number;administrators:number;drivers:number;activeSessions:number;completedSessions:number;energyKWh:number;calculatedCost:number;currency:string;updatedAt:string};

@@ -70,14 +70,9 @@ public sealed record DeviceDto(
     long Version
 );
 
-public sealed record DeviceCredentials(
-    DeviceDto Device,
-    string Username,
-    string Password,
-    string WebSocketPath
-);
+public sealed record DeviceConnectionDetails(DeviceDto Device, string WebSocketPath);
 
-public sealed record DeviceControlInput(long Version, bool Enabled, bool RotatePassword = false);
+public sealed record DeviceControlInput(long Version, bool Enabled);
 
 public sealed record SessionFilter(
     Guid? StationId = null,
@@ -198,13 +193,13 @@ public interface IOperationsManagement
     );
     Task<IReadOnlyList<DriverDirectoryEntry>> DriversAsync(Guid actorId, CancellationToken ct);
     Task<DeviceDto?> DeviceAsync(Guid actorId, Guid stationId, CancellationToken ct);
-    Task<DeviceCredentials> ProvisionDeviceAsync(
+    Task<DeviceConnectionDetails> ProvisionDeviceAsync(
         Guid actorId,
         Guid stationId,
         DeviceInput input,
         CancellationToken ct
     );
-    Task<DeviceCredentials?> ControlDeviceAsync(
+    Task<DeviceDto> ControlDeviceAsync(
         Guid actorId,
         Guid stationId,
         DeviceControlInput input,

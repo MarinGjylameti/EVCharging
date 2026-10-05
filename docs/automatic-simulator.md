@@ -145,8 +145,10 @@ EVCHARGING_Ocpp__AllowAnonymousSimulators=true
 
 Web-i përdor origin-in e `EVCHARGING_API_BASE_URL` për adresën WebSocket dhe nuk
 publikon fjalëkalime të karikuesve. Simulatori nuk shfaqet kur API-ja çaktivizon
-provën demo. Nëse karikuesi mbrohet vetëm me Basic Auth, browser-i nuk mund të
+provën demo. Nëse simulatori mbrohet vetëm me Basic Auth, browser-i nuk mund të
 dërgojë atë header: përdor simulatorin e jashtëm ose mjedisin demo anonim.
+Karikuesit fizikë të regjistruar përdorin URL-në pa username/password;
+politika e veçantë e simulatorëve nuk e kushtëzon lidhjen e tyre.
 
 Migrimi `20261003134511_BatteryCapacityForChargingEstimates` shton kapacitete
 nullable në profil/sesion dhe kohën e marrjes së SoC. Nuk fshin sesione apo

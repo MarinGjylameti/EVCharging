@@ -45,7 +45,7 @@ public static class OcppEndpoints
         if (deviceId is null)
         {
             context.Response.StatusCode = 401;
-            context.Response.Headers.WWWAuthenticate = "Basic realm=\"EVCharging OCPP\"";
+            await context.Response.WriteAsJsonAsync(new { code = "device_connection_denied" });
             return;
         }
         if (!registry.TryOpen(deviceId.Value))
@@ -128,7 +128,7 @@ public static class OcppEndpoints
                 {
                     await socket.CloseOutputAsync(
                         WebSocketCloseStatus.PolicyViolation,
-                        "Device access revoked; reconnect with current credentials.",
+                        "Device connection permission revoked.",
                         idle.Token
                     );
                     return;

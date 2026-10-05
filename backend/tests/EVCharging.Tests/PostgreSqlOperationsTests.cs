@@ -41,7 +41,7 @@ public sealed partial class PostgreSqlChargingTests
         }
         LocationDto location;
         StationDto station;
-        DeviceCredentials device;
+        DeviceConnectionDetails device;
         using (var scope = test.Scope())
         {
             var service = scope.ServiceProvider.GetRequiredService<IOperationsManagement>();
@@ -100,12 +100,7 @@ public sealed partial class PostgreSqlChargingTests
             var gateway = scope.ServiceProvider.GetRequiredService<IOcppGateway>();
             Assert.Equal(
                 device.Device.Id,
-                await gateway.AuthenticateAsync(
-                    device.Username,
-                    device.Username,
-                    device.Password,
-                    default
-                )
+                await gateway.AuthenticateAsync(device.Device.Identity, "", "", default)
             );
             var connection = await gateway.OpenAsync(device.Device.Id, default);
             Assert.True(

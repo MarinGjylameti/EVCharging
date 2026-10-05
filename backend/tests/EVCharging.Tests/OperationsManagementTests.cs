@@ -2,7 +2,6 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Net.WebSockets;
-using System.Text;
 using System.Text.Json;
 using EVCharging.Application.Charging;
 using EVCharging.Application.Identity;
@@ -90,25 +89,29 @@ public sealed class OperationsManagementTests : IDisposable
         Guid? locationId = null
     ) => PostAsync<StationDto>(client, "/api/v1/admin/stations", Station(code, locationId));
 
-    private Task<DeviceCredentials> DeviceAsync(
+    private async Task<DeviceConnectionDetails> DeviceAsync(
         HttpClient client,
         Guid stationId,
         string identity = "CP-001"
-    ) =>
-        PostAsync<DeviceCredentials>(
-            client,
+    )
+    {
+        var response = await client.PostAsJsonAsync(
             $"/api/v1/admin/stations/{stationId}/device",
             new DeviceInput(identity, "SERIAL-123", null, null, "1.6J", ["CARD-001"])
         );
+        response.EnsureSuccessStatusCode();
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.False(json.TryGetProperty("username", out _));
+        Assert.False(json.TryGetProperty("password", out _));
+        return json.Deserialize<DeviceConnectionDetails>(
+            new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        )!;
+    }
 
-    private async Task<WebSocket> SocketAsync(string identity, string password)
+    private async Task<WebSocket> SocketAsync(string identity)
     {
         var client = factory.Server.CreateWebSocketClient();
         client.SubProtocols.Add("ocpp1.6");
-        client.ConfigureRequest = r =>
-            r.Headers.Authorization =
-                "Basic "
-                + Convert.ToBase64String(Encoding.UTF8.GetBytes(identity + ":" + password));
         return await client.ConnectAsync(
             new Uri("ws://localhost/ws/cs/" + identity),
             timeout.Token
@@ -132,45 +135,42 @@ public sealed class OperationsManagementTests : IDisposable
         return JsonDocument.Parse(buffer.AsSpan(0, result.Count).ToArray()).RootElement.Clone();
     }
 
-    [Fact]
-    public async Task PhysicalDeviceWorksWithSimulatorDisabledAndKeepsSessionsPrivate()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PhysicalDeviceConnectsByUrlWithSimulatorDisabledAndKeepsSessionsPrivate(
+        bool legacyPassword
+    )
     {
         var (super, _) = await UserAsync("super@test.com", UserRole.Superadmin);
         var (driver, _) = await UserAsync("driver@test.com", UserRole.Driver);
         var station = await StationAsync(super, "REAL-001");
-        var credentials = await DeviceAsync(super, station.Id);
-        Assert.Equal("CP-001", credentials.Username);
-        Assert.Equal("/ws/cs/CP-001", credentials.WebSocketPath);
-        Assert.Equal(48, credentials.Password.Length);
+        var connection = await DeviceAsync(super, station.Id);
+        Assert.Equal("CP-001", connection.Device.Identity);
+        Assert.Equal("/ws/cs/CP-001", connection.WebSocketPath);
         var deviceResponse = await super.GetAsync($"/api/v1/admin/stations/{station.Id}/device");
-        Assert.DoesNotContain(
-            credentials.Password,
-            await deviceResponse.Content.ReadAsStringAsync()
-        );
         Assert.DoesNotContain("passwordHash", await deviceResponse.Content.ReadAsStringAsync());
         using (var scope = factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<ChargingDbContext>();
-            Assert.NotEqual(
-                credentials.Password,
-                (await db.OcppChargePoints.SingleAsync()).PasswordHash
-            );
-            Assert.DoesNotContain(
-                credentials.Password,
-                string.Join("", await db.Audit.Select(a => a.ChangesJson).ToListAsync())
-            );
+            var device = await db.OcppChargePoints.SingleAsync();
+            Assert.Null(device.PasswordHash);
+            if (legacyPassword)
+            {
+                device.PasswordHash = "legacy-device-hash-no-longer-used";
+                await db.SaveChangesAsync();
+            }
             Assert.Equal(2, await db.OcppConnectors.CountAsync());
         }
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            SocketAsync("CP-001", "wrong-password")
-        );
-        using var socket = await SocketAsync("CP-001", credentials.Password);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => SocketAsync("UNKNOWN-DEVICE"));
+        using var socket = await SocketAsync("CP-001");
         var boot = await CallAsync(
             socket,
             "BootNotification",
             new { chargePointVendor = "Custom", chargePointModel = "Handmade" }
         );
         Assert.Equal("Accepted", boot[2].GetProperty("status").GetString());
+        Assert.Equal(3, (await CallAsync(socket, "Heartbeat", new { }))[0].GetInt32());
         var invalid = await CallAsync(socket, "Authorize", new { idTag = "UNKNOWN" });
         Assert.Equal(
             "Invalid",
@@ -264,7 +264,7 @@ public sealed class OperationsManagementTests : IDisposable
         );
         var busy = await super.PatchAsJsonAsync(
             $"/api/v1/admin/stations/{station.Id}/device",
-            new DeviceControlInput(credentials.Device.Version, true, true)
+            new DeviceControlInput(connection.Device.Version, false)
         );
         Assert.Equal(HttpStatusCode.Conflict, busy.StatusCode);
         var stop = await CallAsync(
@@ -567,20 +567,21 @@ public sealed class OperationsManagementTests : IDisposable
     }
 
     [Fact]
-    public async Task CredentialRotationAndDisableInvalidateDeviceAccessWithoutLeakingSecrets()
+    public async Task DisableRevokesTheConnectionAndReenableAcceptsTheSameUrl()
     {
         var (super, _) = await UserAsync("super@test.com", UserRole.Superadmin);
         var station = await StationAsync(super, "REAL-001");
         var original = await DeviceAsync(super, station.Id);
-        using var socket = await SocketAsync(original.Username, original.Password);
-        var rotatedResponse = await super.PatchAsJsonAsync(
+        using var socket = await SocketAsync(original.Device.Identity);
+        var disabledResponse = await super.PatchAsJsonAsync(
             $"/api/v1/admin/stations/{station.Id}/device",
-            new DeviceControlInput(original.Device.Version, true, true)
+            new DeviceControlInput(original.Device.Version, false)
         );
-        rotatedResponse.EnsureSuccessStatusCode();
-        var rotated = (await rotatedResponse.Content.ReadFromJsonAsync<DeviceCredentials>())!;
-        Assert.NotEqual(original.Password, rotated.Password);
-        Assert.Equal(original.Device.Version + 1, rotated.Device.Version);
+        disabledResponse.EnsureSuccessStatusCode();
+        var disabled = (await disabledResponse.Content.ReadFromJsonAsync<DeviceDto>())!;
+        Assert.False(disabled.IsEnabled);
+        Assert.False(disabled.IsOnline);
+        Assert.Equal(original.Device.Version + 1, disabled.Version);
         await socket.SendAsync(
             JsonSerializer.SerializeToUtf8Bytes(
                 new object[] { 2, "revoked", "Heartbeat", new { } }
@@ -593,18 +594,106 @@ public sealed class OperationsManagementTests : IDisposable
         Assert.Equal(WebSocketMessageType.Close, closed.MessageType);
         Assert.Equal(WebSocketCloseStatus.PolicyViolation, closed.CloseStatus);
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            SocketAsync(original.Username, original.Password)
+            SocketAsync(original.Device.Identity)
         );
-        using var fresh = await SocketAsync(rotated.Username, rotated.Password);
+        var stale = await super.PatchAsJsonAsync(
+            $"/api/v1/admin/stations/{station.Id}/device",
+            new DeviceControlInput(original.Device.Version, true)
+        );
+        Assert.Equal(HttpStatusCode.PreconditionFailed, stale.StatusCode);
+        var enabledResponse = await super.PatchAsJsonAsync(
+            $"/api/v1/admin/stations/{station.Id}/device",
+            new DeviceControlInput(disabled.Version, true)
+        );
+        enabledResponse.EnsureSuccessStatusCode();
+        var enabled = (await enabledResponse.Content.ReadFromJsonAsync<DeviceDto>())!;
+        Assert.True(enabled.IsEnabled);
+        Assert.Equal(disabled.Version + 1, enabled.Version);
+        using var fresh = await SocketAsync(original.Device.Identity);
         Assert.Equal(3, (await CallAsync(fresh, "Heartbeat", new { }))[0].GetInt32());
         await fresh.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);
-        var disable = await super.PatchAsJsonAsync(
-            $"/api/v1/admin/stations/{station.Id}/device",
-            new DeviceControlInput(rotated.Device.Version, false)
+    }
+
+    [Fact]
+    public async Task ChangingAccessInvalidatesPendingUrlAdmissionEvenAfterReenable()
+    {
+        var (super, _) = await UserAsync("super@test.com", UserRole.Superadmin);
+        var station = await StationAsync(super, "REAL-001");
+        var registered = await DeviceAsync(super, station.Id);
+        using (var unauthenticatedScope = factory.Services.CreateScope())
+        {
+            var unauthenticated =
+                unauthenticatedScope.ServiceProvider.GetRequiredService<IOcppGateway>();
+            await Assert.ThrowsAsync<EVCharging.Application.Common.RequestFailure>(() =>
+                unauthenticated.OpenAsync(registered.Device.Id, timeout.Token)
+            );
+        }
+        using var scope = factory.Services.CreateScope();
+        var gateway = scope.ServiceProvider.GetRequiredService<IOcppGateway>();
+        Assert.Equal(
+            registered.Device.Id,
+            await gateway.AuthenticateAsync(registered.Device.Identity, "", "", timeout.Token)
         );
-        disable.EnsureSuccessStatusCode();
+        var disabledResponse = await super.PatchAsJsonAsync(
+            $"/api/v1/admin/stations/{station.Id}/device",
+            new DeviceControlInput(registered.Device.Version, false)
+        );
+        disabledResponse.EnsureSuccessStatusCode();
+        var disabled = (await disabledResponse.Content.ReadFromJsonAsync<DeviceDto>())!;
+        var enabledResponse = await super.PatchAsJsonAsync(
+            $"/api/v1/admin/stations/{station.Id}/device",
+            new DeviceControlInput(disabled.Version, true)
+        );
+        enabledResponse.EnsureSuccessStatusCode();
+        await Assert.ThrowsAsync<EVCharging.Application.Common.RequestFailure>(() =>
+            gateway.OpenAsync(registered.Device.Id, timeout.Token)
+        );
+        using var fresh = await SocketAsync(registered.Device.Identity);
+        await fresh.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);
+    }
+
+    [Theory]
+    [InlineData("archived")]
+    [InlineData("demo")]
+    [InlineData("unmapped")]
+    [InlineData("incomplete")]
+    [InlineData("protocol")]
+    [InlineData("unprovisioned")]
+    public async Task UrlAdmissionRejectsUnavailableOrUnprovisionedPhysicalDevices(string state)
+    {
+        var (super, _) = await UserAsync("super@test.com", UserRole.Superadmin);
+        var station = await StationAsync(super, "REAL-001");
+        var registered = await DeviceAsync(super, station.Id);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ChargingDbContext>();
+            var device = await db.OcppChargePoints.SingleAsync();
+            var storedStation = await db.Stations.SingleAsync();
+            switch (state)
+            {
+                case "archived":
+                    storedStation.IsArchived = true;
+                    break;
+                case "demo":
+                    storedStation.IsDemo = true;
+                    break;
+                case "unmapped":
+                    db.OcppConnectors.RemoveRange(await db.OcppConnectors.ToListAsync());
+                    break;
+                case "incomplete":
+                    (await db.OcppConnectors.FirstAsync()).BusinessConnectorId = null;
+                    break;
+                case "protocol":
+                    device.ProtocolVersion = "2.0.1";
+                    break;
+                case "unprovisioned":
+                    device.ProvisionedSerialNumber = null;
+                    break;
+            }
+            await db.SaveChangesAsync();
+        }
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            SocketAsync(rotated.Username, rotated.Password)
+            SocketAsync(registered.Device.Identity)
         );
     }
 

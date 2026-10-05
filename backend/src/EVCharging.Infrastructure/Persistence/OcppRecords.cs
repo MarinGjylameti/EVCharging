@@ -8,9 +8,13 @@ public sealed class OcppChargePoint
     public string Identity { get; set; } = "";
     public string ProtocolVersion { get; set; } = "1.6J";
     public bool IsEnabled { get; set; }
+
+    // Legacy column retained for existing databases; physical admission no longer uses passwords.
     public string? PasswordHash { get; set; }
     public string? ProvisionedSerialNumber { get; set; }
     public string AuthorizedTagHashesJson { get; set; } = "[]";
+
+    // Admission generation: enabling/disabling still invalidates pending and active connections.
     public long CredentialVersion { get; set; }
     public long ManagementVersion { get; set; }
     public long CommandVersion { get; set; }

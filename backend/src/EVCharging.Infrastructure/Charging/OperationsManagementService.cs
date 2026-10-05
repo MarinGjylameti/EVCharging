@@ -13,7 +13,6 @@ public sealed partial class OperationsManagementService(
     ChargingDbContext db,
     OperationsAccess access,
     IPasswordHasher<Account> accountsHasher,
-    IPasswordHasher<OcppChargePoint> deviceHasher,
     TimeProvider clock,
     StationEventSignal signal,
     StationProjection projection

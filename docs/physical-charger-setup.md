@@ -21,19 +21,20 @@ nuk kërkon ndryshim kodi kur ndryshon domeni.
 | Protokolli | OCPP **1.6 JSON**; WebSocket subprotocol `ocpp1.6` |
 | Serveri | URL-ja e plotë që tregon paneli |
 | Charge Point ID | ID-ja që regjistron te “Karikuesi fizik”, me të njëjtat shkronja |
-| Autentikimi | HTTP Basic mbi TLS (`wss://`) |
-| Username | Charge Point ID, p.sh. `CP-001` |
-| Password | Fjalëkalimi individual që krijon paneli për pajisjen |
+| Lidhja | Vetëm URL-ja mbi TLS (`wss://`); pa username/password ose header `Authorization` |
 | Lidhësit | Numrat **1…N**, sipas numrit të regjistruar; 0 përdoret për gjendjen e gjithë pajisjes |
 | Heartbeat | Përdor intervalin e kthyer nga `BootNotification.conf`: aktualisht 30 sekonda |
 | Matjet | Dërgo çdo 10–30 sekonda gjatë karikimit për provën e parë |
 | Ora | UTC me ISO 8601, p.sh. `2026-10-04T12:00:00Z`; mbaje orën e pajisjes të sinkronizuar |
 
-Në kodin e karikuesit, Basic Auth vendoset në kërkesën HTTP të hapjes së
-WebSocket-it si `Authorization: Basic base64(username:password)`.
-Fjalëkalimi i pajisjes është i veçantë nga fjalëkalimi i llogarisë Admin.
-Kopjoje kur krijohet; serveri ruan vetëm hash-in. Nëse humbet, paneli krijon
-një të ri. Rinovimi/çaktivizimi bllokohet gjatë një sesioni aktiv.
+Karikuesi hap WebSocket-in me këtë URL dhe subprotocol `ocpp1.6`, pastaj
+dërgon `BootNotification`, heartbeat dhe gjendjet. Serveri pranon vetëm ID
+të regjistruara, aktive dhe të lidhura me lidhësit e një pike fizike aktive.
+ID-të e panjohura nuk krijojnë automatikisht pajisje fizike. Çaktivizimi
+mbyll lidhjen dhe ndalon rilidhjen; bllokohet gjatë një sesioni aktiv.
+
+URL-ja identifikon pajisjen, por nuk provon identitetin e saj me një sekret.
+Ky është konfigurimi i kërkuar për pajisjet që lidhen vetëm me URL.
 
 Duhet edhe lista e **idTag** që përdor programi i karikuesit për
 `Authorize`/`StartTransaction`. Regjistro vlerat reale te pajisja, një për
@@ -50,7 +51,7 @@ llogari Driver në aplikacion.
    pajisjes, mos lër kufizim manual Mirëmbajtje/Jashtë funksionit.
 4. Te pika e ruajtur, seksioni **Karikuesi fizik**, shkruaj ID-në dhe serialin;
    prodhuesi/modeli janë opsionalë. Vendos idTag-t e autorizuar dhe regjistroje.
-5. Kopjo URL-në e plotë, username dhe password për kolegun.
+5. Kopjo vetëm URL-në e plotë për kolegun; username/password nuk nevojiten.
 6. Për një llogari **Admin**, Superadmin hap **Administratorët**, krijon
    llogarinë dhe cakton vendndodhje ose pika të veçanta.
 
@@ -104,13 +105,20 @@ nuk krijohen nga energjia e matur vetëm.
 
 Ky ndryshim përfshin migrimet `AdministrationAndPhysicalChargers` dhe
 `OperationsRealtimeAudience`, panelin,
-lejet, kredencialet individuale dhe teste HTTP/WebSocket lokale. Nuk është
+lejet, lidhjen e pajisjes vetëm me URL dhe teste HTTP/WebSocket lokale. Nuk është
 provë që pajisja reale është lidhur me Render. Pas commit/push duhen deploy i
 backend/web, migrimet dhe regjistrimi i pajisjes përpara provës në terren.
 OCPP 2.0.1 dhe komandat për ndryshim konfigurimi/nisje/ndalim në distancë nuk
 janë implementuar në këtë integrim. Lidhja e identifikuesit fizik me llogarinë
 Driver mbetet një integrim i veçantë; të dhënat e klientëve nuk i caktohen
 një përdoruesi vetëm sepse hap faqen e pikës.
+
+Heqja e fjalëkalimit më 5 tetor 2026 nuk kërkon migrim të ri. Edhe pajisjet
+e regjistruara më parë lidhen me URL-në ekzistuese pa kredenciale. Kolona e
+vjetër e hash-it ruhet për pajtueshmërinë e databazës, por nuk përdoret për
+lidhjen ose autorizimin e kartave dhe nuk plotësohet për pajisje të reja.
+Backend-i dhe web-i duhen publikuar bashkë që paneli të tregojë konfigurimin
+e ri. Konfigurimi i simulatorëve mbetet i veçantë.
 
 ### Nëse API-ja dështon me `ck_realtime_outbox_audience`
 

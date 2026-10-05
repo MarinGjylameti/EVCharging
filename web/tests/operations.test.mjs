@@ -15,11 +15,11 @@ function bff(t,token="private-session"){
   return path=>loadTypescript(new URL("../src/app/api/"+path+"/route.ts",import.meta.url),{...headers,"@/lib/backend":backend,"@/lib/request-body":body});
 }
 const request=(body,origin="https://web.example.test")=>new Request("https://web.example.test/api/operations",{method:"POST",headers:{"Content-Type":"application/json",Origin:origin},body:JSON.stringify(body)});
-test("device provisioning forwards credentials only through the authenticated same-origin BFF and disables caching",async t=>{
+test("device provisioning returns the connection path through the authenticated same-origin BFF",async t=>{
   const route=bff(t)("operations");let calls=0;
-  globalThis.fetch=async(url,init)=>{calls++;assert.equal(url,"https://api.example.test/api/v1/admin/stations/"+id+"/device");assert.equal(init.headers.get("Authorization"),"Bearer private-session");assert.equal(init.method,"POST");return Response.json({username:"CP-001",password:"device-secret"});};
+  globalThis.fetch=async(url,init)=>{calls++;assert.equal(url,"https://api.example.test/api/v1/admin/stations/"+id+"/device");assert.equal(init.headers.get("Authorization"),"Bearer private-session");assert.equal(init.method,"POST");return Response.json({device:{identity:"CP-001"},webSocketPath:"/ws/cs/CP-001"});};
   const response=await route.POST(request({resource:"device",operation:"provision",id,input:{identity:"CP-001",serialNumber:"123",protocol:"1.6J",authorizedTags:["CARD"]}}));
-  assert.equal(response.status,200);assert.equal(response.headers.get("cache-control"),"no-store");assert.equal((await response.json()).password,"device-secret");assert.equal(calls,1);
+  assert.equal(response.status,200);assert.equal(response.headers.get("cache-control"),"no-store");assert.deepEqual(await response.json(),{device:{identity:"CP-001"},webSocketPath:"/ws/cs/CP-001"});assert.equal(calls,1);
 });
 test("admin BFF rejects cross-origin writes, arbitrary resources, traversal, missing IDs and invalid operations",async t=>{
   const route=bff(t)("operations");globalThis.fetch=async()=>assert.fail("Invalid request reached upstream");
@@ -60,6 +60,28 @@ test("locations are editable by Superadmin while the Admin view is read-only",()
   const {LocationsManager}=component("locations-manager");
   const view=canEdit=>renderToStaticMarkup(React.createElement(LocationsManager,{initial:[],language:"en",canEdit}));
   assert.match(view(true),/Add location/);assert.doesNotMatch(view(false),/Add location/);assert.match(view(false),/<fieldset[^>]*disabled/);
+});
+test("physical charger panel provides only the URL and toggles access without credential rotation",async t=>{
+  const previousWindow=globalThis.window;
+  globalThis.window={confirm:()=>true};
+  t.after(()=>{if(previousWindow===undefined)delete globalThis.window;else globalThis.window=previousWindow;});
+  const device={id,identity:"CP-001",serialNumber:"123",protocol:"1.6J",connectors:[1,2],isEnabled:true,isOnline:false,authorizedTagCount:1,version:1};
+  const state=[];let cursor=0,effect,pending;const calls=[];
+  const {DeviceManager}=component("device-manager",{
+    react:{...React,useState(initial){const index=cursor++;if(!(index in state))state[index]=initial;return [state[index],value=>{state[index]=value;}];},useEffect:fn=>{effect=fn;}},
+    "./api":{operations:async()=>device,failure:()=>"Unexpected error",mutate:async(...args)=>{calls.push(args);pending=Promise.resolve({...device,isEnabled:args[2].enabled,version:device.version+1});return pending;}}
+  });
+  const render=()=>{cursor=0;return DeviceManager({stationId:id,language:"en",webSocketBaseUrl:"wss://api.example.test/ws/cs",disabled:false});};
+  render();const cleanup=effect();t.after(()=>cleanup());await new Promise(resolve=>setImmediate(resolve));
+  let tree=render();const html=renderToStaticMarkup(tree);
+  assert.match(html,/wss:\/\/api.example.test\/ws\/cs\/CP-001/);
+  assert.match(html,/does not require a username or password/);
+  assert.doesNotMatch(html,/Rotate password|<label>Username|<label>Password|hide credentials/);
+  function find(node,predicate){if(!node||typeof node!=="object")return undefined;if(predicate(node))return node;for(const child of React.Children.toArray(node.props?.children)){const found=find(child,predicate);if(found)return found;}}
+  find(tree,node=>node.type==="button"&&node.props.children==="Disable connection").props.onClick();
+  await pending;await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(calls,[["device","control",{version:1,enabled:false},id]]);
+  assert.match(renderToStaticMarkup(render()),/Enable connection/);
 });
 test("operations dashboard shows all statuses and only Superadmin sees global account counts",()=>{
   const {OperationsOverview}=component("operations-overview",{"next/link":{default:({href,children,...props})=>React.createElement("a",{href,...props},children)}});

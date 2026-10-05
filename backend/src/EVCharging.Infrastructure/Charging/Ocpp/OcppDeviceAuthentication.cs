@@ -1,19 +1,17 @@
 using System.Security.Cryptography;
 using System.Text;
 using EVCharging.Infrastructure.Persistence;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace EVCharging.Infrastructure.Charging.Ocpp;
 
-// Physical devices use individual credentials and explicit connector mappings.
+// Physical devices connect by their provisioned URL identity and explicit connector mappings.
 // The allowlisted demo policy stays independent of physical charger admission.
 public sealed class OcppDeviceAuthentication(
     ChargingDbContext db,
     OcppSimulatorProvisioner provisioner,
-    IOptions<OcppOptions> options,
-    IPasswordHasher<OcppChargePoint> hasher
+    IOptions<OcppOptions> options
 )
 {
     public long? AuthenticatedCredentialVersion { get; private set; }
@@ -27,23 +25,17 @@ public sealed class OcppDeviceAuthentication(
     {
         var settings = options.Value;
         AuthenticatedCredentialVersion = null;
-        if (
-            !System.Text.RegularExpressions.Regex.IsMatch(identity, "^[A-Za-z0-9_-]{1,40}$")
-            || password.Length > 128
-        )
+        if (!System.Text.RegularExpressions.Regex.IsMatch(identity, "^[A-Za-z0-9_-]{1,40}$"))
             return null;
         var physical = await db
             .OcppChargePoints.AsNoTracking()
-            .SingleOrDefaultAsync(x => x.Identity == identity && x.PasswordHash != null, ct);
+            .SingleOrDefaultAsync(
+                x => x.Identity == identity && x.ProvisionedSerialNumber != null,
+                ct
+            );
         if (physical is not null)
         {
-            if (
-                !physical.IsEnabled
-                || physical.ProtocolVersion != "1.6J"
-                || username != identity
-                || hasher.VerifyHashedPassword(physical, physical.PasswordHash!, password)
-                    == PasswordVerificationResult.Failed
-            )
+            if (!physical.IsEnabled || physical.ProtocolVersion != "1.6J")
                 return null;
             var mappings = await db
                 .OcppConnectors.AsNoTracking()
@@ -65,7 +57,7 @@ public sealed class OcppDeviceAuthentication(
         if (
             !settings.SimulatorEnabled
             || !settings.SimulatorIdentities.Contains(identity, StringComparer.Ordinal)
-            || !System.Text.RegularExpressions.Regex.IsMatch(identity, "^[A-Za-z0-9_-]{1,40}$")
+            || password.Length > 128
         )
             return null;
         var anonymousDemo =

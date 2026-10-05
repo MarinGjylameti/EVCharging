@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using EVCharging.Application.Charging;
@@ -55,7 +54,7 @@ public sealed partial class OperationsManagementService
         return device is null ? null : await DeviceDetailsAsync(device, ct);
     }
 
-    public async Task<DeviceCredentials> ProvisionDeviceAsync(
+    public async Task<DeviceConnectionDetails> ProvisionDeviceAsync(
         Guid actorId,
         Guid stationId,
         DeviceInput input,
@@ -114,7 +113,6 @@ public sealed partial class OperationsManagementService
             await db.ChargingSessions.AnyAsync(s => s.PointId == stationId && s.EndedAt == null, ct)
         )
             throw new RequestFailure(409, "station_busy", "Finish the active session first.");
-        var password = Convert.ToHexString(RandomNumberGenerator.GetBytes(24));
         var device = new OcppChargePoint
         {
             Identity = input.Identity,
@@ -129,7 +127,6 @@ public sealed partial class OperationsManagementService
                 input.AuthorizedTags.Select(DeviceTagAuthorization.Hash).Distinct()
             ),
         };
-        device.PasswordHash = deviceHasher.HashPassword(device, password);
         db.OcppChargePoints.Add(device);
         for (var number = 1; number <= station.ConnectorCount; number++)
         {
@@ -191,15 +188,10 @@ public sealed partial class OperationsManagementService
         if (transaction is not null)
             await transaction.CommitAsync(ct);
         signal.Notify();
-        return new(
-            await DeviceDetailsAsync(device, ct),
-            device.Identity,
-            password,
-            "/ws/cs/" + device.Identity
-        );
+        return new(await DeviceDetailsAsync(device, ct), "/ws/cs/" + device.Identity);
     }
 
-    public async Task<DeviceCredentials?> ControlDeviceAsync(
+    public async Task<DeviceDto> ControlDeviceAsync(
         Guid actorId,
         Guid stationId,
         DeviceControlInput input,
@@ -212,7 +204,7 @@ public sealed partial class OperationsManagementService
         var device =
             await MappedDeviceAsync(stationId, ct)
             ?? throw new RequestFailure(404, "device_not_found", "Device not found.");
-        if (station.IsDemo || device.PasswordHash is null || station.IsArchived)
+        if (station.IsDemo || device.ProvisionedSerialNumber is null || station.IsArchived)
             throw new RequestFailure(
                 409,
                 "device_unavailable",
@@ -221,7 +213,7 @@ public sealed partial class OperationsManagementService
         Version(device.ManagementVersion, input.Version);
         // An administrative disconnect must never interrupt an active customer.
         if (
-            (!input.Enabled || input.RotatePassword)
+            !input.Enabled
             && await db.ChargingSessions.AnyAsync(
                 s => s.PointId == stationId && s.EndedAt == null,
                 ct
@@ -230,20 +222,14 @@ public sealed partial class OperationsManagementService
             throw new RequestFailure(
                 409,
                 "station_busy",
-                "Finish the active session before disabling or rotating the device credentials."
+                "Finish the active session before disabling the device connection."
             );
         var before = new { device.IsEnabled, Version = device.ManagementVersion };
-        string? password = null;
-        if (input.RotatePassword)
-        {
-            password = Convert.ToHexString(RandomNumberGenerator.GetBytes(24));
-            device.PasswordHash = deviceHasher.HashPassword(device, password);
-        }
-        if (device.IsEnabled != input.Enabled || input.RotatePassword)
+        if (device.IsEnabled != input.Enabled)
             device.CredentialVersion++;
         device.IsEnabled = input.Enabled;
         device.ManagementVersion++;
-        if (!input.Enabled || input.RotatePassword)
+        if (!input.Enabled)
         {
             foreach (
                 var connection in await db
@@ -254,7 +240,7 @@ public sealed partial class OperationsManagementService
             )
             {
                 connection.DisconnectedAt = clock.GetUtcNow();
-                connection.CloseReason = "Administrative credential revocation";
+                connection.CloseReason = "Administrative connection disable";
             }
             device.LastSeenAt = null;
             foreach (
@@ -271,7 +257,7 @@ public sealed partial class OperationsManagementService
         access.Audit(
             actor,
             stationId,
-            input.RotatePassword ? "DeviceCredentialsRotated" : "DeviceAccessChanged",
+            "DeviceAccessChanged",
             before,
             new { device.IsEnabled, Version = device.ManagementVersion }
         );
@@ -288,13 +274,6 @@ public sealed partial class OperationsManagementService
         if (transaction is not null)
             await transaction.CommitAsync(ct);
         signal.Notify();
-        return password is null
-            ? null
-            : new(
-                await DeviceDetailsAsync(device, ct),
-                device.Identity,
-                password,
-                "/ws/cs/" + device.Identity
-            );
+        return await DeviceDetailsAsync(device, ct);
     }
 }
