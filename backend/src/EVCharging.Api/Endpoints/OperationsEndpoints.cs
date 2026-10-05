@@ -171,6 +171,17 @@ public static class OperationsEndpoints
                 return Results.Ok(await s.ControlDeviceAsync(u.UserId(), id, input, ct));
             }
         );
+        ops.MapPut(
+                "/stations/{id:guid}/device/driver",
+                async (
+                    Guid id,
+                    DeviceDriverInput input,
+                    ClaimsPrincipal u,
+                    IOperationsManagement s,
+                    CancellationToken ct
+                ) => Results.Ok(await s.AssignDeviceDriverAsync(u.UserId(), id, input, ct))
+            )
+            .RequireAuthorization("Superadmin");
         ops.MapGet("/events", OperationsEventsEndpoints.StreamAsync);
     }
 }

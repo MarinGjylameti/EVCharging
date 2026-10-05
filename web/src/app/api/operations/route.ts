@@ -41,8 +41,9 @@ export async function POST(request:Request) {
   if(!input || typeof input!=="object" || Array.isArray(input)) return NextResponse.json({code:"invalid_body"},{status:400});
   const validId=typeof id==="string"&&guid.test(id);
   let path:string; let method="POST";
-  if(resource==="device" && validId && (operation==="provision"||operation==="control")) {
+  if(resource==="device" && validId && (operation==="provision"||operation==="control"||operation==="assignDriver")) {
     path=`/admin/stations/${id}/device`; if(operation==="control") method="PATCH";
+    if(operation==="assignDriver") {path+="/driver";method="PUT";}
   } else if((resource==="locations"||resource==="administrators") && (operation==="create" || validId&&(operation==="update"||operation==="archive"))) {
     path=`/admin/${resource}${operation==="create"?"":`/${id}`}${operation==="archive"?"/archive":""}`;
     if(operation==="update") method="PATCH";

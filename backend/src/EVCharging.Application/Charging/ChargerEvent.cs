@@ -40,7 +40,8 @@ public sealed record ChargerEvent(
     string? CompletionWarning = null,
     string? DeviceStatus = null,
     string? DeviceFaultCode = null,
-    string? DeviceFaultInfo = null
+    string? DeviceFaultInfo = null,
+    Guid? AssignedDriverId = null
 );
 
 // Adapters authenticate and normalize their own protocol. UI clients cannot implement this port.

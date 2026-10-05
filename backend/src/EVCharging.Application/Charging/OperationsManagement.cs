@@ -67,12 +67,16 @@ public sealed record DeviceDto(
     DateTimeOffset? LastBootAt,
     int[] Connectors,
     int AuthorizedTagCount,
-    long Version
+    long Version,
+    Guid? AssignedDriverId = null,
+    string? CardIdTag = null
 );
 
 public sealed record DeviceConnectionDetails(DeviceDto Device, string WebSocketPath);
 
 public sealed record DeviceControlInput(long Version, bool Enabled);
+
+public sealed record DeviceDriverInput(long Version, Guid? DriverId, string? CardInput);
 
 public sealed record SessionFilter(
     Guid? StationId = null,
@@ -203,6 +207,12 @@ public interface IOperationsManagement
         Guid actorId,
         Guid stationId,
         DeviceControlInput input,
+        CancellationToken ct
+    );
+    Task<DeviceDto> AssignDeviceDriverAsync(
+        Guid actorId,
+        Guid stationId,
+        DeviceDriverInput input,
         CancellationToken ct
     );
     Task<OperationsSummary> SummaryAsync(Guid actorId, CancellationToken ct);

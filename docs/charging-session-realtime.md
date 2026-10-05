@@ -25,16 +25,16 @@ Pajisja → autentikim/transport OCPP → inbox dhe bllokim i pajisjes
 - `ChargingConnectionRequest` është lidhja e Driver-it me atë sesion ose pritja për nisjen e tij.
 - SSE vëzhgon të dhënat. Hapja/mbyllja/rilidhja e aplikacionit nuk nis dhe nuk ndalon karikimin.
 
-Një Driver lejohet të ketë maksimumi **një** kërkesë `Waiting` ose `Linked`, në total. Një pikë/lidhës lejohet të ketë maksimumi **një** kërkesë në këto gjendje. Shumë telefona/tab-e të të njëjtit Driver vëzhgojnë të njëjtin sesion.
+Një Driver lejohet të ketë maksimumi **një kërkesë manuale** `Waiting` ose `Linked`. Caktimet fizike automatike `IsAutomatic` mund të mbulojnë disa lidhës/pajisje për përdoruesin demonstrues. Një pikë/lidhës lejohet të ketë maksimumi **një** kërkesë aktive në këto gjendje. Shumë telefona/tab-e të të njëjtit Driver vëzhgojnë të njëjtin sesion.
 
-PostgreSQL i zbaton me indeksat unikë të pjesshëm `ux_claim_active_driver` dhe `ux_claim_active_connector`, me filtrin `state IN ('Waiting', 'Linked')`. Ka edhe unikësi për një claim për sesion dhe një sesion fizik aktiv për lidhës. Foreign keys të përbëra pengojnë lidhjen e claim/sesionit me pikë ose lidhës të gabuar.
+PostgreSQL i zbaton me indeksat unikë të pjesshëm `ux_claim_active_driver` dhe `ux_claim_active_connector`, me filtrin `state IN ('Waiting', 'Linked')`; indeksi i Driver-it përfshin edhe `AND NOT is_automatic`. Ka edhe unikësi për një claim për sesion dhe një sesion fizik aktiv për lidhës. Foreign keys të përbëra pengojnë lidhjen e claim/sesionit me pikë ose lidhës të gabuar.
 
 Claim merr bllokimin ekzistues `FOR UPDATE` të pajisjes dhe bllokimin e llogarisë. I njëjti bllokim i pajisjes serializon claim, start dhe stop. Kufizimet në DB mbrojnë edhe kërkesat e të njëjtit Driver drejt pajisjeve të ndryshme. Konfliktet e pritshme kthehen `409 driver_already_connected` ose `409 charger_in_use`.
 
 ### Dy rendet e nisjes
 
 1. **Aplikacioni i pari:** krijohet `Waiting` me afat 30 minuta. Nisja fizike e lidh atomikisht dhe e kalon në `Linked`.
-2. **Pajisja e para:** krijohet një sesion pa pronar. Vizitori sheh vetëm statusin dhe vlerësimin publik. Claim-i i mëvonshëm refuzohet me `charger_in_use`; pronësia përgatitet para një nisjeje të re.
+2. **Pajisja e para:** nëse Superadmin ka konfiguruar [caktimin demo/kartë](physical-driver-assignment.md), nisja krijon lidhjen me Driver-in përkatës. Ai mund të hyjë më vonë dhe të marrë sesionin e ruajtur. Pa caktim ose pa përputhje karte, krijohet një sesion pa pronar; vizitori sheh vetëm gjendjen publike dhe nuk mund ta marrë vetë sesionin.
 
 Retry në të njëjtën pikë është i sigurt. Pritja mund të anulohet/skadojë. Stop fizik e kalon lidhjen në `Completed` dhe liron kufirin e Driver-it. Humbja e rrjetit nuk e liron pronësinë dhe nuk e mbyll sesionin.
 
@@ -129,6 +129,6 @@ dotnet test backend/EVCharging.slnx --no-restore --filter FullyQualifiedName~Pos
 
 Një instancë API: registry i lidhjeve dhe bus-i janë në memorie; restart-i mbyll rekordet e lidhjeve të braktisura dhe pajisja rilidhet. Një lidhje e re supersedon të vjetrën nën bllokimin e pajisjes. Para shkallëzimit në shumë instanca duhen vendime për pronësinë e socket-eve dhe shpërndarjen/claim të outbox-it.
 
-Greencharge është pajisje e prodhuar nga kolegu. Nevojiten mesazhe nga pajisja reale për SoC/fuqi, sjelljen në pauzë/shkëputje, autentikimin dhe provën e pronësisë për QR. `IChargingClaimVerification` është kufiri për këtë verifikim; implementimi aktual pranon vetëm bypass-in e aktivizuar shprehimisht për pika demo. QR statike me station ID nuk konsiderohet provë pronësie. Politika aktuale OCPP pranon vetëm identitete dhe kredenciale demo të konfiguruara; autentikimi real nuk është shpikur.
+Greencharge është pajisje e prodhuar nga kolegu. Nevojitet provë me pajisjen reale për SoC/fuqi dhe sjelljen në pauzë/shkëputje. Karikuesit fizikë të regjistruar lidhen me URL-në dhe identitetin e tyre; caktimi automatik i Driver-it mbështet demonstrimin ose përputhjen me kartë, siç shpjegohet te [caktimi fizik](physical-driver-assignment.md). `IChargingClaimVerification` mbetet kufiri për lidhjen manuale me QR; implementimi i tij pranon vetëm bypass-in e aktivizuar shprehimisht për pika demo. QR statike me station ID nuk konsiderohet provë pronësie.
 
 Nuk u implementuan komandat remote start/stop, pagesa ose llogaritje sintetike e kohës së mbetur. Nuk u ndryshuan konfigurime sigurie/sistemi të laptopit dhe nuk u krye deploy.

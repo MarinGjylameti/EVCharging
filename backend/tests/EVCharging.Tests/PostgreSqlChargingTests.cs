@@ -269,6 +269,52 @@ public sealed partial class PostgreSqlChargingTests
         );
     }
 
+    [PostgreSqlFact]
+    public async Task AutomaticAssignmentsAllowMultipleConnectorsButKeepConnectorExclusivity()
+    {
+        await using var test = await DatabaseTest.CreateAsync();
+        var (driver, other) = await test.DriversAsync();
+        var stations = await test.StationsAsync();
+        // A manual claim and two automatically assigned connectors can coexist.
+        Assert.Null(await test.ClaimAsync(driver, stations[0]));
+        await using (var db = test.Context())
+        {
+            foreach (var number in new[] { 1, 2 })
+                db.ChargingConnectionRequests.Add(
+                    new ChargingConnectionRequest
+                    {
+                        DriverId = driver,
+                        StationId = stations[1],
+                        ConnectorNumber = number,
+                        IsAutomatic = true,
+                        CreatedAt = DateTimeOffset.UtcNow,
+                        ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(30),
+                    }
+                );
+            await db.SaveChangesAsync();
+            Assert.Equal(3, await db.ChargingConnectionRequests.CountAsync());
+        }
+        await using (var db = test.Context())
+        {
+            db.ChargingConnectionRequests.Add(
+                new ChargingConnectionRequest
+                {
+                    DriverId = other,
+                    StationId = stations[1],
+                    ConnectorNumber = 2,
+                    IsAutomatic = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(30),
+                }
+            );
+            var error = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+            Assert.Equal(
+                "ux_claim_active_connector",
+                Assert.IsType<PostgresException>(error.InnerException).ConstraintName
+            );
+        }
+    }
+
     private static async Task<string?[]> RaceAsync(params Func<Task<string?>>[] actions)
     {
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

@@ -156,6 +156,24 @@ test("station mutations reject CSRF and path injection, and preserve API failure
   assert.deepEqual(await result.json(), { code: "station_busy" });
 });
 
+test("charger detail forwards the selected connector and rejects malformed connector parameters", async t => {
+  const { route } = setup(t);
+  const handler = route("driver/stations/[id]/charging");
+  const context = { params: Promise.resolve({ id }) };
+  let calls = 0;
+  globalThis.fetch = async url => {
+    calls++;
+    assert.equal(url, `https://api.example.test/api/v1/driver/stations/${id}/charging?connector=2`);
+    return Response.json({ connector: { number: 2 } });
+  };
+  const response = await handler.GET(request(`driver/stations/${id}/charging?connector=2`, "GET"), context);
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).connector.number, 2);
+  for (const value of ["0", "-1", "1.5", "x", "1000"])
+    assert.equal((await handler.GET(request(`driver/stations/${id}/charging?connector=${value}`, "GET"), context)).status, 400);
+  assert.equal(calls, 1);
+});
+
 test("backend forwarding keeps the caller's abort signal", async t => {
   const { backend } = setup(t);
   const controller = new AbortController();

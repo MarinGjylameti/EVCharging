@@ -15,8 +15,9 @@ public static class DriverEndpoints
                 Guid stationId,
                 ClaimsPrincipal user,
                 IDriverCharging charging,
-                CancellationToken ct
-            ) => Results.Ok(await charging.GetAsync(user.UserId(), stationId, ct))
+                CancellationToken ct,
+                int? connector
+            ) => Results.Ok(await charging.GetAsync(user.UserId(), stationId, ct, connector))
         );
         driver.MapPost(
             "/stations/{stationId:guid}/connect",

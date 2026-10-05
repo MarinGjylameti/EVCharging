@@ -36,11 +36,11 @@ mbyll lidhjen dhe ndalon rilidhjen; bllokohet gjatë një sesioni aktiv.
 URL-ja identifikon pajisjen, por nuk provon identitetin e saj me një sekret.
 Ky është konfigurimi i kërkuar për pajisjet që lidhen vetëm me URL.
 
-Duhet edhe lista e **idTag** që përdor programi i karikuesit për
-`Authorize`/`StartTransaction`. Regjistro vlerat reale te pajisja, një për
-rresht ose me presje. Serveri pranon vetëm ato vlera për atë pajisje.
-Kjo listë autorizon identifikuesit; nuk lidh automatikisht një kartë me një
-llogari Driver në aplikacion.
+Për caktimin e të dhënave te një Driver, Superadmin mund të zgjedhë
+përdoruesin dhe të lërë bosh fushën **Kodi i kartës / JSON** për demo, ose
+të shkruajë idTag-n e kartës për caktim vetëm sipas saj. [Udhëzimi i
+plotë i dy mënyrave](physical-driver-assignment.md). Lista e veçantë e
+kartave të lejuara mund të përdoret për karikime pa pronar Driver.
 
 ## Regjistrimi nga web-i
 
@@ -50,7 +50,8 @@ llogari Driver në aplikacion.
    lloj/numër lidhësish, fuqi dhe tarifë EUR/kWh. Për të marrë gjendjen e
    pajisjes, mos lër kufizim manual Mirëmbajtje/Jashtë funksionit.
 4. Te pika e ruajtur, seksioni **Karikuesi fizik**, shkruaj ID-në dhe serialin;
-   prodhuesi/modeli janë opsionalë. Vendos idTag-t e autorizuar dhe regjistroje.
+   prodhuesi/modeli dhe lista e kartave janë opsionalë. Regjistro pajisjen,
+   pastaj zgjidh përdoruesin dhe mënyrën demo/kartë në caktimin Driver.
 5. Kopjo vetëm URL-në e plotë për kolegun; username/password nuk nevojiten.
 6. Për një llogari **Admin**, Superadmin hap **Administratorët**, krijon
    llogarinë dhe cakton vendndodhje ose pika të veçanta.
@@ -104,14 +105,13 @@ nuk krijohen nga energjia e matur vetëm.
 ## Gjendja e dorëzimit
 
 Ky ndryshim përfshin migrimet `AdministrationAndPhysicalChargers` dhe
-`OperationsRealtimeAudience`, panelin,
+`OperationsRealtimeAudience` dhe `PhysicalChargerDriverAssignments`, panelin,
 lejet, lidhjen e pajisjes vetëm me URL dhe teste HTTP/WebSocket lokale. Nuk është
 provë që pajisja reale është lidhur me Render. Pas commit/push duhen deploy i
 backend/web, migrimet dhe regjistrimi i pajisjes përpara provës në terren.
 OCPP 2.0.1 dhe komandat për ndryshim konfigurimi/nisje/ndalim në distancë nuk
-janë implementuar në këtë integrim. Lidhja e identifikuesit fizik me llogarinë
-Driver mbetet një integrim i veçantë; të dhënat e klientëve nuk i caktohen
-një përdoruesi vetëm sepse hap faqen e pikës.
+janë implementuar në këtë integrim. Caktimi automatik te Driver-i
+konfigurohet nga Superadmin; hapja e faqes vetëm nuk jep pronësi.
 
 Heqja e fjalëkalimit më 5 tetor 2026 nuk kërkon migrim të ri. Edhe pajisjet
 e regjistruara më parë lidhen me URL-në ekzistuese pa kredenciale. Kolona e

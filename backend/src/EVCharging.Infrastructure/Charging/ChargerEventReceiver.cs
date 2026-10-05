@@ -194,6 +194,19 @@ public sealed class ChargerEventReceiver(
                     && x.State == "Waiting",
                 ct
             );
+            if (waiting is null && change.AssignedDriverId is { } assignedDriver)
+            {
+                waiting = new ChargingConnectionRequest
+                {
+                    DriverId = assignedDriver,
+                    StationId = station.Id,
+                    ConnectorNumber = connector.Number,
+                    IsAutomatic = true,
+                    CreatedAt = now,
+                    ExpiresAt = now.AddMinutes(30),
+                };
+                db.ChargingConnectionRequests.Add(waiting);
+            }
             if (waiting is not null)
             {
                 // Match the claim/profile lock order: device, then account. A profile

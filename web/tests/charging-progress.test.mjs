@@ -129,6 +129,25 @@ test("faults, disconnections and expired measurements never display old charging
   assert.match(expired, /Waiting for fresh readings/);
 });
 
+test("assigned physical charger shows idle signals without a Connect action and supports connector selection", () => {
+  const live = { station: { id: "physical-1", code: "CP-001", name: "Real charger", address: "Address", city: "Tirana", connectorType: "CCS2", connectorCount: 2, isDemo: false, powerKW: 22, pricePerKWh: .35, currency: "EUR" },
+    canConnect: false, driverAccessMode: "Demo", inUse: false, deviceConnected: true, connectionRequest: null, session: null,
+    connector: { number: 2, status: "Available" }, diagnostics: { samples: [], lastCommand: { action: "Heartbeat", accepted: true, receivedAt: "2026-10-05T10:00:00Z", version: 1 } } };
+  const { StationChargingView } = compile("../src/features/driver/station-charging-view.tsx", {
+    "next/link": { default: ({ href, children }) => createElement("a", { href }, children) },
+    "./use-live-snapshot": { useLiveSnapshot: (_initial, url) => { assert.match(url, /connector=2$/); return { snapshot: live, setSnapshot: () => {}, connected: true, unavailable: false }; } },
+    "./charging-progress": progress, "./charging-fault": fault, "./simulator-diagnostics": diagnostics,
+    "./charging-test-report": report, "./station-availability": availability,
+    "./live-update-policy": compile("../src/features/driver/live-update-policy.ts"),
+  });
+  const html = renderToStaticMarkup(createElement(StationChargingView, { initial: live, language: "en" }));
+  assert.match(html, /Charger signals/);
+  assert.match(html, /Heartbeat/);
+  assert.match(html, /assigned to you automatically/);
+  assert.match(html, /href="\/driver\/stations\/physical-1\?connector=1"/);
+  assert.doesNotMatch(html, /Connect to charger|only for test charge points|Open automatic simulator/);
+});
+
 test("100 percent reports battery level without inventing a stop or completion time", () => {
   const html = render({ stateOfCharge: 100 });
   assert.match(html, /aria-valuenow="100"/);

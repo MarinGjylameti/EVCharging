@@ -17,7 +17,9 @@ internal static class DeviceTagAuthorization
 
     public static bool Accepted(OcppChargePoint device, string tag, OcppOptions options) =>
         device.ProvisionedSerialNumber is not null
-            ? Hashes(device).Contains(Hash(tag), StringComparer.Ordinal)
+            ? device.AssignedDriverId is not null
+                && (device.DriverCardIdTag is null || device.DriverCardIdTag == tag)
+                || Hashes(device).Contains(Hash(tag), StringComparer.Ordinal)
             : options.SimulatorEnabled
                 && options.SimulatorIdentities.Contains(device.Identity, StringComparer.Ordinal)
                 && tag == options.SimulatorTagId;

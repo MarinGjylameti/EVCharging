@@ -10,12 +10,18 @@ public sealed record DriverStationCharging(
     ChargingConnectionDto? ConnectionRequest,
     DriverChargingSession? Session,
     DriverConnectorState? Connector = null,
-    ChargingDiagnostics? Diagnostics = null
+    ChargingDiagnostics? Diagnostics = null,
+    string? DriverAccessMode = null
 );
 
 public interface IDriverCharging
 {
-    Task<DriverStationCharging> GetAsync(Guid driverId, Guid stationId, CancellationToken ct);
+    Task<DriverStationCharging> GetAsync(
+        Guid driverId,
+        Guid stationId,
+        CancellationToken ct,
+        int? connectorNumber = null
+    );
     Task<DriverStationCharging> ConnectAsync(Guid driverId, Guid stationId, CancellationToken ct);
     Task<DriverStationCharging> CancelAsync(Guid driverId, Guid stationId, CancellationToken ct);
 }

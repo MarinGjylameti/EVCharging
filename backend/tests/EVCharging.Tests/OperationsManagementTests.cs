@@ -12,7 +12,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace EVCharging.Tests;
 
-public sealed class OperationsManagementTests : IDisposable
+public sealed partial class OperationsManagementTests : IDisposable
 {
     private readonly ApiFactory factory = new();
     private readonly CancellationTokenSource timeout = new(TimeSpan.FromSeconds(40));

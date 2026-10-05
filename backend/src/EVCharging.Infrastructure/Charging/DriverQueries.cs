@@ -17,9 +17,8 @@ public sealed class DriverQueries(
         Guid? stationId = null
     )
     {
-        // Active view: one claim/session. A charger-detail recovery may also return
-        // its latest completed session, without scanning historical telemetry.
-        var claim = await db
+        // All active assignments, or one latest owned session per connector on detail.
+        var query = db
             .ChargingConnectionRequests.AsNoTracking()
             .Where(x =>
                 x.DriverId == driverId
@@ -30,23 +29,50 @@ public sealed class DriverQueries(
                         : x.StationId == stationId
                             && (x.State == "Linked" || x.State == "Completed")
                 )
-            )
-            .OrderByDescending(x => x.LinkedAt)
-            .FirstOrDefaultAsync(ct);
-        if (claim is null)
+            );
+        if (stationId is not null)
+            query = query
+                .GroupBy(x => x.ConnectorNumber)
+                .Select(g =>
+                    g.OrderByDescending(x => x.State == "Linked")
+                        .ThenByDescending(x => x.LinkedAt)
+                        .ThenByDescending(x => x.CreatedAt)
+                        .First()
+                );
+        var claims = (await query.ToListAsync(ct))
+            .OrderByDescending(x => x.State == "Linked")
+            .ThenByDescending(x => x.LinkedAt)
+            .ToList();
+        if (claims.Count == 0)
             return new(verification.DemoBypassEnabled, []);
-        var session = await db
+        var ids = claims.Select(x => x.SessionId).ToArray();
+        var sessions = await db
             .ChargingSessions.AsNoTracking()
-            .SingleAsync(x => x.Id == claim.SessionId, ct);
-        var connector = await db
+            .Where(x => ids.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, ct);
+        var connectorIds = sessions.Values.Select(x => x.ConnectorId).ToArray();
+        var connectors = await db
             .ChargingConnectors.AsNoTracking()
-            .SingleAsync(x => x.Id == session.ConnectorId, ct);
-        var station = await db
+            .Where(x => connectorIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, ct);
+        var stationIds = sessions.Values.Select(x => x.PointId).ToArray();
+        var stations = await db
             .Stations.AsNoTracking()
-            .SingleAsync(x => x.Id == session.PointId, ct);
+            .Where(x => stationIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, ct);
         return new(
             verification.DemoBypassEnabled,
-            [ChargingRealtime.SessionDto(session, connector, station, clock.GetUtcNow())]
+            claims
+                .Select(c => sessions[c.SessionId!.Value])
+                .Select(s =>
+                    ChargingRealtime.SessionDto(
+                        s,
+                        connectors[s.ConnectorId],
+                        stations[s.PointId],
+                        clock.GetUtcNow()
+                    )
+                )
+                .ToArray()
         );
     }
 

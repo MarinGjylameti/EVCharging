@@ -173,7 +173,12 @@ public sealed class RealtimePlatformTests
         {
             var index = Assert.Single(claim.GetIndexes(), x => x.GetDatabaseName() == name);
             Assert.True(index.IsUnique);
-            Assert.Equal("state IN ('Waiting', 'Linked')", index.GetFilter());
+            Assert.Equal(
+                name == "ux_claim_active_driver"
+                    ? "state IN ('Waiting', 'Linked') AND NOT is_automatic"
+                    : "state IN ('Waiting', 'Linked')",
+                index.GetFilter()
+            );
         }
         var audience = Assert.Single(
             model.FindEntityType(typeof(RealtimeOutboxEvent))!.GetCheckConstraints(),

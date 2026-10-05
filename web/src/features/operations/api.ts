@@ -13,6 +13,9 @@ export async function mutate<T>(resource:string,operation:string,input:unknown,i
 export function failure(error:unknown,sq:boolean):string {
   const code=error instanceof Error?error.message:"request_failed";
   const messages:Record<string,[string,string]>={
+    invalid_card_input:["Shkruaj kodin e kartës (1–20 karaktere) ose JSON të vlefshëm me idTag tekst.","Enter the card code (1–20 characters) or valid JSON with a string idTag."],
+    driver_required:["Zgjidh përdoruesin që ka këtë kartë.","Choose the account that owns this card."],
+    invalid_driver:["Zgjidh një llogari Driver aktive.","Choose an active Driver account."],
     version_conflict:["Të dhënat kanë ndryshuar. Rifresko para se të ruash.","The resource changed. Refresh before saving."],
     location_has_stations:["Zhvendos ose arkivo pikat aktive përpara vendndodhjes.","Move or archive active stations first."],
     station_busy:["Pika ka një karikim aktiv. Përfundoje përpara këtij veprimi.","Finish the active charging session first."],

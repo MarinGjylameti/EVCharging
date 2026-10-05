@@ -48,7 +48,7 @@ test("an anonymous operations SSE subscriber cannot contact the backend",async t
   assert.equal((await route.GET(new Request("https://web.example.test/api/operations/events"))).status,401);
 });
 function component(name,dependencies={}){
-  return loadTypescript(new URL("../src/features/operations/"+name+".tsx",import.meta.url),{react:{...React,useEffect:()=>{},useState:initial=>[initial,()=>{}]},"./api":{},"./use-operations-live":{useOperationsLive:()=>true},...dependencies});
+  return loadTypescript(new URL("../src/features/operations/"+name+".tsx",import.meta.url),{react:{...React,useEffect:()=>{},useState:initial=>[initial,()=>{}]},"./api":{},"./use-operations-live":{useOperationsLive:()=>true},"./device-driver-form":{DeviceDriverForm:()=>null},...dependencies});
 }
 test("administrator form exposes contact data, initial password and separate location and station grants",()=>{
   const {AdministratorsManager}=component("administrators-manager");
@@ -94,4 +94,29 @@ test("session filters convert local date fields to explicit UTC and preserve nam
   const {sessionQuery}=component("sessions-monitor");const date="2026-10-04T13:30";
   const query=new URLSearchParams(sessionQuery({stationId:id,locationId:"",status:"Active",from:date,until:"",driver:"Arta Test",page:2}).slice(1));
   assert.equal(query.get("from"),new Date(date).toISOString());assert.equal(query.get("driver"),"Arta Test");assert.equal(query.get("page"),"2");
+});
+
+test("device Driver assignment BFF forwards the chosen account and card JSON to its protected endpoint",async t=>{
+  const route=bff(t)("operations");const input={version:3,driverId:id,cardInput:'{"idTag":"CARD-001"}'};
+  globalThis.fetch=async(url,init)=>{assert.equal(url,`https://api.example.test/api/v1/admin/stations/${id}/device/driver`);assert.equal(init.method,"PUT");assert.deepEqual(JSON.parse(init.body),input);return Response.json({assignedDriverId:id,cardIdTag:"CARD-001",version:4});};
+  const response=await route.POST(request({resource:"device",operation:"assignDriver",id,input}));
+  assert.equal(response.status,200);assert.equal((await response.json()).cardIdTag,"CARD-001");
+});
+
+test("Driver assignment form explains empty demo mode, accepts JSON and submits the selected account",async t=>{
+  const state=[];let cursor=0,effect;const saved=[],calls=[];
+  const device={version:3,assignedDriverId:id,cardIdTag:null};
+  const {DeviceDriverForm}=component("device-driver-form",{
+    react:{...React,useState(initial){const index=cursor++;if(!(index in state))state[index]=initial;return [state[index],value=>{state[index]=value;}];},useEffect:fn=>{effect=fn;}},
+    "./api":{operations:async()=>[{id,firstName:"Demo",lastName:"Driver",email:"demo@example.test",isActive:true}],failure:()=>"Invalid card input",mutate:async(...args)=>{calls.push(args);return {...device,version:4,cardIdTag:"CARD-001"};}}
+  });
+  const render=()=>{cursor=0;return DeviceDriverForm({device,stationId:id,sq:false,disabled:false,onSaved:value=>saved.push(value)});};
+  function find(node,predicate){if(!node||typeof node!=="object")return undefined;if(predicate(node))return node;for(const child of React.Children.toArray(node.props?.children)){const found=find(child,predicate);if(found)return found;}}
+  render();const cleanup=effect();t.after(()=>cleanup());await new Promise(resolve=>setImmediate(resolve));
+  assert.match(renderToStaticMarkup(render()),/every new charge/);
+  find(render(),node=>node.type==="textarea").props.onChange({target:{value:'{"idTag":"CARD-001"}'}});
+  assert.match(renderToStaticMarkup(render()),/Only charges using this card/);
+  render().props.onSubmit({preventDefault(){}});await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(calls,[["device","assignDriver",{version:3,driverId:id,cardInput:'{"idTag":"CARD-001"}'},id]]);
+  assert.equal(saved[0].cardIdTag,"CARD-001");assert.match(renderToStaticMarkup(render()),/Assignment saved/);
 });

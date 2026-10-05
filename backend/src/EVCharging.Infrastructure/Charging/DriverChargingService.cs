@@ -19,7 +19,8 @@ public sealed class DriverChargingService(
     public async Task<DriverStationCharging> GetAsync(
         Guid driverId,
         Guid stationId,
-        CancellationToken ct
+        CancellationToken ct,
+        int? connectorNumber = null
     )
     {
         var station =
@@ -27,22 +28,31 @@ public sealed class DriverChargingService(
                 .Stations.AsNoTracking()
                 .SingleOrDefaultAsync(x => x.Id == stationId && !x.IsArchived, ct)
             ?? throw new RequestFailure(404, "station_not_found", "Station not found.");
+        if (connectorNumber is < 1 || connectorNumber > station.ConnectorCount)
+            throw new RequestFailure(
+                400,
+                "invalid_connector",
+                "Choose a connector on this station."
+            );
+        var own = (
+            await queries.GetChargingStateAsync(driverId, ct, stationId)
+        ).Sessions.FirstOrDefault(s => connectorNumber is null || s.ConnectorId == connectorNumber);
+        var selectedNumber = connectorNumber ?? own?.ConnectorId ?? 1;
+        var assigned = await DeviceDriverAssignment.ForDriverAsync(db, driverId, stationId, ct);
+        var demoAccess = assigned is { DriverCardIdTag: null };
         var connector = await db
             .ChargingConnectors.AsNoTracking()
-            .SingleOrDefaultAsync(x => x.StationId == stationId && x.Number == 1, ct);
+            .SingleOrDefaultAsync(x => x.StationId == stationId && x.Number == selectedNumber, ct);
         var now = clock.GetUtcNow();
         var claim = await db
             .ChargingConnectionRequests.AsNoTracking()
             .SingleOrDefaultAsync(
                 x =>
                     x.StationId == stationId
-                    && x.ConnectorNumber == 1
+                    && x.ConnectorNumber == selectedNumber
                     && (x.State == "Linked" || x.State == "Waiting" && x.ExpiresAt > now),
                 ct
             );
-        var own = (
-            await queries.GetChargingStateAsync(driverId, ct, stationId)
-        ).Sessions.FirstOrDefault();
         var activeSessionId = connector is null
             ? null
             : await db
@@ -59,7 +69,10 @@ public sealed class DriverChargingService(
             own = null;
         return new(
             ChargingRealtime.StationDto(station, now),
-            verification.DemoBypassEnabled && station.IsDemo && connector is not null,
+            verification.DemoBypassEnabled
+                && station.IsDemo
+                && connector is not null
+                && selectedNumber == 1,
             connector?.IsOnline == true,
             inUse,
             claim?.DriverId == driverId && claim.State == "Waiting"
@@ -67,20 +80,27 @@ public sealed class DriverChargingService(
                 : null,
             own,
             connector is null ? null : ChargingRealtime.ConnectorDto(connector),
-            verification.DemoBypassEnabled
-            && !inUse
-            && station.IsDemo
+            !inUse
             && connector is not null
-            && (claim?.DriverId == driverId || own is not null && claim is null)
+            && (
+                demoAccess
+                || own is not null
+                || verification.DemoBypassEnabled && station.IsDemo && claim?.DriverId == driverId
+            )
                 ? await diagnostics.GetAsync(
                     connector.Id,
                     claim?.State == "Waiting" ? null : own?.Id,
                     ct,
                     claim?.State == "Waiting"
                         ? claim.CreatedAt
-                        : own?.StartReceivedAt ?? claim?.CreatedAt
+                        : own?.StartReceivedAt
+                            ?? assigned?.DriverAssignmentSince
+                            ?? claim?.CreatedAt
                 )
-                : null
+                : null,
+            assigned is null ? null
+                : demoAccess ? "Demo"
+                : "Card"
         );
     }
 
@@ -118,7 +138,10 @@ public sealed class DriverChargingService(
             if (expired.Count > 0)
                 await db.SaveChangesAsync(ct);
             var own = await db.ChargingConnectionRequests.SingleOrDefaultAsync(
-                x => x.DriverId == driverId && (x.State == "Waiting" || x.State == "Linked"),
+                x =>
+                    x.DriverId == driverId
+                    && !x.IsAutomatic
+                    && (x.State == "Waiting" || x.State == "Linked"),
                 ct
             );
             if (

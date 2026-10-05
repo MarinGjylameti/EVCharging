@@ -4,6 +4,16 @@ import { loadTypescript } from "./helpers/load-typescript.mjs";
 
 const policyExports = loadTypescript(new URL("../src/features/driver/live-update-policy.ts", import.meta.url));
 
+test("charger details ignore other connectors and preserve the selected connector during recovery",()=>{
+  const policy=policyExports.chargingLivePolicy;
+  const current={station:{id:"station-1",version:1},connector:{number:2,version:1},session:null,diagnostics:null};
+  assert.equal(policy.event(current,{eventType:"DeviceCommandChanged",connector:{number:1,version:20},command:{action:"MeterValues",version:20}}),null);
+  assert.equal(policy.event(current,{eventType:"SessionMeasured",session:{id:"other",connectorId:1,version:20}}),null);
+  assert.equal(policy.event(current,{eventType:"DeviceAccessChanged"}).refreshUrl,"/api/driver/stations/station-1/charging?connector=2");
+  const revoked=policy.merge({...current,driverAccessMode:"Demo",diagnostics:{lastCommand:{action:"Heartbeat",version:20}}},{...current,driverAccessMode:null});
+  assert.equal(revoked.diagnostics,null);
+});
+
 test("private vehicle updates change the active session without refetching or overwriting newer meter data", () => {
   const session = { id: "session-1", version: 10, status: "Charging", stoppedAt: null, energyKWh: 1,
     batteryCapacityKWh: 60, readings: [{ measurand: "SoC", value: "45" }] };

@@ -59,10 +59,12 @@ export type ChargingDiagnostics = {
   samples: ChargingSampleDiagnostic[];
 };
 export type DriverConnectorState = {
+  number?: number;
   status: string; faultCode: string | null; faultInfo: string | null; version?: number;
   deviceStatus?: string | null; deviceFaultCode?: string | null; deviceFaultInfo?: string | null;
 };
 export type StationCharging = {
+  driverAccessMode?: "Demo" | "Card" | null;
   station: Station; canConnect: boolean; deviceConnected: boolean; inUse: boolean;
   connectionRequest: { id: string; state: string; expiresAt: string } | null;
   session: DriverChargingSession | null;

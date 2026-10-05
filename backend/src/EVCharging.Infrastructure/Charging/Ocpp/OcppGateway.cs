@@ -387,9 +387,26 @@ public sealed class OcppGateway(
                     x => x.SessionId == stoppedSessionId && x.State == "Completed",
                     ct
                 );
-            if (claim is null)
+            Guid? recipient = claim?.DriverId;
+            if (recipient is null)
+            {
+                if (
+                    device.AssignedDriverId is { } demoDriver
+                    && device.DriverCardIdTag is null
+                    && device.DriverAssignmentSince <= result.ReceivedAt
+                    && await DeviceDriverAssignment.ForDriverAsync(
+                        db,
+                        demoDriver,
+                        mapped.StationId!.Value,
+                        ct
+                    )
+                        is not null
+                )
+                    recipient = demoDriver;
+            }
+            if (recipient is null)
                 continue;
-            if (targetTransaction is not null && claim.SessionId != targetTransaction.SessionId)
+            if (targetTransaction is not null && claim?.SessionId != targetTransaction.SessionId)
                 continue;
             var connector = await db.ChargingConnectors.SingleAsync(
                 x => x.Id == mapped.BusinessConnectorId,
@@ -403,7 +420,7 @@ public sealed class OcppGateway(
                 connector.Id,
                 version,
                 result.ReceivedAt,
-                claim.DriverId,
+                recipient.Value,
                 connector: ChargingRealtime.ConnectorDto(connector),
                 command: result with
                 {

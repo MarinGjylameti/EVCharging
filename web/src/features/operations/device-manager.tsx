@@ -4,8 +4,9 @@ import type { Language } from "../../../../contracts/account";
 import type { DeviceConnectionDetails, Device } from "../../../../contracts/operations";
 import { failure, mutate, operations } from "./api";
 import { useOperationsLive } from "./use-operations-live";
+import { DeviceDriverForm } from "./device-driver-form";
 
-export function DeviceManager({stationId,language,webSocketBaseUrl,disabled}:{stationId:string;language:Language;webSocketBaseUrl:string;disabled:boolean}) {
+export function DeviceManager({stationId,language,webSocketBaseUrl,disabled,canAssignDriver=false}:{stationId:string;language:Language;webSocketBaseUrl:string;disabled:boolean;canAssignDriver?:boolean}) {
   const sq=language==="sq";const [device,setDevice]=useState<Device|null>(null);const [loaded,setLoaded]=useState(false);
   const [busy,setBusy]=useState(false);const [error,setError]=useState("");
   const [identity,setIdentity]=useState("");const [serial,setSerial]=useState("");const [vendor,setVendor]=useState("");const [model,setModel]=useState("");const [tags,setTags]=useState("");
@@ -32,14 +33,15 @@ export function DeviceManager({stationId,language,webSocketBaseUrl,disabled}:{st
       <label>{sq?"URL-ja e plotë WebSocket":"Full WebSocket URL"}<input readOnly value={url}/></label>
       <p>{sq?"Vendos vetëm këtë URL në karikues. Lidhja nuk kërkon username ose fjalëkalim.":"Configure only this URL on the charger. The connection does not require a username or password."}</p>
       <div className="operations-actions"><button type="button" className="button-outline" disabled={busy||disabled} onClick={()=>void control()}>{device.isEnabled?(sq?"Çaktivizo lidhjen":"Disable connection"):(sq?"Aktivizo lidhjen":"Enable connection")}</button></div>
+      {canAssignDriver && <DeviceDriverForm device={device} stationId={stationId} sq={sq} disabled={disabled||busy} onSaved={setDevice}/>}
     </>:<form onSubmit={e=>{e.preventDefault();void provision();}}><fieldset disabled={busy||disabled} className="station-form-fields">
       <p>{sq?"Regjistro pajisjen, pastaj vendos vetëm URL-në në karikues. Nuk nevojitet username ose fjalëkalim. Zgjidh E lirë te forma e pikës për të hequr kufizimin manual.":"Register the device, then configure only its URL on the charger. No username or password is needed. Select Available in the station form to clear a manual restriction."}</p>
       <label>Charge Point ID<input required pattern="[A-Za-z0-9_-]{2,40}" maxLength={40} placeholder="CP-001" value={identity} onChange={e=>setIdentity(e.target.value)}/></label>
       <label>{sq?"Numri serial":"Serial number"}<input required maxLength={64} value={serial} onChange={e=>setSerial(e.target.value)}/></label>
       <div className="station-form-pair"><label>{sq?"Prodhuesi (opsional)":"Manufacturer (optional)"}<input maxLength={64} value={vendor} onChange={e=>setVendor(e.target.value)}/></label><label>{sq?"Modeli (opsional)":"Model (optional)"}<input maxLength={64} value={model} onChange={e=>setModel(e.target.value)}/></label></div>
       <label>{sq?"Protokolli":"Protocol"}<select value="1.6J" disabled><option value="1.6J">OCPP 1.6 JSON · ocpp1.6</option></select></label>
-      <label>{sq?"Identifikuesit e autorizuar (idTag)":"Authorized identifiers (idTag)"}<textarea required maxLength={2100} rows={3} value={tags} onChange={e=>setTags(e.target.value)} placeholder="CARD-001"/></label>
-      <small>{sq?"Një identifikues për rresht ose me presje, siç e dërgon karikuesi. Vetëm këto idTag pranohen për Authorize/StartTransaction; kërkoji kolegut vlerat që përdor pajisja.":"One identifier per line or comma separated, exactly as sent by the charger. Only these idTags are accepted for Authorize/StartTransaction; obtain the device's values from your colleague."}</small>
+      <label>{sq?"Kartat e lejuara pa caktim Driver (opsionale)":"Allowed cards without Driver assignment (optional)"}<textarea maxLength={2100} rows={3} value={tags} onChange={e=>setTags(e.target.value)} placeholder="CARD-001"/></label>
+      <small>{sq?"Një kod për rresht ose me presje. Pas regjistrimit, Superadmin mund të zgjedhë përdoruesin demo ose kodin/JSON e kartës te caktimi Driver. Kartat e kësaj liste mund të karikojnë edhe pa pronar Driver.":"One code per line or comma separated. After registration, Superadmin can choose the demo account or card code/JSON in Driver assignment. Cards in this list can charge even without an assigned Driver."}</small>
       <p>{sq?"Lidhësit regjistrohen 1 deri te numri i vendosur në pikë.":"Connectors are provisioned from 1 to the station's connector count."}</p>
       <button className="button-primary" disabled={busy}>{busy?(sq?"Duke regjistruar…":"Registering…"):(sq?"Regjistro karikuesin":"Register charger")}</button>
     </fieldset></form>}

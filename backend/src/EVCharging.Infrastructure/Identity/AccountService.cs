@@ -136,7 +136,10 @@ public sealed class AccountService(
         var claim = await db
             .ChargingConnectionRequests.AsNoTracking()
             .SingleOrDefaultAsync(
-                x => x.DriverId == userId && (x.State == "Linked" || x.State == "Waiting"),
+                x =>
+                    x.DriverId == userId
+                    && !x.IsAutomatic
+                    && (x.State == "Linked" || x.State == "Waiting"),
                 ct
             );
         var connector = claim is null
@@ -160,7 +163,10 @@ public sealed class AccountService(
         var lockedClaim = await db
             .ChargingConnectionRequests.AsNoTracking()
             .SingleOrDefaultAsync(
-                x => x.DriverId == userId && (x.State == "Linked" || x.State == "Waiting"),
+                x =>
+                    x.DriverId == userId
+                    && !x.IsAutomatic
+                    && (x.State == "Linked" || x.State == "Waiting"),
                 ct
             );
         if (

@@ -60,7 +60,7 @@ internal sealed class ChargingConnectionConfiguration
         e.HasIndex(x => x.DriverId)
             .IsUnique()
             .HasDatabaseName("ux_claim_active_driver")
-            .HasFilter("state IN ('Waiting', 'Linked')");
+            .HasFilter("state IN ('Waiting', 'Linked') AND NOT is_automatic");
         e.HasIndex(x => x.SessionId).IsUnique().HasFilter("session_id IS NOT NULL");
         e.HasIndex(x => new { x.DriverId, x.CreatedAt });
     }

@@ -43,7 +43,9 @@ public sealed partial class OperationsManagementService
                 .Select(c => c.ConnectorNumber)
                 .ToArrayAsync(ct),
             DeviceTagAuthorization.Hashes(device).Length,
-            device.ManagementVersion
+            device.ManagementVersion,
+            device.AssignedDriverId,
+            device.DriverCardIdTag
         );
 
     public async Task<DeviceDto?> DeviceAsync(Guid actorId, Guid stationId, CancellationToken ct)
@@ -75,7 +77,7 @@ public sealed partial class OperationsManagementService
             || input.Vendor?.Length > 64
             || input.Model?.Length > 64
             || input.AuthorizedTags is null
-            || input.AuthorizedTags.Length is < 1 or > 100
+            || input.AuthorizedTags.Length > 100
             || input.AuthorizedTags.Any(t =>
                 string.IsNullOrWhiteSpace(t) || t.Length > 20 || t.Any(char.IsControl)
             )
@@ -83,7 +85,7 @@ public sealed partial class OperationsManagementService
             throw new RequestFailure(
                 400,
                 "invalid_device_details",
-                "Enter the device identity, serial number and 1–100 authorized tags (up to 20 characters each)."
+                "Enter the device identity, serial number and up to 100 authorized tags (up to 20 characters each)."
             );
         // Keep the auto-provisioned simulator namespace independent of hardware.
         if (input.Identity.StartsWith("SIM-", StringComparison.Ordinal))

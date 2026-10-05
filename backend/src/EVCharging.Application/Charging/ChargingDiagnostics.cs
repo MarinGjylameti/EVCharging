@@ -39,7 +39,8 @@ public sealed record DriverConnectorState(
     long Version = 0,
     string? DeviceStatus = null,
     string? DeviceFaultCode = null,
-    string? DeviceFaultInfo = null
+    string? DeviceFaultInfo = null,
+    int Number = 1
 );
 
 public interface IChargingDiagnostics

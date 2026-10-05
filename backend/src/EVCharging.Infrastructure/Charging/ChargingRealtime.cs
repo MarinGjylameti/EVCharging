@@ -98,7 +98,8 @@ internal static class ChargingRealtime
             connector.Version,
             connector.DeviceStatus,
             connector.DeviceFaultCode,
-            connector.DeviceFaultInfo
+            connector.DeviceFaultInfo,
+            connector.Number
         );
 
     public static DriverStationDto StationDto(ChargingStation station, DateTimeOffset now) =>

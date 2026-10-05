@@ -14,6 +14,11 @@ internal sealed class OcppChargePointConfiguration : IEntityTypeConfiguration<Oc
         e.Property(x => x.Identity).HasMaxLength(100);
         e.Property(x => x.PasswordHash).HasMaxLength(512);
         e.Property(x => x.ProvisionedSerialNumber).HasMaxLength(64);
+        e.Property(x => x.DriverCardIdTag).HasMaxLength(20);
+        e.HasOne<Account>()
+            .WithMany()
+            .HasForeignKey(x => x.AssignedDriverId)
+            .OnDelete(DeleteBehavior.Restrict);
         e.Property(x => x.ManagementVersion).IsConcurrencyToken();
         e.Property(x => x.ProtocolVersion).HasMaxLength(12);
         e.Property(x => x.Vendor).HasMaxLength(64);

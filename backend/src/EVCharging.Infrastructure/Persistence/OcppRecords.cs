@@ -12,6 +12,9 @@ public sealed class OcppChargePoint
     // Legacy column retained for existing databases; physical admission no longer uses passwords.
     public string? PasswordHash { get; set; }
     public string? ProvisionedSerialNumber { get; set; }
+    public Guid? AssignedDriverId { get; set; }
+    public string? DriverCardIdTag { get; set; }
+    public DateTimeOffset? DriverAssignmentSince { get; set; }
     public string AuthorizedTagHashesJson { get; set; } = "[]";
 
     // Admission generation: enabling/disabling still invalidates pending and active connections.

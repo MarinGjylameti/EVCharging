@@ -6,6 +6,9 @@ public sealed class ChargingConnectionRequest
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid DriverId { get; set; }
+
+    // Device assignments can monitor several physical connectors without reserving them.
+    public bool IsAutomatic { get; set; }
     public Guid StationId { get; set; }
     public int ConnectorNumber { get; set; } = 1;
     public string State { get; set; } = "Waiting";

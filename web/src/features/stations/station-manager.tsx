@@ -118,7 +118,7 @@ export function StationManager({initial, language, canEdit, locations:initialLoc
       {canEdit&&selected&&!selected.isArchived&&<button type="button" className="station-archive" disabled={busy||["Charging","Occupied"].includes(selected.status)} onClick={()=>void send("archive")}>
         {sq?"Arkivo pikën":"Archive station"}</button>}
       {!canEdit&&<p className="station-readonly">{sq?"Vetëm Superadmin mund të ndryshojë pikat.":"Only Superadmin can change stations."}</p>}
-      {selected&&!selected.isDemo&&<DeviceManager key={selected.id} stationId={selected.id} language={language} webSocketBaseUrl={webSocketBaseUrl} disabled={!canEdit||!!selected.isArchived}/>}
+      {selected&&!selected.isDemo&&<DeviceManager key={selected.id} stationId={selected.id} language={language} webSocketBaseUrl={webSocketBaseUrl} disabled={!canEdit||!!selected.isArchived} canAssignDriver={superadmin}/>}
     </section></div>
     {mapOpen&&<StationMapPicker initial={{latitude:draft.latitude,longitude:draft.longitude}} language={language}
       requireClick={!selectedId} onClose={closeMap} onConfirm={point=>{

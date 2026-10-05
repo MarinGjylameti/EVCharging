@@ -747,7 +747,7 @@ public sealed partial class OcppWebSocketTests
         Assert.Equal("Charging", state.Session!.Status);
         Assert.Null(state.Session.FaultCode);
         Assert.Equal(20m, state.Session.PowerKW);
-        Assert.Null(state.Diagnostics);
+        Assert.Equal(transactionId.ToString(), state.Diagnostics!.ExternalSessionId);
         await SimulatorMeterAsync(
             socket,
             started.AddSeconds(-1),

@@ -36,7 +36,10 @@ function updateFailure(diagnostics: ChargingDiagnostics | null | undefined, comm
 
 export const chargingLivePolicy: LivePolicy<StationCharging> = {
   event(current, event) {
-    const refreshUrl = `/api/driver/stations/${current.station.id}/charging`;
+    const number = current.connector?.number;
+    const refreshUrl = `/api/driver/stations/${current.station.id}/charging${number ? `?connector=${number}` : ""}`;
+    if (number && (event.connector?.number && event.connector.number !== number
+      || event.session?.connectorId && event.session.connectorId !== number)) return null;
     // Public events carry no ownership or private measurements. Resolve those
     // through the authenticated endpoint when another vehicle starts or stops.
     if (event.eventType === "StationChanged") {
