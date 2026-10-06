@@ -20,9 +20,9 @@ nuk kërkon ndryshim kodi kur ndryshon domeni.
 |---|---|
 | Protokolli | OCPP **1.6 JSON**; WebSocket subprotocol `ocpp1.6` |
 | Serveri | URL-ja e plotë që tregon paneli |
-| Charge Point ID | ID-ja që regjistron te “Karikuesi fizik”, me të njëjtat shkronja |
+| Charge Point ID | ID-ja që pajisja vendos në fund të URL-së; përdor të njëjtën ID te “Karikuesi fizik” për ta lidhur me pikën |
 | Lidhja | Vetëm URL-ja mbi TLS (`wss://`); pa username/password ose header `Authorization` |
-| Lidhësit | Numrat **1…N**, sipas numrit të regjistruar; 0 përdoret për gjendjen e gjithë pajisjes |
+| Lidhësit | Numrat pozitivë zbulohen automatikisht kur raportohen; numri në panel përcakton lidhësit e lidhur me pikën. 0 përdoret për gjendjen e gjithë pajisjes |
 | Heartbeat | Përdor intervalin e kthyer nga `BootNotification.conf`: aktualisht 30 sekonda |
 | Matjet | Dërgo çdo 10–30 sekonda gjatë karikimit për provën e parë |
 | Ora | UTC me ISO 8601, p.sh. `2026-10-04T12:00:00Z`; mbaje orën e pajisjes të sinkronizuar |
@@ -151,7 +151,9 @@ Ky ndryshim përfshin migrimet `AdministrationAndPhysicalChargers` dhe
 `OperationsRealtimeAudience` dhe `PhysicalChargerDriverAssignments`, panelin,
 lejet, lidhjen e pajisjes vetëm me URL dhe teste HTTP/WebSocket lokale. Nuk është
 provë që pajisja reale është lidhur me Render. Pas commit/push duhen deploy i
-backend/web, migrimet dhe regjistrimi i pajisjes përpara provës në terren.
+backend/web dhe migrimet ekzistuese, nëse nuk janë aplikuar. Zbulimi automatik
+nuk kërkon migrim të ri ose regjistrim paraprak për provën e lidhjes. Lidhja me
+pikën dhe caktimi i Driver-it duhen për shfaqjen e të dhënave te përdoruesi.
 OCPP 2.0.1 dhe komandat për ndryshim konfigurimi/nisje/ndalim në distancë nuk
 janë implementuar në këtë integrim. Caktimi automatik te Driver-i
 konfigurohet nga Superadmin; hapja e faqes vetëm nuk jep pronësi.
