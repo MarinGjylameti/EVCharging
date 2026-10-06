@@ -634,7 +634,7 @@ public sealed partial class OcppWebSocketTests : IDisposable
         );
         Assert.Equal(3, (await CallAsync(socket, "Heartbeat", new { }))[0].GetInt32());
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            client.ConnectAsync(new Uri("ws://localhost/ws/cs/REAL-DEVICE"), timeout.Token)
+            client.ConnectAsync(new Uri("ws://localhost/ws/cs/SIM-UNCONFIGURED"), timeout.Token)
         );
         await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);
     }

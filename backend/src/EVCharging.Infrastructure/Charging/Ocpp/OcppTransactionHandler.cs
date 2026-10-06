@@ -12,7 +12,8 @@ public sealed class OcppTransactionHandler(
     OcppMeterHandler meters,
     TimeProvider clock,
     IOptions<OcppOptions> options,
-    IChargerEventReceiver receiver
+    IChargerEventReceiver receiver,
+    OcppHardwareDiscovery discovery
 )
 {
     public async Task<object> StartAsync(
@@ -26,23 +27,19 @@ public sealed class OcppTransactionHandler(
         var idTag = OcppPayload.Text(payload, "idTag", 20);
         var meter = OcppPayload.Integer(payload, "meterStart");
         var started = OcppPayload.Timestamp(payload);
-        if (!DeviceTagAuthorization.Accepted(device, idTag, options.Value))
+        var connector = await discovery.ConnectorAsync(device.Id, number, ct);
+        if (
+            connector.BusinessConnectorId is not null
+            && !DeviceTagAuthorization.Accepted(device, idTag, options.Value)
+        )
             throw new OcppFault(
                 "SecurityError",
                 "The authorization tag is not registered for this charge point."
             );
-        var connector =
-            await db.OcppConnectors.SingleOrDefaultAsync(
-                x => x.ChargePointId == device.Id && x.ConnectorNumber == number,
-                ct
-            )
-            ?? throw new OcppFault("PropertyConstraintViolation", "Connector is not provisioned.");
-        if (connector.BusinessConnectorId is null)
-            throw new OcppFault(
-                "PropertyConstraintViolation",
-                "Connector has no business mapping."
-            );
-        if (!await db.Stations.AnyAsync(x => x.Id == connector.StationId && !x.IsArchived, ct))
+        if (
+            connector.BusinessConnectorId is not null
+            && !await db.Stations.AnyAsync(x => x.Id == connector.StationId && !x.IsArchived, ct)
+        )
             throw new OcppFault(
                 "PropertyConstraintViolation",
                 "The station is archived or unavailable."
@@ -104,6 +101,16 @@ public sealed class OcppTransactionHandler(
             StartReceivedAt = now,
             MeterStartWh = meter,
         };
+        if (connector.BusinessConnectorId is null)
+        {
+            db.OcppChargingTransactions.Add(transaction);
+            await db.SaveChangesAsync(ct);
+            return new
+            {
+                transactionId = transaction.Ocpp16TransactionId,
+                idTagInfo = new { status = "Accepted" },
+            };
+        }
         // Stable normalized session identity; protocol records link to it explicitly.
         transaction.SessionId = transaction.Id;
         await receiver.ReceiveAsync(
@@ -181,6 +188,17 @@ public sealed class OcppTransactionHandler(
         transaction.State = "Stopped";
         transaction.StopReason = reason;
         transaction.MeterStopWh = meterStop;
+        if (transaction.SessionId is null)
+        {
+            await projection.SetConnectorAsync(
+                device.Id,
+                transaction.ConnectorNumber,
+                "Finishing",
+                stopped,
+                ct
+            );
+            return new { };
+        }
         var connector = await db.OcppConnectors.SingleAsync(
             x => x.ChargePointId == device.Id && x.ConnectorNumber == transaction.ConnectorNumber,
             ct

@@ -73,6 +73,7 @@ public static class DependencyInjection
             .ValidateOnStart();
         services.AddScoped<OcppSimulatorProvisioner>();
         services.AddScoped<OcppDeviceAuthentication>();
+        services.AddScoped<OcppHardwareDiscovery>();
         services.AddScoped<OcppStationProjection>();
         services.AddScoped<OcppMeterHandler>();
         services.AddScoped<OcppTransactionHandler>();

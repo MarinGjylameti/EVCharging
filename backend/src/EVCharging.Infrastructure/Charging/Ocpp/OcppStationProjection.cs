@@ -30,6 +30,19 @@ public sealed class OcppStationProjection(
                 x.ChargePointId == deviceId && (number == 0 || x.ConnectorNumber == number)
             )
             .ToListAsync(ct);
+        if (
+            number == 0
+            && connectors.Count == 0
+            && observed >= now.AddMinutes(-5)
+            && observed <= now.AddMinutes(5)
+            && (device.StatusObservedAt is null || observed >= device.StatusObservedAt)
+        )
+        {
+            device.ReportedStatus = status;
+            device.ErrorCode = errorCode;
+            device.ErrorInfo = info;
+            device.StatusObservedAt = observed;
+        }
         foreach (var connector in connectors)
         {
             var simulation =

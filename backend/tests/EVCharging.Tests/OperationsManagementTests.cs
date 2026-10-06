@@ -162,7 +162,7 @@ public sealed partial class OperationsManagementTests : IDisposable
             }
             Assert.Equal(2, await db.OcppConnectors.CountAsync());
         }
-        await Assert.ThrowsAsync<InvalidOperationException>(() => SocketAsync("UNKNOWN-DEVICE"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => SocketAsync("BAD.ID"));
         using var socket = await SocketAsync("CP-001");
         var boot = await CallAsync(
             socket,
@@ -659,7 +659,7 @@ public sealed partial class OperationsManagementTests : IDisposable
     [InlineData("incomplete")]
     [InlineData("protocol")]
     [InlineData("unprovisioned")]
-    public async Task UrlAdmissionRejectsUnavailableOrUnprovisionedPhysicalDevices(string state)
+    public async Task UrlAdmissionDoesNotRequireStationMappingButKeepsTheProtocolCheck(string state)
     {
         var (super, _) = await UserAsync("super@test.com", UserRole.Superadmin);
         var station = await StationAsync(super, "REAL-001");
@@ -692,9 +692,16 @@ public sealed partial class OperationsManagementTests : IDisposable
             }
             await db.SaveChangesAsync();
         }
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            SocketAsync(registered.Device.Identity)
-        );
+        if (state == "protocol")
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                SocketAsync(registered.Device.Identity)
+            );
+        else
+        {
+            using var socket = await SocketAsync(registered.Device.Identity);
+            Assert.Equal(3, (await CallAsync(socket, "Heartbeat", new { }))[0].GetInt32());
+            await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);
+        }
     }
 
     public void Dispose()

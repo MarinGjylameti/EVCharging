@@ -13,7 +13,8 @@ public sealed class OcppActionHandler(
     OcppStationProjection projection,
     IOptions<OcppOptions> options,
     TimeProvider clock,
-    StationProjection stations
+    StationProjection stations,
+    OcppHardwareDiscovery discovery
 )
 {
     public async Task<object> HandleAsync(
@@ -31,15 +32,18 @@ public sealed class OcppActionHandler(
                 device.LastHeartbeatAt = clock.GetUtcNow();
                 return new { currentTime = clock.GetUtcNow() };
             case "Authorize":
+                var tag = OcppPayload.Text(payload, "idTag", 20);
                 return new
                 {
                     idTagInfo = new
                     {
-                        status = DeviceTagAuthorization.Accepted(
-                            device,
-                            OcppPayload.Text(payload, "idTag", 20),
-                            options.Value
-                        )
+                        status = (
+                            device.ProvisionedSerialNumber is not null
+                            && !await db.OcppConnectors.AnyAsync(
+                                x => x.ChargePointId == device.Id && x.BusinessConnectorId != null,
+                                ct
+                            )
+                        ) || DeviceTagAuthorization.Accepted(device, tag, options.Value)
                             ? "Accepted"
                             : "Invalid",
                     },
@@ -192,14 +196,8 @@ public sealed class OcppActionHandler(
         var info = OcppPayload.OptionalText(payload, "info", 50);
         var vendorId = OcppPayload.OptionalText(payload, "vendorId", 255);
         var vendorError = OcppPayload.OptionalText(payload, "vendorErrorCode", 50);
-        if (
-            number > 0
-            && !await db.OcppConnectors.AnyAsync(
-                x => x.ChargePointId == device.Id && x.ConnectorNumber == number,
-                ct
-            )
-        )
-            throw new OcppFault("PropertyConstraintViolation", "Connector is not provisioned.");
+        if (number > 0)
+            await discovery.ConnectorAsync(device.Id, number, ct);
         db.OcppStatusEvents.Add(
             new OcppStatusEvent
             {

@@ -30,7 +30,8 @@ public sealed partial class OperationsManagementTests
             HttpStatusCode.BadRequest,
             (await admin.GetAsync("/ws/cs/UNKNOWN-DEVICE")).StatusCode
         );
-        await Assert.ThrowsAsync<InvalidOperationException>(() => SocketAsync("UNKNOWN-DEVICE"));
+        using (var discovered = await SocketAsync("UNKNOWN-DEVICE"))
+            await discovered.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);
         var unknown = (
             await admin.GetFromJsonAsync<ApplicationLogPage>(
                 "/api/v1/admin/logs?source=OCPP&identity=UNKNOWN"
@@ -42,7 +43,7 @@ public sealed partial class OperationsManagementTests
         );
         Assert.Contains(
             unknown.Entries,
-            x => x.Identity == "UNKNOWN-DEVICE" && x.Message.Contains("HTTP 401")
+            x => x.Identity == "UNKNOWN-DEVICE" && x.Message.Contains("discovered automatically")
         );
         var station = await StationAsync(admin, "CH-001");
         var device = (await DeviceAsync(admin, station.Id, "NKR2023072805")).Device;

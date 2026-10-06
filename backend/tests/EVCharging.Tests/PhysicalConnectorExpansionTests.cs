@@ -59,7 +59,7 @@ public sealed partial class OperationsManagementTests
                 vendorId = "com.cnchargepoint",
             }
         );
-        Assert.Equal(4, unregistered[0].GetInt32());
+        Assert.Equal(3, unregistered[0].GetInt32());
         station = Assert.Single(
             (await admin.GetFromJsonAsync<StationDto[]>("/api/v1/admin/stations"))!
         );

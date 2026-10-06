@@ -3,6 +3,7 @@ using EVCharging.Application.Common;
 using EVCharging.Application.Identity;
 using EVCharging.Domain.Charging;
 using EVCharging.Domain.Identity;
+using EVCharging.Infrastructure.Charging.Ocpp;
 using EVCharging.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -15,7 +16,8 @@ public sealed partial class OperationsManagementService(
     IPasswordHasher<Account> accountsHasher,
     TimeProvider clock,
     StationEventSignal signal,
-    StationProjection projection
+    StationProjection projection,
+    OcppStationProjection hardwareProjection
 ) : IOperationsManagement
 {
     private static LocationDto Location(ChargingLocation x) =>

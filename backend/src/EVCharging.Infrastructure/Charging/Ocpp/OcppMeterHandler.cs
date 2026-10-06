@@ -10,7 +10,8 @@ public sealed class OcppMeterHandler(
     ChargingDbContext db,
     TimeProvider clock,
     IOptions<OcppOptions> options,
-    IChargerEventReceiver receiver
+    IChargerEventReceiver receiver,
+    OcppHardwareDiscovery discovery
 )
 {
     public async Task RecordAsync(
@@ -24,14 +25,8 @@ public sealed class OcppMeterHandler(
         var samples = OcppPayload.Samples(payload, "meterValue");
         if (samples.Count == 0)
             throw new OcppFault("FormationViolation", "Missing meter values.");
-        if (
-            number > 0
-            && !await db.OcppConnectors.AnyAsync(
-                x => x.ChargePointId == deviceId && x.ConnectorNumber == number,
-                ct
-            )
-        )
-            throw new OcppFault("PropertyConstraintViolation", "Connector is not provisioned.");
+        if (number > 0)
+            await discovery.ConnectorAsync(deviceId, number, ct);
         OcppChargingTransaction? transaction = null;
         if (payload.TryGetProperty("transactionId", out _))
         {

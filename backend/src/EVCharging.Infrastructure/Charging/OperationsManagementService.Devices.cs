@@ -102,9 +102,27 @@ public sealed partial class OperationsManagementService
                 "station_unavailable",
                 "Choose an active physical station."
             );
+        var device = await db.OcppChargePoints.SingleOrDefaultAsync(
+            d => d.Identity == input.Identity,
+            ct
+        );
+        if (device is not null && db.Database.IsRelational())
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT 1 FROM ocpp_charge_points WHERE id = {device.Id} FOR UPDATE",
+                ct
+            );
+            await db.Entry(device).ReloadAsync(ct);
+        }
         if (
             await db.OcppConnectors.AnyAsync(c => c.StationId == stationId, ct)
-            || await db.OcppChargePoints.AnyAsync(d => d.Identity == input.Identity, ct)
+            || device is not null
+                && await db.OcppConnectors.AnyAsync(
+                    c =>
+                        c.ChargePointId == device.Id
+                        && (c.StationId != null || c.BusinessConnectorId != null),
+                    ct
+                )
         )
             throw new RequestFailure(
                 409,
@@ -113,23 +131,33 @@ public sealed partial class OperationsManagementService
             );
         if (
             await db.ChargingSessions.AnyAsync(s => s.PointId == stationId && s.EndedAt == null, ct)
+            || device is not null
+                && await db.OcppChargingTransactions.AnyAsync(
+                    t => t.ChargePointId == device.Id && t.StoppedAt == null,
+                    ct
+                )
         )
             throw new RequestFailure(409, "station_busy", "Finish the active session first.");
-        var device = new OcppChargePoint
+        if (device is null)
         {
-            Identity = input.Identity,
-            ProvisionedSerialNumber = input.SerialNumber!.Trim(),
-            Vendor = input.Vendor?.Trim(),
-            Model = input.Model?.Trim(),
-            IsEnabled = true,
-            ProtocolVersion = "1.6J",
-            ManagementVersion = 1,
-            CredentialVersion = 1,
-            AuthorizedTagHashesJson = JsonSerializer.Serialize(
-                input.AuthorizedTags.Select(DeviceTagAuthorization.Hash).Distinct()
-            ),
-        };
-        db.OcppChargePoints.Add(device);
+            device = new OcppChargePoint
+            {
+                Identity = input.Identity,
+                IsEnabled = true,
+                CredentialVersion = 1,
+            };
+            db.OcppChargePoints.Add(device);
+        }
+        device.ProvisionedSerialNumber = input.SerialNumber!.Trim();
+        if (!string.IsNullOrWhiteSpace(input.Vendor))
+            device.Vendor = input.Vendor.Trim();
+        if (!string.IsNullOrWhiteSpace(input.Model))
+            device.Model = input.Model.Trim();
+        device.ProtocolVersion = "1.6J";
+        device.ManagementVersion++;
+        device.AuthorizedTagHashesJson = JsonSerializer.Serialize(
+            input.AuthorizedTags.Select(DeviceTagAuthorization.Hash).Distinct()
+        );
         for (var number = 1; number <= station.ConnectorCount; number++)
         {
             var connector = await db.ChargingConnectors.SingleOrDefaultAsync(
@@ -141,15 +169,17 @@ public sealed partial class OperationsManagementService
                 connector = new ChargingConnector { StationId = stationId, Number = number };
                 db.ChargingConnectors.Add(connector);
             }
-            db.OcppConnectors.Add(
-                new OcppConnector
-                {
-                    ChargePointId = device.Id,
-                    ConnectorNumber = number,
-                    StationId = stationId,
-                    BusinessConnectorId = connector.Id,
-                }
+            var mapping = await db.OcppConnectors.SingleOrDefaultAsync(
+                c => c.ChargePointId == device.Id && c.ConnectorNumber == number,
+                ct
             );
+            if (mapping is null)
+            {
+                mapping = new OcppConnector { ChargePointId = device.Id, ConnectorNumber = number };
+                db.OcppConnectors.Add(mapping);
+            }
+            mapping.StationId = stationId;
+            mapping.BusinessConnectorId = connector.Id;
         }
         // New hardware starts with unknown availability until fresh device reports.
         station.Status = station.ManualRestriction switch
@@ -187,6 +217,28 @@ public sealed partial class OperationsManagementService
             station: ChargingRealtime.StationDto(station, clock.GetUtcNow())
         );
         await db.SaveChangesAsync(ct);
+        if (device.IsEnabled && device.LastSeenAt > clock.GetUtcNow().AddSeconds(-120))
+        {
+            var reports = await db
+                .OcppConnectors.Where(c =>
+                    c.ChargePointId == device.Id
+                    && c.StationId == stationId
+                    && c.ReportedStatus != null
+                    && c.StatusObservedAt != null
+                )
+                .ToListAsync(ct);
+            foreach (var report in reports)
+                await hardwareProjection.SetConnectorAsync(
+                    device.Id,
+                    report.ConnectorNumber,
+                    report.ReportedStatus!,
+                    report.StatusObservedAt!.Value,
+                    ct,
+                    report.ErrorCode,
+                    report.ErrorInfo
+                );
+            await db.SaveChangesAsync(ct);
+        }
         if (transaction is not null)
             await transaction.CommitAsync(ct);
         signal.Notify();

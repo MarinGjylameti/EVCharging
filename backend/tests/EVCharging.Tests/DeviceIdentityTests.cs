@@ -50,7 +50,18 @@ public sealed partial class OperationsManagementTests
         Assert.Equal(device.Version + 1, updated.Version);
         // An admitted socket belongs to the same device key and can still report.
         Assert.Equal(3, (await CallAsync(socket, "Heartbeat", new { }))[0].GetInt32());
-        await Assert.ThrowsAsync<InvalidOperationException>(() => SocketAsync("CH-001"));
+        // The old URL now discovers a separate unmapped device, without inheriting ownership.
+        using (var oldIdentity = await SocketAsync("CH-001"))
+        {
+            Assert.Equal(3, (await CallAsync(oldIdentity, "Heartbeat", new { }))[0].GetInt32());
+            using var check = factory.Services.CreateScope();
+            var discovered = await check
+                .ServiceProvider.GetRequiredService<ChargingDbContext>()
+                .OcppChargePoints.SingleAsync(x => x.Identity == "CH-001");
+            Assert.NotEqual(device.Id, discovered.Id);
+            Assert.Null(discovered.AssignedDriverId);
+            await oldIdentity.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);
+        }
         await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);
         using var reconnected = await SocketAsync(updated.Identity);
         var boot = await CallAsync(

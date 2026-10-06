@@ -28,13 +28,21 @@ nuk kërkon ndryshim kodi kur ndryshon domeni.
 | Ora | UTC me ISO 8601, p.sh. `2026-10-04T12:00:00Z`; mbaje orën e pajisjes të sinkronizuar |
 
 Karikuesi hap WebSocket-in me këtë URL dhe subprotocol `ocpp1.6`, pastaj
-dërgon `BootNotification`, heartbeat dhe gjendjet. Serveri pranon vetëm ID
-të regjistruara, aktive dhe të lidhura me lidhësit e një pike fizike aktive.
-ID-të e panjohura nuk krijojnë automatikisht pajisje fizike. Çaktivizimi
+dërgon `BootNotification`, heartbeat dhe gjendjet. Një ID fizike e panjohur
+regjistrohet automatikisht; lidhësit krijohen kur pajisja i raporton. Nuk kërkohet
+regjistrim paraprak ose lidhje me një pikë për të marrë dhe ruajtur mesazhet.
+`SIM-` mbetet hapësira e simulatorëve me konfigurimin e tyre të veçantë. Çaktivizimi
 mbyll lidhjen dhe ndalon rilidhjen; bllokohet gjatë një sesioni aktiv.
 
 URL-ja identifikon pajisjen, por nuk provon identitetin e saj me një sekret.
 Ky është konfigurimi i kërkuar për pajisjet që lidhen vetëm me URL.
+
+Për pajisjet pa pikë, Boot/Heartbeat, gjendjet, matjet dhe transaksionet ruhen
+në të dhënat OCPP dhe në loget administrative. Nuk krijohet pikë publike ose
+sesion Driver automatikisht. Te forma “Karikuesi fizik”, fut ID-në e zbuluar
+për ta lidhur me pikën: ruhet pajisja ekzistuese, metadata dhe historiku OCPP.
+Lidhja me pikën bllokohet gjatë një transaksioni aktiv. Transaksionet e vjetra
+pa pikë nuk i caktohen retroaktivisht një Driver-i; caktimi zbatohet për sesionet e reja.
 
 Për caktimin e të dhënave te një Driver, Superadmin mund të zgjedhë
 përdoruesin dhe të lërë bosh fushën **Kodi i kartës / JSON** për demo, ose

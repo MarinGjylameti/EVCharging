@@ -230,6 +230,10 @@ public sealed class StationManagementService(
                 x => x.PointId == station.Id && x.EndedAt == null,
                 ct
             )
+            || await db.OcppChargingTransactions.AnyAsync(
+                x => x.ChargePointId == device.Id && x.StoppedAt == null,
+                ct
+            )
         )
             throw new RequestFailure(
                 409,
@@ -240,15 +244,17 @@ public sealed class StationManagementService(
         {
             var connector = new ChargingConnector { StationId = station.Id, Number = number };
             db.ChargingConnectors.Add(connector);
-            db.OcppConnectors.Add(
-                new OcppConnector
-                {
-                    ChargePointId = device.Id,
-                    ConnectorNumber = number,
-                    StationId = station.Id,
-                    BusinessConnectorId = connector.Id,
-                }
+            var mapping = await db.OcppConnectors.SingleOrDefaultAsync(
+                x => x.ChargePointId == device.Id && x.ConnectorNumber == number,
+                ct
             );
+            if (mapping is null)
+            {
+                mapping = new OcppConnector { ChargePointId = device.Id, ConnectorNumber = number };
+                db.OcppConnectors.Add(mapping);
+            }
+            mapping.StationId = station.Id;
+            mapping.BusinessConnectorId = connector.Id;
         }
         device.ManagementVersion++;
         ChargingRealtime.StageOperations(
