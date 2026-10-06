@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Net.WebSockets;
 using System.Text;
@@ -26,11 +27,21 @@ public static class OcppEndpoints
         ILoggerFactory logs
     )
     {
-        if (
-            !context.WebSockets.IsWebSocketRequest
-            || !context.WebSockets.WebSocketRequestedProtocols.Contains("ocpp1.6")
-        )
+        var logger = logs.CreateLogger("OcppWebSocket");
+        var offeredOcpp16 = context.WebSockets.WebSocketRequestedProtocols.Contains("ocpp1.6");
+        logger.LogInformation(
+            "OCPP connection attempt {Identity}: HTTP {Protocol}, WebSocket={WebSocket}, Ocpp16={Ocpp16}.",
+            identity,
+            context.Request.Protocol,
+            context.WebSockets.IsWebSocketRequest,
+            offeredOcpp16
+        );
+        if (!context.WebSockets.IsWebSocketRequest || !offeredOcpp16)
         {
+            logger.LogWarning(
+                "OCPP connection {Identity} rejected: HTTP 400, ocpp1.6 WebSocket required.",
+                identity
+            );
             context.Response.StatusCode = 400;
             await context.Response.WriteAsJsonAsync(new { code = "ocpp16_websocket_required" });
             return;
@@ -44,19 +55,29 @@ public static class OcppEndpoints
         );
         if (deviceId is null)
         {
+            logger.LogWarning(
+                "OCPP connection {Identity} rejected: HTTP 401, device admission denied.",
+                identity
+            );
             context.Response.StatusCode = 401;
             await context.Response.WriteAsJsonAsync(new { code = "device_connection_denied" });
             return;
         }
         if (!registry.TryOpen(deviceId.Value))
         {
+            logger.LogWarning(
+                "OCPP connection {Identity} rejected: HTTP 409, an existing socket is still open.",
+                identity
+            );
             context.Response.StatusCode = 409;
             return;
         }
 
         Guid? connectionId = null;
         WebSocket? socket = null;
-        var logger = logs.CreateLogger("OcppWebSocket");
+        var started = Stopwatch.GetTimestamp();
+        var receivedMessages = 0;
+        var sentReplies = 0;
         try
         {
             connectionId = await gateway.OpenAsync(deviceId.Value, context.RequestAborted);
@@ -79,6 +100,13 @@ public static class OcppEndpoints
                     received = await socket.ReceiveAsync(buffer, idle.Token);
                     if (received.MessageType == WebSocketMessageType.Close)
                     {
+                        logger.LogInformation(
+                            "OCPP device {Identity} sent Close: code={CloseCode}, received={Received}, replied={Replied}.",
+                            identity,
+                            (int?)received.CloseStatus,
+                            receivedMessages,
+                            sentReplies
+                        );
                         // Commit the disconnect before acknowledging it so a
                         // subsequent snapshot cannot still show a live device.
                         using var closeTimeout = new CancellationTokenSource(
@@ -106,6 +134,12 @@ public static class OcppEndpoints
                         || message.Length + received.Count > MaximumFrameBytes
                     )
                     {
+                        logger.LogWarning(
+                            "OCPP device {Identity} rejected frame: type={FrameType}, bytes={FrameBytes}.",
+                            identity,
+                            received.MessageType,
+                            message.Length + received.Count
+                        );
                         await socket.CloseOutputAsync(
                             WebSocketCloseStatus.MessageTooBig,
                             "Text frames up to 64 KiB are supported.",
@@ -115,6 +149,15 @@ public static class OcppEndpoints
                     }
                     message.Write(buffer, 0, received.Count);
                 } while (!received.EndOfMessage);
+
+                receivedMessages++;
+                if (receivedMessages == 1)
+                    logger.LogInformation(
+                        "OCPP device {Identity} sent its first text message: {FrameBytes} bytes after {ElapsedMs} ms.",
+                        identity,
+                        message.Length,
+                        (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds
+                    );
 
                 await using var scope = scopes.CreateAsyncScope();
                 var processor = scope.ServiceProvider.GetRequiredService<IOcppGateway>();
@@ -126,6 +169,10 @@ public static class OcppEndpoints
                     )
                 )
                 {
+                    logger.LogWarning(
+                        "OCPP device {Identity} connection permission was revoked.",
+                        identity
+                    );
                     await socket.CloseOutputAsync(
                         WebSocketCloseStatus.PolicyViolation,
                         "Device connection permission revoked.",
@@ -145,6 +192,7 @@ public static class OcppEndpoints
                     true,
                     idle.Token
                 );
+                sentReplies++;
             }
         }
         catch (Exception error)
@@ -156,9 +204,15 @@ public static class OcppEndpoints
             )
         {
             logger.LogInformation(
-                "OCPP device {Identity} disconnected: {ErrorType}.",
+                "OCPP device {Identity} disconnected: {ErrorType}; websocketError={WebSocketError}; requestAborted={RequestAborted}; state={SocketState}; received={Received}; replied={Replied}; elapsedMs={ElapsedMs}.",
                 identity,
-                error.GetType().Name
+                error.GetType().Name,
+                (error as WebSocketException)?.WebSocketErrorCode,
+                context.RequestAborted.IsCancellationRequested,
+                socket?.State,
+                receivedMessages,
+                sentReplies,
+                (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds
             );
             if (socket?.State == WebSocketState.Open)
                 await socket.CloseOutputAsync(
@@ -183,6 +237,14 @@ public static class OcppEndpoints
         }
         finally
         {
+            logger.LogInformation(
+                "OCPP connection {Identity} ended: received={Received}, replied={Replied}, closeCode={CloseCode}, elapsedMs={ElapsedMs}.",
+                identity,
+                receivedMessages,
+                sentReplies,
+                (int?)socket?.CloseStatus,
+                (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds
+            );
             try
             {
                 if (connectionId is { } id)

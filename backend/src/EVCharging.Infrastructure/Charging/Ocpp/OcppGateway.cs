@@ -6,6 +6,7 @@ using EVCharging.Application.Common;
 using EVCharging.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace EVCharging.Infrastructure.Charging.Ocpp;
@@ -17,7 +18,8 @@ public sealed class OcppGateway(
     OcppStationProjection projection,
     StationEventSignal events,
     TimeProvider clock,
-    IOptions<OcppOptions> options
+    IOptions<OcppOptions> options,
+    ILogger<OcppGateway> logger
 ) : IOcppGateway
 {
     public Task<bool> IsConnectionCurrentAsync(
@@ -226,6 +228,11 @@ public sealed class OcppGateway(
             if (transaction is not null)
                 await transaction.CommitAsync(ct);
             events.Notify();
+            if (action == "BootNotification")
+                logger.LogInformation(
+                    "OCPP BootNotification accepted and committed for {Identity}.",
+                    device.Identity
+                );
             return response;
         }
         catch (OcppFault fault)
@@ -264,6 +271,12 @@ public sealed class OcppGateway(
             if (transaction is not null)
                 await transaction.CommitAsync(ct);
             events.Notify();
+            logger.LogWarning(
+                "OCPP action {Action} rejected for device {DeviceId}: {FailureCode}.",
+                action,
+                chargePointId,
+                fault.Code
+            );
             return response;
         }
         finally

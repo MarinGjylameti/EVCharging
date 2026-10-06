@@ -130,3 +130,28 @@ ose sesionet. Ai ruan kushtin që një ngjarje private `Driver` të ketë marrë
 Pas push-it të rregullimit, bëj redeploy të backend-it me
 `EVCHARGING_MIGRATE_ON_START=true`. Në log duhet të shfaqet aplikimi i
 `OperationsRealtimeAudience` përpara nisjes normale të shërbimit.
+
+### Nëse karikuesi tregon `101` dhe më pas shkëputet
+
+Në Render hap shërbimin API → **Logs**, zgjidh intervalin e tentativës ose
+**Live**, dhe filtro me Charge Point ID. Ora me `Z`/`GMT` është UTC; më 6 tetor
+2026, `14:40 UTC` përputhet me `16:40` në Berlin/Tiranë. Loget e nisjes së
+shërbimit përpara tentativës nuk tregojnë shkakun e shkëputjes.
+
+Diagnostikimi i lidhjes regjistron vetëm metadata, jo fjalëkalime, karta ose
+payload-e:
+
+- `connection attempt`: kërkesa arriti te endpoint-i; refuzimet shënojnë
+  `400` (WebSocket/protokoll), `401` (pajisja) ose `409` (lidhje ekzistuese).
+- `connected`: serveri ka pranuar WebSocket-in.
+- `first text message`: mbërriti mesazhi i parë; `BootNotification accepted
+  and committed` konfirmon që Boot u pranua dhe u ruajt.
+- `disconnected`/`ended`: numri i mesazheve, përgjigjeve, koha e kaluar,
+  gjendja dhe kodi i mbylljes ndihmojnë në dallimin e transportit nga OCPP.
+  `received=0` do të thotë se nuk u mor asnjë mesazh i plotë tekst.
+- `OCPP processing failed`: shiko exception-in pasues për dështimin në server.
+
+Përgjigjja `101` në ekran nuk provon vetë një lidhje të qëndrueshme ose
+pranimin e BootNotification. Mos ndrysho portin, TLS-in ose formatin OCPP
+pa krahasuar loget e të njëjtës tentativë. Shtimi i këtyre logeve kërkon
+publikimin e backend-it, por nuk kërkon migrim databaze.
