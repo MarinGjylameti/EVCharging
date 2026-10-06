@@ -100,15 +100,8 @@ public sealed class StationManagementService(
             );
         if (input.Reason?.Length > 500)
             throw new RequestFailure(400, "invalid_reason", "Use up to 500 characters.");
-        if (
-            data.ConnectorCount != station.ConnectorCount
-            && await db.OcppConnectors.AnyAsync(x => x.StationId == id, ct)
-        )
-            throw new RequestFailure(
-                409,
-                "device_connectors_locked",
-                "The provisioned connector count cannot be changed. Register a separate device for a topology change."
-            );
+        if (data.ConnectorCount != station.ConnectorCount)
+            await ExpandPhysicalConnectorsAsync(station, data.ConnectorCount, ct);
         if (await db.Stations.AnyAsync(other => other.Code == data.Code && other.Id != id, ct))
             throw new RequestFailure(409, "station_code_taken", "The station code already exists.");
 
@@ -205,6 +198,68 @@ public sealed class StationManagementService(
                 "version_conflict",
                 "The station changed. Refresh and try again."
             );
+    }
+
+    private async Task ExpandPhysicalConnectorsAsync(
+        ChargingStation station,
+        int count,
+        CancellationToken ct
+    )
+    {
+        var mappings = await db
+            .OcppConnectors.Where(x => x.StationId == station.Id)
+            .ToListAsync(ct);
+        if (mappings.Count == 0)
+            return;
+        var deviceIds = mappings.Select(x => x.ChargePointId).Distinct().ToArray();
+        if (station.IsDemo || count < station.ConnectorCount || deviceIds.Length != 1)
+            throw new RequestFailure(
+                409,
+                "device_connectors_locked",
+                "Only adding connectors to a physical device is supported; existing connectors and history cannot be removed."
+            );
+        var device = await db.OcppChargePoints.SingleAsync(x => x.Id == deviceIds[0], ct);
+        if (device.ProvisionedSerialNumber is null)
+            throw new RequestFailure(
+                409,
+                "device_connectors_locked",
+                "Choose a provisioned physical device."
+            );
+        if (
+            await db.ChargingSessions.AnyAsync(
+                x => x.PointId == station.Id && x.EndedAt == null,
+                ct
+            )
+        )
+            throw new RequestFailure(
+                409,
+                "station_busy",
+                "Finish active charging before adding connectors."
+            );
+        for (var number = station.ConnectorCount + 1; number <= count; number++)
+        {
+            var connector = new ChargingConnector { StationId = station.Id, Number = number };
+            db.ChargingConnectors.Add(connector);
+            db.OcppConnectors.Add(
+                new OcppConnector
+                {
+                    ChargePointId = device.Id,
+                    ConnectorNumber = number,
+                    StationId = station.Id,
+                    BusinessConnectorId = connector.Id,
+                }
+            );
+        }
+        device.ManagementVersion++;
+        ChargingRealtime.StageOperations(
+            db,
+            station.Id,
+            "DeviceChanged",
+            "Device",
+            device.Id,
+            device.ManagementVersion,
+            clock.GetUtcNow()
+        );
     }
 
     private void Apply(ChargingStation station, ValidatedStation data)

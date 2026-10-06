@@ -10,6 +10,7 @@ export function DeviceManager({stationId,language,webSocketBaseUrl,disabled,canA
   const sq=language==="sq";const [device,setDevice]=useState<Device|null>(null);const [loaded,setLoaded]=useState(false);
   const [busy,setBusy]=useState(false);const [error,setError]=useState("");
   const [identity,setIdentity]=useState("");const [serial,setSerial]=useState("");const [vendor,setVendor]=useState("");const [model,setModel]=useState("");const [tags,setTags]=useState("");
+  const [editedIdentity,setEditedIdentity]=useState<string|null>(null);const [identitySaved,setIdentitySaved]=useState(false);
   const refresh=async(signal:AbortSignal)=>{const data=await operations<Device|null>("device",signal,`&id=${stationId}`);if(!signal.aborted){setDevice(data);setLoaded(true);}};
   const live=useOperationsLive(refresh);
   useEffect(()=>{const controller=new AbortController();void refresh(controller.signal).catch(e=>{if(!controller.signal.aborted)setError(failure(e,sq));});return()=>controller.abort();},[stationId,sq]);
@@ -25,13 +26,26 @@ export function DeviceManager({stationId,language,webSocketBaseUrl,disabled,canA
     try{setDevice(await mutate<Device>("device","control",{version:device.version,enabled:!device.isEnabled},stationId));}
     catch(e){setError(failure(e,sq));}finally{setBusy(false);}
   }
+  async function updateIdentity(){
+    if(!device||busy||disabled)return;
+    setBusy(true);setError("");setIdentitySaved(false);
+    try{setDevice(await mutate<Device>("device","updateIdentity",{version:device.version,identity:editedIdentity??device.identity},stationId));setEditedIdentity(null);setIdentitySaved(true);}
+    catch(e){setError(failure(e,sq));}finally{setBusy(false);}
+  }
   const url=`${webSocketBaseUrl}/${device?.identity??identity}`;
   return <section className="operations-device"><h3>{sq?"Karikuesi fizik":"Physical charger"}</h3>{error&&<p className="form-error" role="alert">{error}</p>}
     {!loaded?<p>{sq?"Duke lexuar pajisjen…":"Loading device…"}</p>:device?<>
       <p><strong>{device.identity}</strong> · {device.isOnline?(sq?"I lidhur":"Connected"):(sq?"I shkëputur":"Disconnected")} · {live?(sq?"Përditësime aktive":"Live updates"):(sq?"Duke rilidhur përditësimet":"Reconnecting updates")}</p>
       <dl className="operations-details"><dt>{sq?"Seriali":"Serial"}</dt><dd>{device.serialNumber||"—"}</dd><dt>OCPP</dt><dd>{device.protocol}</dd><dt>{sq?"Lidhësit":"Connectors"}</dt><dd>{device.connectors.join(", ")}</dd><dt>{sq?"Mesazhi i fundit":"Last message"}</dt><dd>{device.lastSeenAt?new Date(device.lastSeenAt).toLocaleString(sq?"sq-AL":"en-GB"):"—"}</dd><dt>{sq?"Identifikues të autorizuar":"Authorized identifiers"}</dt><dd>{device.authorizedTagCount}</dd></dl>
+      <form onSubmit={e=>{e.preventDefault();void updateIdentity();}}><fieldset className="station-form-fields" disabled={busy||disabled}>
+        <label>Charge Point ID<input required pattern="[A-Za-z0-9_-]{2,40}" maxLength={40} value={editedIdentity??device.identity} onChange={e=>{setEditedIdentity(e.target.value);setIdentitySaved(false);}}/></label>
+        <small>{sq?"Vendos ID-në e plotë që përdor pajisja. Duhet të përputhet me fundin e URL-së në karikues. Mund ta ndryshosh kur nuk ka karikim aktiv; historiku dhe caktimi i Driver-it ruhen.":"Enter the full ID used by the device. It must match the end of the charger's URL. Change it when no charge is active; history and Driver assignment are preserved."}</small>
+        <button className="button-primary" disabled={busy||editedIdentity===null||editedIdentity===device.identity}>{sq?"Ruaj ID-në e karikuesit":"Save charger ID"}</button>
+      </fieldset></form>
+      {identitySaved&&<p role="status">{sq?"ID-ja u ruajt dhe URL-ja u përditësua. Në rilidhjen tjetër, URL-ja e pajisjes duhet të ketë këtë ID.":"ID saved and URL updated. The device URL must contain this ID on its next connection."}</p>}
       <label>{sq?"URL-ja e plotë WebSocket":"Full WebSocket URL"}<input readOnly value={url}/></label>
       <p>{sq?"Vendos vetëm këtë URL në karikues. Lidhja nuk kërkon username ose fjalëkalim.":"Configure only this URL on the charger. The connection does not require a username or password."}</p>
+      {canAssignDriver&&<a className="button-outline inline-link" href="/dashboard/logs">{sq?"Hap loget e lidhjes OCPP":"Open OCPP connection logs"}</a>}
       <div className="operations-actions"><button type="button" className="button-outline" disabled={busy||disabled} onClick={()=>void control()}>{device.isEnabled?(sq?"Çaktivizo lidhjen":"Disable connection"):(sq?"Aktivizo lidhjen":"Enable connection")}</button></div>
       {canAssignDriver && <DeviceDriverForm device={device} stationId={stationId} sq={sq} disabled={disabled||busy} onSaved={setDevice}/>}
     </>:<form onSubmit={e=>{e.preventDefault();void provision();}}><fieldset disabled={busy||disabled} className="station-form-fields">

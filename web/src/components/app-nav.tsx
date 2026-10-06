@@ -31,6 +31,7 @@ export function AppNav({area, language, superadmin=false}: {area: Area; language
     aria-label={sq ? "Menuja kryesore" : "Main navigation"}>
     {[...links[area],...(area==="dashboard"&&superadmin?[
       {href:"/dashboard/administrators",icon:"◇",sq:"Administratorët",en:"Administrators",shortSq:"Adminët",shortEn:"Admins"},
+      {href:"/dashboard/logs",icon:"≡",sq:"Loget e lidhjes",en:"Connection logs",shortSq:"Loget",shortEn:"Logs"},
       {href:"/dashboard/drivers",icon:"♙",sq:"Drejtuesit",en:"Drivers",shortSq:"Drejtuesit",shortEn:"Drivers"}
     ]:[])].map(item => {
       const active = pathname === item.href ||

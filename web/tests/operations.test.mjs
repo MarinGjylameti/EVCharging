@@ -103,6 +103,63 @@ test("device Driver assignment BFF forwards the chosen account and card JSON to 
   assert.equal(response.status,200);assert.equal((await response.json()).cardIdTag,"CARD-001");
 });
 
+test("device identity BFF updates the registered charger through its protected endpoint",async t=>{
+  const route=bff(t)("operations");const input={version:3,identity:"NKR2023072805"};
+  globalThis.fetch=async(url,init)=>{assert.equal(url,`https://api.example.test/api/v1/admin/stations/${id}/device/identity`);assert.equal(init.method,"PUT");assert.equal(init.headers.get("Authorization"),"Bearer private-session");assert.deepEqual(JSON.parse(init.body),input);return Response.json({identity:input.identity,version:4});};
+  const response=await route.POST(request({resource:"device",operation:"updateIdentity",id,input}));
+  assert.equal(response.status,200);assert.equal((await response.json()).identity,input.identity);
+});
+
+test("application log BFF forwards safe filters and retains Superadmin authorization failures",async t=>{
+  const route=bff(t)("operations");let calls=0;
+  globalThis.fetch=async(url,init)=>{calls++;assert.equal(url,"https://api.example.test/api/v1/admin/logs?source=OCPP&identity=NKR");assert.equal(init.headers.get("Authorization"),"Bearer private-session");return Response.json({code:"access_denied"},{status:403});};
+  assert.equal((await route.GET(new Request("https://web.example.test/api/operations?resource=logs&source=OCPP&identity=NKR"))).status,403);
+  for(const query of ["source=Database","identity="+"A".repeat(41),"identity=CP%0A001"])assert.equal((await route.GET(new Request("https://web.example.test/api/operations?resource=logs&"+query))).status,400);
+  assert.equal(calls,1);
+});
+
+test("connection log view polls the backend, renders escaped messages and aborts when closed",async t=>{
+  const previous={interval:globalThis.setInterval,clear:globalThis.clearInterval,document:globalThis.document};let poll,cleared=false;
+  globalThis.setInterval=(fn,delay)=>{assert.equal(delay,5000);poll=fn;return 123;};globalThis.clearInterval=value=>{assert.equal(value,123);cleared=true;};globalThis.document={visibilityState:"visible"};
+  t.after(()=>{globalThis.setInterval=previous.interval;globalThis.clearInterval=previous.clear;if(previous.document===undefined)delete globalThis.document;else globalThis.document=previous.document;});
+  const state=[];let cursor=0,effect;const calls=[];
+  const {ApplicationLogs}=component("application-logs",{
+    react:{...React,useState(initial){const index=cursor++;if(!(index in state))state[index]=initial;return [state[index],value=>{state[index]=typeof value==="function"?value(state[index]):value;}];},useEffect:fn=>{effect=fn;}},
+    "./api":{operations:async(...args)=>{calls.push(args);return {instanceId:"instance-123",startedAt:"2026-10-06T15:00:00Z",capacity:1000,entries:[{sequence:1,recordedAt:"2026-10-06T15:19:53Z",source:"OCPP",level:"Warning",identity:"NKR2023072805",message:"HTTP 401 <script>alert(1)</script>"}]};},failure:()=>"Cannot load logs"}
+  });
+  const render=()=>{cursor=0;return ApplicationLogs({language:"en"});};
+  render();const cleanup=effect();await new Promise(resolve=>setImmediate(resolve));
+  const html=renderToStaticMarkup(render());assert.match(html,/NKR2023072805/);assert.match(html,/HTTP 401 &lt;script&gt;/);assert.doesNotMatch(html,/<script>/);assert.match(html,/reset after a restart\/deploy/);
+  assert.equal(calls[0][0],"logs");assert.equal(calls[0][2],"&source=OCPP");poll();await new Promise(resolve=>setImmediate(resolve));assert.equal(calls.length,2);
+  cleanup();assert.equal(calls[0][1].aborted,true);assert.equal(cleared,true);
+});
+
+test("charger ID editor retains the saved URL until the backend accepts the new identity",async t=>{
+  const device={id,identity:"CH-001",serialNumber:"123",protocol:"1.6J",connectors:[1],isEnabled:true,isOnline:false,authorizedTagCount:1,version:3};
+  const state=[];let cursor=0,effect,complete,reject;const calls=[];
+  const {DeviceManager}=component("device-manager",{
+    react:{...React,useState(initial){const index=cursor++;if(!(index in state))state[index]=initial;return [state[index],value=>{state[index]=value;}];},useEffect:fn=>{effect=fn;}},
+    "./api":{operations:async()=>device,failure:()=>"ID could not be saved",mutate:(...args)=>{calls.push(args);return new Promise((resolve,fail)=>{complete=resolve;reject=fail;});}}
+  });
+  const render=()=>{cursor=0;return DeviceManager({stationId:id,language:"en",webSocketBaseUrl:"wss://api.example.test/ws/cs",disabled:false});};
+  function find(node,predicate){if(!node||typeof node!=="object")return undefined;if(predicate(node))return node;for(const child of React.Children.toArray(node.props?.children)){const found=find(child,predicate);if(found)return found;}}
+  const url=()=>find(render(),node=>node.type==="input"&&node.props.readOnly).props.value;
+  const save=()=>find(render(),node=>node.type==="button"&&node.props.children==="Save charger ID");
+  render();const cleanup=effect();t.after(()=>cleanup());await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(save().props.disabled,true);
+  find(render(),node=>node.type==="input"&&node.props.pattern).props.onChange({target:{value:"NKR2023072805"}});
+  assert.equal(save().props.disabled,false);assert.equal(url(),"wss://api.example.test/ws/cs/CH-001");
+  find(render(),node=>node.type==="form").props.onSubmit({preventDefault(){}});
+  assert.equal(url(),"wss://api.example.test/ws/cs/CH-001");
+  reject(new Error("Conflict"));await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(url(),"wss://api.example.test/ws/cs/CH-001");assert.match(renderToStaticMarkup(render()),/ID could not be saved/);
+  find(render(),node=>node.type==="form").props.onSubmit({preventDefault(){}});
+  complete({...device,identity:"NKR2023072805",version:4});await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(url(),"wss://api.example.test/ws/cs/NKR2023072805");assert.equal(save().props.disabled,true);
+  assert.match(renderToStaticMarkup(render()),/ID saved and URL updated/);
+  assert.deepEqual(calls,Array(2).fill(["device","updateIdentity",{version:3,identity:"NKR2023072805"},id]));
+});
+
 test("Driver assignment form explains empty demo mode, accepts JSON and submits the selected account",async t=>{
   const state=[];let cursor=0,effect;const saved=[],calls=[];
   const device={version:3,assignedDriverId:id,cardIdTag:null};

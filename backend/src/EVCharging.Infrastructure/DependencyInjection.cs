@@ -9,6 +9,7 @@ using EVCharging.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace EVCharging.Infrastructure;
 
@@ -20,6 +21,10 @@ public static class DependencyInjection
     )
     {
         services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<IApplicationDiagnostics, ApplicationDiagnostics>();
+        services.AddLogging(logging =>
+            logging.AddFilter<OcppDiagnosticLoggerProvider>(level => level >= LogLevel.Information)
+        );
         services.AddDbContext<ChargingDbContext>(options =>
             options.UseNpgsql(
                 connectionString

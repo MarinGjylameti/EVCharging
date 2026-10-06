@@ -147,9 +147,11 @@ public sealed class OcppGateway(
             chargePointId,
             ct
         );
+        string? chargePointIdentity = null;
         try
         {
             var device = await db.OcppChargePoints.SingleAsync(x => x.Id == chargePointId, ct);
+            chargePointIdentity = device.Identity;
             if (!device.IsEnabled)
                 throw new OcppFault("SecurityError", "The charge point is disabled.");
             var previous = await db.OcppInboundMessages.SingleOrDefaultAsync(
@@ -213,6 +215,12 @@ public sealed class OcppGateway(
                 if (transaction is not null)
                     await transaction.CommitAsync(ct);
                 events.Notify();
+                logger.LogInformation(
+                    "OCPP action {Action} replayed for {Identity}; reusedCallId={Reused}.",
+                    action,
+                    device.Identity,
+                    reused
+                );
                 return cached!;
             }
 
@@ -228,10 +236,23 @@ public sealed class OcppGateway(
             if (transaction is not null)
                 await transaction.CommitAsync(ct);
             events.Notify();
+            logger.LogInformation(
+                "OCPP action {Action} processed and committed for {Identity}.",
+                action,
+                device.Identity
+            );
             if (action == "BootNotification")
                 logger.LogInformation(
                     "OCPP BootNotification accepted and committed for {Identity}.",
                     device.Identity
+                );
+            if (action == "StatusNotification")
+                logger.LogInformation(
+                    "OCPP status for {Identity}: connector={Connector}, status={Status}, error={ErrorCode}.",
+                    device.Identity,
+                    root[3].GetProperty("connectorId").GetInt32(),
+                    root[3].GetProperty("status").GetString(),
+                    root[3].GetProperty("errorCode").GetString()
                 );
             return response;
         }
@@ -272,9 +293,9 @@ public sealed class OcppGateway(
                 await transaction.CommitAsync(ct);
             events.Notify();
             logger.LogWarning(
-                "OCPP action {Action} rejected for device {DeviceId}: {FailureCode}.",
+                "OCPP action {Action} rejected for {Identity}: {FailureCode}.",
                 action,
-                chargePointId,
+                chargePointIdentity,
                 fault.Code
             );
             return response;

@@ -59,7 +59,42 @@ kartave të lejuara mund të përdoret për karikime pa pronar Driver.
 Caktimi i një vendndodhjeje lejon pikat e saj dhe krijimin e pikave aty.
 Caktimi i një pike lejon vetëm atë pikë. Admin pa caktime nuk merr akses
 automatik në rrjet. Një pikë mund të ketë disa lidhës; paneli operativ i
-monitoron veçmas. Numri i lidhësve nuk ndryshohet pas regjistrimit të pajisjes.
+monitoron veçmas. Për një pajisje fizike mund të rritësh **Numrin e lidhësve**
+kur nuk ka karikim aktiv; ruajtja shton lidhësit dhe hartëzimin OCPP. Lidhësit
+ekzistues nuk hiqen, që historiku të mbetet i lidhur me të njëjtin identitet.
+
+### Ndryshimi i ID-së së një pajisjeje të regjistruar
+
+Te **Karikuesi fizik → Charge Point ID**, vendos ID-në e plotë të pajisjes
+dhe shtyp **Ruaj ID-në e karikuesit**. Për shembull, për pajisjen
+`NKR2023072805`, URL-ja bëhet
+`wss://vcharging-api-demo.onrender.com/ws/cs/NKR2023072805`.
+Fusha e URL-së është vetëm për kopjim dhe përditësohet pas ruajtjes.
+Kodi i pikës, p.sh. `CH-001`, mbetet i veçantë nga ID-ja fizike.
+
+Ndryshimi lejohet kur nuk ka karikim aktiv dhe ID-ja nuk i përket një pajisjeje
+tjetër. Ruhet e njëjta pajisje në bazë, bashkë me lidhësit, historikun dhe
+caktimin Driver; ndryshimi regjistrohet në audit. Një lidhje e pranuar më parë
+vazhdon të punojë, ndërsa lidhjet e reja pranohen vetëm me ID-në e re.
+Kjo nuk ndryshon konfigurimin e pajisjes nga larg: URL-ja në karikues duhet
+të përputhet. Publiko backend-in dhe web-in për të shfaqur këtë fushë;
+ndryshimi nuk kërkon migrim të ri.
+
+### Loget nga web-i
+
+Superadmin hap **Loget e lidhjes** në menu (`/dashboard/logs`), ose lidhjen
+**Hap loget e lidhjes OCPP** te karikuesi. Pamja përditësohet çdo 5 sekonda
+dhe lejon filtrimin sipas OCPP/HTTP dhe Charge Point ID. Lëre ID-në bosh
+për të parë edhe tentativat me ID të paregjistruara dhe gabimet 400/401/409.
+Kërkesat HTTP tregojnë metodën, rrugën, statusin dhe kohëzgjatjen; OCPP tregon
+lidhjen, veprimet e përpunuara/refuzuara dhe shkëputjet.
+
+Këto loge janë për diagnostikim të çastit: mbahen 1 000 ngjarjet e fundit në
+memorien e instancës API dhe shfaqen deri në 200 rezultate. Restart/deploy
+i pastron; nëse ka disa instanca, secila ka buffer të vetin. Historiku i
+karikimeve mbetet në databazë. Tokenët, header-at, query string, trupat HTTP,
+JSON-i i kartave dhe payload-et OCPP nuk shfaqen në këtë pamje. Aksesi është
+vetëm për Superadmin dhe nuk varet nga plani i logeve të Render-it.
 
 ## Nëse nuk ka ende Superadmin
 

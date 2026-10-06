@@ -10,7 +10,7 @@ const actions:Record<string,[string,string]>={
   LocationCreated:["Vendndodhja u krijua","Location created"],LocationUpdated:["Vendndodhja u ndryshua","Location updated"],LocationArchived:["Vendndodhja u arkivua","Location archived"],
   AdministratorCreated:["Administratori u krijua","Administrator created"],AdministratorUpdated:["Administratori/lejet u ndryshuan","Administrator/permissions updated"],AdministratorArchived:["Administratori u arkivua","Administrator archived"],
   ChargingStarted:["Karikimi filloi","Charging started"],ChargingCompleted:["Karikimi përfundoi","Charging completed"],ChargerConnected:["Karikuesi u lidh","Charger connected"],ChargerDisconnected:["Karikuesi u shkëput","Charger disconnected"],ChargerStatusChanged:["Gjendja e karikuesit ndryshoi","Charger status changed"],
-  DeviceProvisioned:["Pajisja u regjistrua","Device registered"],DeviceCredentialsRotated:["Kredencialet u rinovuan","Credentials rotated"],DeviceAccessChanged:["Leja e pajisjes u ndryshua","Device access changed"],DeviceDriverAssigned:["Driver-i i pajisjes u caktua","Device Driver assigned"]
+  DeviceProvisioned:["Pajisja u regjistrua","Device registered"],DeviceCredentialsRotated:["Kredencialet u rinovuan","Credentials rotated"],DeviceAccessChanged:["Leja e pajisjes u ndryshua","Device access changed"],DeviceDriverAssigned:["Driver-i i pajisjes u caktua","Device Driver assigned"],DeviceIdentityChanged:["ID-ja e karikuesit u ndryshua","Charger ID changed"]
 };
 export function HistoryView({initial,kind,stations,language}:{initial:(Audit|Price|Driver)[];kind:"audit"|"prices"|"drivers";stations:Station[];language:Language}){
   const sq=language==="sq";const [items,setItems]=useState(initial);

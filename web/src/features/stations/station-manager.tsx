@@ -58,7 +58,8 @@ export function StationManager({initial, language, canEdit, locations:initialLoc
       if (!response.ok) {
         setError(response.status===412 ? (sq?"Pika ka ndryshuar. Rifresko faqen.":"The station changed. Refresh the page.") :
           data.code==="station_code_taken" ? (sq?"Ky kod përdoret tashmë.":"This code already exists.") :
-          data.code==="station_busy" ? (sq?"Pika është e zënë dhe nuk arkivohet.":"A busy station cannot be archived.") :
+          data.code==="station_busy" ? (sq?"Përfundo karikimin aktiv përpara këtij veprimi.":"Finish the active charge before this action.") :
+          data.code==="device_connectors_locked" ? (sq?"Mund të shtosh lidhës te një pajisje fizike; lidhësit ekzistues nuk mund të hiqen.":"You can add connectors to a physical device; existing connectors cannot be removed.") :
           sq?"Kontrollo të dhënat dhe provo përsëri.":"Check the details and try again.");
         return;
       }

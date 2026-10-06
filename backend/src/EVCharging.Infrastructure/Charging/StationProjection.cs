@@ -21,6 +21,10 @@ public sealed class StationProjection(ChargingDbContext db, TimeProvider clock)
         var connectors = await db
             .ChargingConnectors.Where(x => x.StationId == stationId)
             .ToListAsync(ct);
+        connectors = connectors
+            .Concat(db.ChargingConnectors.Local.Where(x => x.StationId == stationId))
+            .DistinctBy(x => x.Id)
+            .ToList();
         var sessions = await db
             .ChargingSessions.Where(x => x.PointId == stationId && x.EndedAt == null)
             .ToListAsync(ct);

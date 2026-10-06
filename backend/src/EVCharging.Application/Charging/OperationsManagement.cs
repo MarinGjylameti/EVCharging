@@ -76,6 +76,8 @@ public sealed record DeviceConnectionDetails(DeviceDto Device, string WebSocketP
 
 public sealed record DeviceControlInput(long Version, bool Enabled);
 
+public sealed record DeviceIdentityInput(long Version, string Identity);
+
 public sealed record DeviceDriverInput(long Version, Guid? DriverId, string? CardInput);
 
 public sealed record SessionFilter(
@@ -213,6 +215,12 @@ public interface IOperationsManagement
         Guid actorId,
         Guid stationId,
         DeviceDriverInput input,
+        CancellationToken ct
+    );
+    Task<DeviceDto> UpdateDeviceIdentityAsync(
+        Guid actorId,
+        Guid stationId,
+        DeviceIdentityInput input,
         CancellationToken ct
     );
     Task<OperationsSummary> SummaryAsync(Guid actorId, CancellationToken ct);

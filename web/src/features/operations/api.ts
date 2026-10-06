@@ -13,6 +13,8 @@ export async function mutate<T>(resource:string,operation:string,input:unknown,i
 export function failure(error:unknown,sq:boolean):string {
   const code=error instanceof Error?error.message:"request_failed";
   const messages:Record<string,[string,string]>={
+    invalid_device_identity:["Shkruaj Charge Point ID të plotë: 2–40 shkronja, numra, _ ose -.","Enter the complete Charge Point ID: 2–40 letters, digits, _ or -."],
+    invalid_log_filter:["Zgjidh OCPP ose HTTP dhe një ID deri në 40 karaktere.","Choose OCPP or HTTP and an ID up to 40 characters."],
     invalid_card_input:["Shkruaj kodin e kartës (1–20 karaktere) ose JSON të vlefshëm me idTag tekst.","Enter the card code (1–20 characters) or valid JSON with a string idTag."],
     driver_required:["Zgjidh përdoruesin që ka këtë kartë.","Choose the account that owns this card."],
     invalid_driver:["Zgjidh një llogari Driver aktive.","Choose an active Driver account."],

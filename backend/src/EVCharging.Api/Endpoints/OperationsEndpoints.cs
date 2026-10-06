@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using EVCharging.Api.Security;
 using EVCharging.Application.Charging;
+using EVCharging.Application.Common;
 
 namespace EVCharging.Api.Endpoints;
 
@@ -9,6 +10,29 @@ public static class OperationsEndpoints
     public static void MapOperationsEndpoints(this WebApplication app)
     {
         var ops = app.MapGroup("/api/v1/admin").RequireAuthorization("Operator");
+        ops.MapGet(
+                "/logs",
+                (string? source, string? identity, IApplicationDiagnostics diagnostics) =>
+                {
+                    if (
+                        source is not (null or "OCPP" or "HTTP")
+                        || identity?.Length > 40
+                        || identity?.Any(char.IsControl) == true
+                    )
+                        throw new RequestFailure(
+                            400,
+                            "invalid_log_filter",
+                            "Choose OCPP or HTTP and an identity up to 40 characters."
+                        );
+                    return Results.Ok(
+                        diagnostics.Read(
+                            source,
+                            string.IsNullOrWhiteSpace(identity) ? null : identity
+                        )
+                    );
+                }
+            )
+            .RequireAuthorization("Superadmin");
         ops.MapGet(
             "/locations",
             async (ClaimsPrincipal u, IOperationsManagement s, CancellationToken ct) =>
@@ -170,6 +194,16 @@ public static class OperationsEndpoints
                 context.Response.Headers.CacheControl = "no-store";
                 return Results.Ok(await s.ControlDeviceAsync(u.UserId(), id, input, ct));
             }
+        );
+        ops.MapPut(
+            "/stations/{id:guid}/device/identity",
+            async (
+                Guid id,
+                DeviceIdentityInput input,
+                ClaimsPrincipal u,
+                IOperationsManagement s,
+                CancellationToken ct
+            ) => Results.Ok(await s.UpdateDeviceIdentityAsync(u.UserId(), id, input, ct))
         );
         ops.MapPut(
                 "/stations/{id:guid}/device/driver",

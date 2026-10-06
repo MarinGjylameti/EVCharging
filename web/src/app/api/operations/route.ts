@@ -16,6 +16,12 @@ async function proxy(path:string, init:RequestInit = {}) {
 export async function GET(request:Request) {
   const params = new URL(request.url).searchParams;
   const resource = params.get("resource") ?? "";
+  if(resource === "logs") {
+    const source=params.get("source"),identity=params.get("identity");
+    if(source!==null&&!['OCPP','HTTP'].includes(source) || identity!==null&&(identity.length>40||/[\x00-\x1f\x7f]/.test(identity))) return NextResponse.json({code:"invalid_log_filter"},{status:400});
+    const query=new URLSearchParams();if(source)query.set("source",source);if(identity)query.set("identity",identity);
+    return proxy(`/admin/logs?${query}`,{signal:request.signal});
+  }
   if(resource === "device") {
     const id=params.get("id");
     if(!id || !guid.test(id)) return NextResponse.json({code:"invalid_resource"},{status:400});
@@ -41,9 +47,10 @@ export async function POST(request:Request) {
   if(!input || typeof input!=="object" || Array.isArray(input)) return NextResponse.json({code:"invalid_body"},{status:400});
   const validId=typeof id==="string"&&guid.test(id);
   let path:string; let method="POST";
-  if(resource==="device" && validId && (operation==="provision"||operation==="control"||operation==="assignDriver")) {
+  if(resource==="device" && validId && (operation==="provision"||operation==="control"||operation==="assignDriver"||operation==="updateIdentity")) {
     path=`/admin/stations/${id}/device`; if(operation==="control") method="PATCH";
     if(operation==="assignDriver") {path+="/driver";method="PUT";}
+    if(operation==="updateIdentity") {path+="/identity";method="PUT";}
   } else if((resource==="locations"||resource==="administrators") && (operation==="create" || validId&&(operation==="update"||operation==="archive"))) {
     path=`/admin/${resource}${operation==="create"?"":`/${id}`}${operation==="archive"?"/archive":""}`;
     if(operation==="update") method="PATCH";
