@@ -129,8 +129,7 @@ public sealed partial class PostgreSqlChargingTests
             await using var test = await DatabaseTest.CreateAsync(async db =>
             {
                 await SeedLegacyAsync(db, [driver, other], session, waitingStation);
-                db.ChargingConnectionRequests.Add(waiting);
-                await db.SaveChangesAsync();
+                await db.Database.ExecuteSqlInterpolatedAsync(LegacyMigrationSeed.Claim(waiting));
             });
             await using var db = test.Context();
             var claim = await db.ChargingConnectionRequests.SingleAsync();
@@ -161,8 +160,7 @@ public sealed partial class PostgreSqlChargingTests
         await using var test = await DatabaseTest.CreateAsync(async db =>
         {
             await SeedLegacyAsync(db, [driver], active, stopped);
-            db.ChargingConnectionRequests.Add(expired);
-            await db.SaveChangesAsync();
+            await db.Database.ExecuteSqlInterpolatedAsync(LegacyMigrationSeed.Claim(expired));
         });
         await using var db = test.Context();
         Assert.Equal(
@@ -287,16 +285,17 @@ public sealed partial class PostgreSqlChargingTests
                 PayloadHash = "test",
                 ReceivedAt = legacy.Received,
             };
-            db.Stations.Add(station);
+            await db.Database.ExecuteSqlInterpolatedAsync(LegacyMigrationSeed.Station(station));
             await db.Database.ExecuteSqlInterpolatedAsync(
                 $"""
                 INSERT INTO ocpp_charge_points (id, identity, protocol_version, is_enabled)
                 VALUES ({device.Id}, {device.Identity}, '1.6J', true);
                 """
             );
-            db.OcppConnections.Add(connection);
-            db.OcppInboundMessages.Add(message);
-            await db.SaveChangesAsync();
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                LegacyMigrationSeed.Connection(connection)
+            );
+            await db.Database.ExecuteSqlInterpolatedAsync(LegacyMigrationSeed.Message(message));
             DateTimeOffset? stopped = legacy.Completed ? legacy.Started.AddMinutes(20) : null;
             var state = legacy.Completed ? "Stopped" : "Active";
             await db.Database.ExecuteSqlInterpolatedAsync(
@@ -311,35 +310,38 @@ public sealed partial class PostgreSqlChargingTests
                 """
             );
             if (legacy.ClaimOwner is { } owner)
-                db.ChargingConnectionRequests.Add(
-                    new ChargingConnectionRequest
-                    {
-                        Id = legacy.ClaimId,
-                        DriverId = owner,
-                        StationId = station.Id,
-                        State = "Linked",
-                        CreatedAt = legacy.Received,
-                        ExpiresAt = legacy.Received.AddMinutes(30),
-                        LinkedAt = legacy.Received.AddMinutes(1),
-                        SessionId = legacy.Id,
-                    }
+                await db.Database.ExecuteSqlInterpolatedAsync(
+                    LegacyMigrationSeed.Claim(
+                        new ChargingConnectionRequest
+                        {
+                            Id = legacy.ClaimId,
+                            DriverId = owner,
+                            StationId = station.Id,
+                            State = "Linked",
+                            CreatedAt = legacy.Received,
+                            ExpiresAt = legacy.Received.AddMinutes(30),
+                            LinkedAt = legacy.Received.AddMinutes(1),
+                            SessionId = legacy.Id,
+                        }
+                    )
                 );
             if (stopped is { } ended && legacy.DriverId is { } driver)
-                db.ChargingHistory.Add(
-                    new ChargingHistory
-                    {
-                        DriverId = driver,
-                        StationId = station.Id,
-                        StartedAt = legacy.Started,
-                        EndedAt = ended,
-                        EnergyKWh = 2,
-                        UnitPriceSnapshot = .35m,
-                        TotalCost = .70m,
-                        Currency = "EUR",
-                        IsDemo = legacy.IsDemo,
-                    }
+                await db.Database.ExecuteSqlInterpolatedAsync(
+                    LegacyMigrationSeed.History(
+                        new ChargingHistory
+                        {
+                            DriverId = driver,
+                            StationId = station.Id,
+                            StartedAt = legacy.Started,
+                            EndedAt = ended,
+                            EnergyKWh = 2,
+                            UnitPriceSnapshot = .35m,
+                            TotalCost = .70m,
+                            Currency = "EUR",
+                            IsDemo = legacy.IsDemo,
+                        }
+                    )
                 );
-            await db.SaveChangesAsync();
         }
     }
 }

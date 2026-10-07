@@ -72,7 +72,7 @@ public sealed partial class PostgreSqlChargingTests
                 ReceivedAt = received,
             };
             await InsertLegacyAccountsAsync(db, [driver]);
-            db.Stations.Add(station);
+            await db.Database.ExecuteSqlInterpolatedAsync(LegacyMigrationSeed.Station(station));
             // Seed the old schema without columns introduced by later migrations.
             await db.Database.ExecuteSqlInterpolatedAsync(
                 $"""
@@ -80,9 +80,10 @@ public sealed partial class PostgreSqlChargingTests
                 VALUES ({device.Id}, {device.Identity}, '1.6J', true);
                 """
             );
-            db.OcppConnections.Add(connection);
-            db.OcppInboundMessages.Add(message);
-            await db.SaveChangesAsync();
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                LegacyMigrationSeed.Connection(connection)
+            );
+            await db.Database.ExecuteSqlInterpolatedAsync(LegacyMigrationSeed.Message(message));
             await db.Database.ExecuteSqlInterpolatedAsync(
                 $"""
                 INSERT INTO ocpp_connectors (id, charge_point_id, connector_number, station_id, reported_status, version)
@@ -336,15 +337,7 @@ public sealed partial class PostgreSqlChargingTests
     private static async Task InsertLegacyAccountsAsync(ChargingDbContext db, Account[] accounts)
     {
         foreach (var account in accounts)
-            await db.Database.ExecuteSqlInterpolatedAsync(
-                $"""
-                INSERT INTO accounts (id, email, normalized_email, password_hash, first_name, last_name,
-                    role, language, push_enabled, is_active, version, created_at)
-                VALUES ({account.Id}, {account.Email}, {account.NormalizedEmail}, {account.PasswordHash},
-                    {account.FirstName}, {account.LastName}, {account.Role.ToString()}, {account.Language.ToString()},
-                    {account.PushEnabled}, {account.IsActive}, {account.Version}, {account.CreatedAt});
-                """
-            );
+            await db.Database.ExecuteSqlInterpolatedAsync(LegacyMigrationSeed.Account(account));
     }
 
     [PostgreSqlFact]
