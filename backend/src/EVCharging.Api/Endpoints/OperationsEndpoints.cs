@@ -121,6 +121,26 @@ public static class OperationsEndpoints
                 Results.Ok(await s.SummaryAsync(u.UserId(), ct))
         );
         ops.MapGet(
+            "/analytics",
+            async (
+                string? period,
+                DateOnly? date,
+                DateOnly? from,
+                DateOnly? until,
+                string? timeZone,
+                ClaimsPrincipal u,
+                IOperationsManagement s,
+                CancellationToken ct
+            ) =>
+                Results.Ok(
+                    await s.AnalyticsAsync(
+                        u.UserId(),
+                        new(period ?? "Daily", date, from, until, timeZone ?? "Europe/Tirane"),
+                        ct
+                    )
+                )
+        );
+        ops.MapGet(
             "/sessions",
             async (
                 Guid? stationId,

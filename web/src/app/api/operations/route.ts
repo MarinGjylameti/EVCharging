@@ -16,6 +16,18 @@ async function proxy(path:string, init:RequestInit = {}) {
 export async function GET(request:Request) {
   const params = new URL(request.url).searchParams;
   const resource = params.get("resource") ?? "";
+  if(resource === "analytics") {
+    const query = new URLSearchParams();
+    for(const key of ["period","date","from","until","timeZone"]) {
+      const value = params.get(key); if(value===null) continue;
+      if(value.length>100 || /[\x00-\x1f\x7f]/.test(value)
+        || key==="period" && !["Daily","Weekly","Monthly","Custom"].includes(value)
+        || ["date","from","until"].includes(key) && !/^\d{4}-\d{2}-\d{2}$/.test(value))
+        return NextResponse.json({code:"invalid_analytics_filter"},{status:400});
+      query.set(key,value);
+    }
+    return proxy(`/admin/analytics?${query}`,{signal:request.signal});
+  }
   if(resource === "logs") {
     const source=params.get("source"),identity=params.get("identity");
     if(source!==null&&!['OCPP','HTTP','Worker','System'].includes(source) || identity!==null&&(identity.length>40||/[\x00-\x1f\x7f]/.test(identity))) return NextResponse.json({code:"invalid_log_filter"},{status:400});

@@ -224,6 +224,11 @@ public interface IOperationsManagement
         CancellationToken ct
     );
     Task<OperationsSummary> SummaryAsync(Guid actorId, CancellationToken ct);
+    Task<OperationsAnalytics> AnalyticsAsync(
+        Guid actorId,
+        AnalyticsFilter filter,
+        CancellationToken ct
+    );
     Task<SessionPage> SessionsAsync(Guid actorId, SessionFilter filter, CancellationToken ct);
     Task<IReadOnlyList<AuditDto>> AuditAsync(Guid actorId, Guid? stationId, CancellationToken ct);
     Task<IReadOnlyList<PriceRevisionDto>> PricesAsync(

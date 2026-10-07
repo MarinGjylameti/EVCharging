@@ -17,7 +17,8 @@ public sealed class ApiFactory(
     bool simulator = false,
     bool anonymousSimulators = false,
     string? postgresConnection = null,
-    SaveChangesInterceptor? saveInterceptor = null
+    SaveChangesInterceptor? saveInterceptor = null,
+    TimeProvider? clock = null
 ) : WebApplicationFactory<Program>
 {
     private readonly string database = Guid.NewGuid().ToString();
@@ -34,6 +35,11 @@ public sealed class ApiFactory(
         );
         builder.ConfigureServices(services =>
         {
+            if (clock is not null)
+            {
+                services.RemoveAll<TimeProvider>();
+                services.AddSingleton(clock);
+            }
             services.AddDataProtection().UseEphemeralDataProtectionProvider();
             if (simulator)
             {

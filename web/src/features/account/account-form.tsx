@@ -11,6 +11,7 @@ export function AccountForm({ initial, children }: { initial: User; children?: R
   const [error, setError] = useState("");
   const router = useRouter();
   const sq = user.language === "sq";
+  const isDriver = user.role === "DRIVER";
   useEffect(() => { setUser(initial); }, [initial]);
   async function send(action: string, payload: object) {
     setBusy(action); setError(""); setMessage("");
@@ -38,9 +39,15 @@ export function AccountForm({ initial, children }: { initial: User; children?: R
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const capacity = String(data.get("batteryCapacityKWh") ?? "").trim();
-    void send("profile", {firstName:data.get("firstName"),lastName:data.get("lastName"),phone:data.get("phone"),
+    const vehicle = isDriver ? {
       vehicleMake:data.get("vehicleMake"),vehicleModel:data.get("vehicleModel"),batteryType:data.get("batteryType"),
-      batteryCapacityKWh:capacity === "" ? null : Number(capacity),version:user.version});
+      batteryCapacityKWh:capacity === "" ? null : Number(capacity),
+    } : {
+      vehicleMake:user.vehicleMake,vehicleModel:user.vehicleModel,batteryType:user.batteryType,
+      batteryCapacityKWh:user.batteryCapacityKWh,
+    };
+    void send("profile", {firstName:data.get("firstName"),lastName:data.get("lastName"),phone:data.get("phone"),
+      ...vehicle,version:user.version});
   }
   function password(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -62,7 +69,7 @@ export function AccountForm({ initial, children }: { initial: User; children?: R
         <label>Email<input type="email" readOnly value={user.email}/></label>
         <label>{sq ? "Telefoni" : "Phone"}<input name="phone" type="tel" autoComplete="tel" maxLength={32} defaultValue={user.phone ?? ""}/></label>
       </div>
-      <h3>{sq ? "Makina jote" : "Your vehicle"}</h3>
+      {isDriver && <><h3>{sq ? "Makina jote" : "Your vehicle"}</h3>
       <div className="field-grid">
         <label>{sq ? "Marka" : "Make"}<input name="vehicleMake" maxLength={80} defaultValue={user.vehicleMake ?? ""}/></label>
         <label>{sq ? "Modeli" : "Model"}<input name="vehicleModel" maxLength={80} defaultValue={user.vehicleModel ?? ""}/></label>
@@ -71,7 +78,7 @@ export function AccountForm({ initial, children }: { initial: User; children?: R
           <input id="battery-capacity" name="batteryCapacityKWh" type="number" inputMode="decimal" min="0.01" max="1000" step="0.01" defaultValue={user.batteryCapacityKWh ?? ""} aria-describedby="battery-capacity-help"/>
         </label>
       </div>
-      <p id="battery-capacity-help">{sq ? "Fushë opsionale. Vendos kapacitetin e përdorshëm nga specifikimet e makinës. E përdorim me përqindjen dhe fuqinë e raportuar për të vlerësuar kohën deri në 100%." : "Optional. Enter the usable capacity from your vehicle specifications. We use it with reported battery percentage and power to estimate the time to 100%."}</p>
+      <p id="battery-capacity-help">{sq ? "Fushë opsionale. Vendos kapacitetin e përdorshëm nga specifikimet e makinës. E përdorim me përqindjen dhe fuqinë e raportuar për të vlerësuar kohën deri në 100%." : "Optional. Enter the usable capacity from your vehicle specifications. We use it with reported battery percentage and power to estimate the time to 100%."}</p></>}
       <button className="button-primary">{busy === "profile" ? (sq ? "Duke ruajtur…" : "Saving…") : (sq ? "Ruaj profilin" : "Save profile")}</button></fieldset>
     </form>
     {children}

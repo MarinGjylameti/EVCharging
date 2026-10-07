@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { loadTypescript } from "./helpers/load-typescript.mjs";
+import { analyticsDependencies, analyticsFixture } from "./helpers/analytics.mjs";
 
 const id="14eedf70-4774-4b4d-808e-8f91dbbc13ce";
 function bff(t,token="private-session"){
@@ -48,7 +49,7 @@ test("an anonymous operations SSE subscriber cannot contact the backend",async t
   assert.equal((await route.GET(new Request("https://web.example.test/api/operations/events"))).status,401);
 });
 function component(name,dependencies={}){
-  return loadTypescript(new URL("../src/features/operations/"+name+".tsx",import.meta.url),{react:{...React,useEffect:()=>{},useState:initial=>[initial,()=>{}]},"./api":{},"./use-operations-live":{useOperationsLive:()=>true},"./device-driver-form":{DeviceDriverForm:()=>null},...dependencies});
+  return loadTypescript(new URL("../src/features/operations/"+name+".tsx",import.meta.url),{react:{...React,useEffect:()=>{},useState:initial=>[initial,()=>{}]},"./api":{},"./use-operations-live":{useOperationsLive:()=>true},"./device-driver-form":{DeviceDriverForm:()=>null},...analyticsDependencies,...dependencies});
 }
 test("administrator form exposes contact data, initial password and separate location and station grants",()=>{
   const {AdministratorsManager}=component("administrators-manager");
@@ -85,9 +86,9 @@ test("physical charger panel provides only the URL and toggles access without cr
 });
 test("operations dashboard shows all statuses and only Superadmin sees global account counts",()=>{
   const {OperationsOverview}=component("operations-overview",{"next/link":{default:({href,children,...props})=>React.createElement("a",{href,...props},children)}});
-  const initial={stations:3,locations:1,administrators:2,drivers:4,statusCounts:{Available:1,Occupied:0,Charging:1,OutOfService:1,Maintenance:0,Unknown:0},activeSessions:1,completedSessions:2,energyKWh:4,calculatedCost:1.4,currency:"EUR"};
+  const initial=analyticsFixture();
   const view=superadmin=>renderToStaticMarkup(React.createElement(OperationsOverview,{initial,language:"en",superadmin}));
-  for(const label of ["Out of service","Maintenance","Unknown","Active sessions","Completed sessions","4.000 kWh","1.40 EUR"])assert.ok(view(true).includes(label));
+  for(const label of ["Out of service","Maintenance","Unknown","Active sessions now","Completed sessions","4.000","1.40 EUR","Daily","Weekly","Monthly","Custom"])assert.ok(view(true).includes(label));
   assert.match(view(true),/Active administrators/);assert.doesNotMatch(view(false),/Active administrators/);assert.doesNotMatch(view(false),/Active drivers/);
 });
 test("session filters convert local date fields to explicit UTC and preserve names and identifiers",()=>{
