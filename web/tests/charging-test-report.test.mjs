@@ -4,7 +4,7 @@ import { loadTypescript } from "./helpers/load-typescript.mjs";
 
 const compile = path => loadTypescript(new URL(path, import.meta.url));
 const { SimulatorTestJournal, createChargingTestReport, reportSimulatorConfig } = compile("../src/features/driver/charging-test-report.ts");
-const { prepareSimulatorAccount, SimulatorAccountError } = compile("../src/features/driver/simulator-account.ts");
+const { prepareSimulatorAccount, SimulatorAccountError, simulatorAccountFailureMessage } = compile("../src/features/driver/simulator-account.ts");
 const station = { id: "station-one", code: "SIM-001", status: "Charging", version: 12 };
 const entry = (action, detail, direction = "OUT") => ({ at: "2026-10-03T14:00:00Z", direction, action, detail: JSON.stringify(detail) });
 
@@ -72,10 +72,27 @@ test("unchecked ownership cancels only the caller's waiting association before s
 
 test("association failures and mismatched responses prevent starting under the wrong account", async () => {
   for (const status of [401, 409]) {
-    await assert.rejects(() => prepareSimulatorAccount(station.id, true, async () => ({ ok: false, status, json: async () => ({ code: "charger_in_use" }) })),
-      error => error instanceof SimulatorAccountError && error.status === status && error.code === "charger_in_use");
+    await assert.rejects(() => prepareSimulatorAccount(station.id, true, async () => ({ ok: false, status, json: async () => ({ code: "charger_in_use", traceId: "0HNP4IL3JL3NT:00000001" }) })),
+      error => error instanceof SimulatorAccountError && error.status === status && error.code === "charger_in_use"
+        && error.traceId === "0HNP4IL3JL3NT:00000001");
   }
   await assert.rejects(() => prepareSimulatorAccount(station.id, false, async () => ({ ok: true, json: async () => ({ station: { id: "other" } }) })), /Invalid charging association response/);
+});
+
+test("association diagnostics distinguish a busy charger, another claim, expired login and service failure", () => {
+  const busy = simulatorAccountFailureMessage(new SimulatorAccountError(409, "charger_in_use"), "en");
+  assert.match(busy, /waiting request.*HTTP 409 · charger_in_use/);
+  assert.match(simulatorAccountFailureMessage(new SimulatorAccountError(409, "driver_already_connected"), "sq"), /pikë tjetër.*driver_already_connected/);
+  assert.match(simulatorAccountFailureMessage(new SimulatorAccountError(401, "unauthorized"), "en"), /expired.*HTTP 401/);
+  assert.match(simulatorAccountFailureMessage(new SimulatorAccountError(403, "invalid_origin"), "en"), /web configuration.*invalid_origin/);
+  assert.match(simulatorAccountFailureMessage(new SimulatorAccountError(403, "test_connection_unavailable"), "en"), /Demo association is not enabled.*test environment/);
+  for (const failure of [new SimulatorAccountError(503, "service_unavailable"), new Error("private transport detail")]) {
+    const message = simulatorAccountFailureMessage(failure, "en");
+    assert.doesNotMatch(message, /active transaction|private transport detail/);
+    assert.match(message, /service/i);
+  }
+  assert.doesNotMatch(simulatorAccountFailureMessage(new SimulatorAccountError(502, "secret: token"), "en"), /secret|token/);
+  assert.equal(new SimulatorAccountError(502, null, "token=private-secret").traceId, null);
 });
 
 test("another driver's public snapshot cannot export stale private summary fields", () => {

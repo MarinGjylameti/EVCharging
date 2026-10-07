@@ -59,6 +59,19 @@ public sealed partial class OperationsManagementTests
             new { connectorId = "private-invalid-value", transactionId }
         );
         Assert.Equal(4, rejected[0].GetInt32());
+        var conflictingStart = await CallAsync(
+            socket,
+            "StartTransaction",
+            new
+            {
+                connectorId = 1,
+                idTag = "CARD-001",
+                meterStart = 2000,
+                timestamp = started.AddSeconds(1),
+            }
+        );
+        Assert.Equal(4, conflictingStart[0].GetInt32());
+        Assert.Equal("OccurrenceConstraintViolation", conflictingStart[2].GetString());
         var stopped = await CallAsync(
             socket,
             "StopTransaction",
@@ -115,6 +128,25 @@ public sealed partial class OperationsManagementTests
                 && x.Context.EventName == "message_rejected"
                 && x.Context.InboxMessageId is not null
         );
+        var conflict = Assert.Single(
+            logs,
+            x =>
+                x.Context is { } context
+                && context.MessageId == conflictingStart[1].GetString()
+                && context.EventName == "message_rejected"
+        );
+        Assert.Equal(session.Id, conflict.Context!.SessionId);
+        Assert.Equal(station.Id, conflict.Context.StationId);
+        Assert.Equal(session.ConnectorId, conflict.Context.ConnectorId);
+        Assert.Equal(1, conflict.Context.ConnectorNumber);
+        Assert.Contains($"active transaction {transactionId}", conflict.Message);
+        Assert.Contains("Send StopTransaction", conflict.Message);
+        var conflictInbox = await db.OcppInboundMessages.SingleAsync(x =>
+            x.Id == conflict.Context.InboxMessageId
+        );
+        Assert.Equal(conflictingStart[1].GetString(), conflictInbox.CallId);
+        Assert.Equal("Rejected", conflictInbox.ProcessingState);
+        Assert.Equal(1, await db.ChargingSessions.CountAsync());
         Assert.DoesNotContain(
             logs,
             x => x.Message.Contains("CARD-001") || x.Message.Contains("private-invalid-value")

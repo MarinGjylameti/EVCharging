@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Language, Station, StationCharging } from "../../../../contracts/account";
 import { AutomaticSimulator, simulatorErrors, simulatorStopReasons, type SimulatorLog, type SimulatorState } from "./automatic-simulator";
 import { createChargingTestReport, downloadChargingTestReport, reportSimulatorConfig, SimulatorTestJournal } from "./charging-test-report";
-import { prepareSimulatorAccount, SimulatorAccountError } from "./simulator-account";
+import { prepareSimulatorAccount, SimulatorAccountError, simulatorAccountFailureMessage } from "./simulator-account";
 
 export function AutomaticSimulatorPanel({ stations, selected, socketBase, capacityKWh, language }: {
   stations: Station[]; selected: string; socketBase: string; capacityKWh: number | null; language: Language;
@@ -85,10 +85,14 @@ export function AutomaticSimulatorPanel({ stations, selected, socketBase, capaci
     let view: StationCharging;
     try { view = await prepareSimulatorAccount(station.id, own); }
     catch (failure) {
-      if (failure instanceof SimulatorAccountError && failure.status === 401) { window.location.assign("/"); throw failure; }
-      throw new Error(failure instanceof SimulatorAccountError && failure.code === "driver_already_connected"
-        ? (sq ? "Përfundo karikimin në pikën tjetër përpara se të nisësh këtë." : "Finish the charge at the other station first.")
-        : (sq ? "Lidhja e llogarisë nuk u konfirmua; pika mund të ketë një karikim aktiv. Nuk u ndryshua pronari i tij." : "Account association failed; the charger may already have an active charge. Its owner was not changed."));
+      const message = simulatorAccountFailureMessage(failure, language);
+      record({ at: new Date().toISOString(), direction: "SYS", action: "AccountAssociationFailed",
+        detail: JSON.stringify({ stationId: station.id, stationCode: station.code, mode: own ? "own" : "other-user", message,
+          httpStatus: failure instanceof SimulatorAccountError ? failure.status : null,
+          code: failure instanceof SimulatorAccountError ? failure.code : "association_not_confirmed",
+          traceId: failure instanceof SimulatorAccountError ? failure.traceId : null }) });
+      if (failure instanceof SimulatorAccountError && failure.status === 401) window.location.assign("/");
+      throw new Error(message);
     }
     record({ at: new Date().toISOString(), direction: "SYS", action: "AccountAssociation",
       detail: JSON.stringify({ mode: own ? "own" : "other-user", waiting: view.connectionRequest !== null, inUse: view.inUse }) });

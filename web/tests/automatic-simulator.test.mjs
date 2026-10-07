@@ -133,10 +133,18 @@ test("faults freeze energy, recovery reports Charging and a socket reconnect pre
   assert.equal(s.engine.snapshot.status, "Faulted");
   await s.engine.resume(); s.engine.disconnect(); await s.flush();
   assert.equal(s.engine.snapshot.transactionId, 83);
+  assert.match(s.logs.findLast(log => log.action === "Disconnected").detail, /transaction 83 has no confirmed StopTransaction/);
   await s.engine.connect(); assert.equal(s.engine.snapshot.status, "Paused");
   await s.engine.resume(); await s.advance(5_000); await s.engine.stop();
   assert.equal(s.calls.filter(frame => frame[2] === "StartTransaction").length, 1);
   assert.equal(s.calls.find(frame => frame[2] === "StopTransaction")[3].transactionId, 83);
+});
+test("disconnecting before a start does not claim a transaction exists on the server", async t => {
+  const s = setup(t); await s.engine.connect();
+  s.engine.disconnect(); await s.flush();
+  assert.equal(s.engine.snapshot.transactionId, null);
+  assert.match(s.logs.findLast(log => log.action === "Disconnected").detail, /no active transaction is tracked.*Server state was not checked/);
+  assert.ok(!s.calls.some(frame => ["StartTransaction", "StopTransaction"].includes(frame[2])));
 });
 test("a rejected start never emits measurements, StopTransaction or Charging", async t => {
   const s = setup(t, {}, call => call[2] === "StartTransaction" ? [4, call[1], "OccurrenceConstraintViolation", "Active transaction exists", {}] : undefined);

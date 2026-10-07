@@ -1,0 +1,10 @@
+{
+  "name": "evcharging-optional-e2e",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "devDependencies": {
+    "@playwright/test": "^1.41.2",
+    "ws": "^8.18.0"
+  }
+}

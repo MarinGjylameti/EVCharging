@@ -29,3 +29,13 @@ Before accepting the staging run, connect the existing public simulator with its
 Health code remains unchanged: `/health/live` checks the process; `/health/ready` checks required database connectivity and returns 503 without dependency details on failure. Local tests verify healthy responses; actual database outage and hosted HTTPS/CORS behavior still require staging. Existing bounded history/session/log queries and server-side analytics aggregation were retained; no SQL performance or production availability claim is made from in-memory tests.
 
 No commit or push was performed.
+
+## Account association and duplicate-start diagnostics
+
+The supplied 7 October log export contains only 200 displayed OCPP entries. It shows completed stops for SIM-001/SIM-002, a duplicate physical start rejected for SIM-010, and only a completed HTTP 101 WebSocket upgrade for SIM-007. It excludes the Driver's HTTP account-association rejection and is not sufficient to establish that SIM-007 had an active transaction.
+
+- Simulator disconnect logs now distinguish a tracked transaction without a confirmed stop from an unverified server state when the simulator has no transaction ID. A socket close or `Available` notification does not prove a physical stop.
+- Association failures expose the HTTP status and safe application error code. The test journal also retains station ID/code, account mode and the backend Trace ID when returned. Busy charger/other waiting owner, another Driver claim, expired login, disabled demo association, forbidden origin and unavailable service are distinguished without changing claim/ownership rules.
+- Rejected OCPP diagnostics include the controlled protocol reason. A duplicate `StartTransaction` retains the existing physical session/station/connector correlation across rollback and associates it with the rejected inbox message; it does not create a session or stop the existing transaction.
+
+For missing association evidence, use saved log history with source **HTTP**, clear the charge-point identity filter, and select the failure's time range. Correlate `API rejection` and request completion by Trace ID. Export the relevant pages; the JSON export includes only the displayed page. For charger faults, separately select **OCPP** and the exact device identity. Do not infer ownership or transaction state from WebSocket admission alone.

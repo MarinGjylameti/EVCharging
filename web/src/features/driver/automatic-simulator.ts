@@ -112,7 +112,9 @@ export class AutomaticSimulator {
           if (this.socket === socket) this.socket = null;
           this.state.connected = false; this.state.powerKW = 0;
           if (this.state.transactionId !== null) this.state.status = "Paused";
-          this.publish(); this.log("SYS", "Disconnected", "Connection closed; an active transaction remains open on the server.");
+          this.publish(); this.log("SYS", "Disconnected", this.state.transactionId === null
+            ? "Connection closed; no active transaction is tracked by this simulator. Server state was not checked."
+            : `Connection closed; transaction ${this.state.transactionId} has no confirmed StopTransaction.`);
         };
       });
       const boot = await this.call("BootNotification", { chargePointVendor: "EVCharging", chargePointModel: "AutomaticDemo", chargePointSerialNumber: this.config.stationCode, firmwareVersion: "1.0.0" });

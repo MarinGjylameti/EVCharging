@@ -39,6 +39,10 @@ export function HistoryChart({ history, language }: { history: ChargingHistory[]
         </select>}
       </div>
     </div>
+    <div className="history-chart-highlight">
+      <div><span>{monthLabel(selected.date, true)}</span><strong>{number(value(selected))} <small>{unit}</small></strong></div>
+      <p><span className="history-chart-key" data-metric={metric} aria-hidden="true" />{metric === "energy" ? (sq ? "Energjia e karikimeve të tua" : "Energy from your charges") : (sq ? "Kostoja e llogaritur e karikimeve" : "Calculated charging cost")}</p>
+    </div>
     <div className="history-chart-bars" data-metric={metric} role="group" aria-label={`${metric === "energy" ? (sq ? "Energjia mujore" : "Monthly energy") : (sq ? "Kostoja mujore" : "Monthly cost")} (${unit})`}>
       {months.map(item => <button type="button" key={item.key} className="history-chart-month"
         aria-pressed={item.key === selected.key} onClick={() => setSelectedKey(item.key)}
@@ -50,10 +54,10 @@ export function HistoryChart({ history, language }: { history: ChargingHistory[]
       </button>)}
     </div>
     <div className="history-chart-summary" aria-live="polite" aria-atomic="true">
-      <strong>{monthLabel(selected.date, true)}</strong>
-      <span>{selected.charges} <small>{sq ? "karikime" : "charges"}</small></span>
-      <span>{number(selected.energyKWh)} <small>kWh</small></span>
-      <span>{Object.entries(selected.costs).map(([code, total]) => `${number(total)} ${code}`).join(" · ") || `0 ${currency}`} <small>{sq ? "kosto e llogaritur" : "calculated cost"}</small></span>
+      <div><small>{sq ? "Muaji i zgjedhur" : "Selected month"}</small><strong>{monthLabel(selected.date, true)}</strong></div>
+      <div><small>{sq ? "Karikime të përfunduara" : "Completed charges"}</small><strong>{selected.charges}</strong></div>
+      <div><small>{sq ? "Energjia e marrë" : "Energy delivered"}</small><strong>{number(selected.energyKWh)} <span>kWh</span></strong></div>
+      <div><small>{sq ? "Kosto e llogaritur" : "Calculated cost"}</small><strong>{Object.entries(selected.costs).map(([code, total]) => `${number(total)} ${code}`).join(" · ") || `0 ${currency}`}</strong></div>
     </div>
     <p className="history-chart-note">{sq ? `Bazuar në ${history.length} karikimet e fundit të listuara, sipas datës së përfundimit.` : `Based on the ${history.length} recent charges listed, grouped by completion date.`}</p>
   </section>;

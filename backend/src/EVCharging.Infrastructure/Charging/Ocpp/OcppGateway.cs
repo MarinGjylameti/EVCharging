@@ -273,6 +273,18 @@ public sealed class OcppGateway(
         }
         catch (OcppFault fault)
         {
+            // A duplicate physical start refers to an already persisted charge.
+            // Capture its identifiers before rollback clears tracked entities;
+            // do not retain identifiers from other, uncommitted failed actions.
+            var conflictContext =
+                action == "StartTransaction"
+                && fault.Code == "OccurrenceConstraintViolation"
+                && db.OcppInboundMessages.Local.FirstOrDefault(x =>
+                    x.ConnectionId == connectionId && x.CallId == callId
+                )
+                    is { } attempted
+                    ? MessageContext(attempted, root[3])
+                    : null;
             if (transaction is not null)
             {
                 await transaction.RollbackAsync(ct);
@@ -307,13 +319,21 @@ public sealed class OcppGateway(
             if (transaction is not null)
                 await transaction.CommitAsync(ct);
             events.Notify();
-            using var rejectedContext = diagnostics.BeginScope(MessageContext(message, root[3]));
+            using var rejectedContext = diagnostics.BeginScope(
+                conflictContext is null
+                    ? MessageContext(message, root[3])
+                    : conflictContext with
+                    {
+                        InboxMessageId = message.Id,
+                    }
+            );
             logger.LogWarning(
                 new EventId(1103, "message_rejected"),
-                "OCPP action {Action} rejected for {Identity}: {FailureCode}. call={CallId}; connection={ConnectionId}.",
+                "OCPP action {Action} rejected for {Identity}: {FailureCode}. reason={FailureReason}; call={CallId}; connection={ConnectionId}.",
                 action,
                 chargePointIdentity,
                 fault.Code,
+                fault.Message,
                 callId,
                 connectionId
             );
