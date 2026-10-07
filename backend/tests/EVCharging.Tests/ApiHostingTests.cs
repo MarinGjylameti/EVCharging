@@ -72,6 +72,51 @@ public sealed class ApiHostingTests
         );
     }
 
+    [Theory]
+    [InlineData("Ocpp:SimulatorEnabled")]
+    [InlineData("Ocpp:AllowAnonymousSimulators")]
+    public void ProductionRefusesSimulatorAndAnonymousBypassFlags(string flag)
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["ConnectionStrings:Default"] = "Host=db;Database=evcharging",
+                    ["Cors:AllowedOrigins:0"] = "https://web.example.test",
+                    [flag] = "true",
+                }
+            )
+            .Build();
+        var failure = Assert.Throws<InvalidOperationException>(() =>
+            ApiRuntimeConfiguration.Load(configuration, new TestEnvironment())
+        );
+        Assert.Equal("OCPP simulator options are unavailable in Production.", failure.Message);
+    }
+
+    [Theory]
+    [InlineData("Development")]
+    [InlineData("Testing")]
+    [InlineData("Staging")]
+    public void NonProductionRetainsExplicitSimulatorConfiguration(string environment)
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["ConnectionStrings:Default"] = "Host=db;Database=evcharging",
+                    ["Ocpp:SimulatorEnabled"] = "true",
+                    ["Ocpp:AllowAnonymousSimulators"] = "true",
+                }
+            )
+            .Build();
+        Assert.NotNull(
+            ApiRuntimeConfiguration.Load(
+                configuration,
+                new TestEnvironment { EnvironmentName = environment }
+            )
+        );
+    }
+
     private sealed class TestEnvironment : IHostEnvironment
     {
         public string EnvironmentName { get; set; } = Environments.Production;

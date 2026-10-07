@@ -20,7 +20,8 @@ public sealed class OcppGateway(
     StationEventSignal events,
     TimeProvider clock,
     IOptions<OcppOptions> options,
-    ILogger<OcppGateway> logger
+    ILogger<OcppGateway> logger,
+    IApplicationDiagnostics diagnostics
 ) : IOcppGateway
 {
     public Task<bool> IsConnectionCurrentAsync(
@@ -219,6 +220,7 @@ public sealed class OcppGateway(
                 if (transaction is not null)
                     await transaction.CommitAsync(ct);
                 events.Notify();
+                using var replayContext = diagnostics.BeginScope(MessageContext(previous, root[3]));
                 logger.LogInformation(
                     new EventId(1101, "message_replayed"),
                     "OCPP action {Action} replayed for {Identity}; reusedCallId={Reused}; call={CallId}; connection={ConnectionId}.",
@@ -243,7 +245,9 @@ public sealed class OcppGateway(
             if (transaction is not null)
                 await transaction.CommitAsync(ct);
             events.Notify();
-            logger.LogInformation(
+            using var committedContext = diagnostics.BeginScope(MessageContext(message, root[3]));
+            logger.Log(
+                action == "MeterValues" ? LogLevel.Debug : LogLevel.Information,
                 new EventId(1102, "message_committed"),
                 "OCPP action {Action} processed and committed for {Identity}. call={CallId}; connection={ConnectionId}; elapsedMs={ElapsedMs}.",
                 action,
@@ -303,6 +307,7 @@ public sealed class OcppGateway(
             if (transaction is not null)
                 await transaction.CommitAsync(ct);
             events.Notify();
+            using var rejectedContext = diagnostics.BeginScope(MessageContext(message, root[3]));
             logger.LogWarning(
                 new EventId(1103, "message_rejected"),
                 "OCPP action {Action} rejected for {Identity}: {FailureCode}. call={CallId}; connection={ConnectionId}.",
@@ -349,6 +354,52 @@ public sealed class OcppGateway(
                 message.CommandVersion
             );
         return new(message.Action, true, null, null, message.ReceivedAt, message.CommandVersion);
+    }
+
+    // Correlate using entities already loaded while processing; logging adds no
+    // database reads to the metering path. Unknown identifiers remain unbound.
+    private ApplicationLogContext MessageContext(OcppInboundMessage message, JsonElement payload)
+    {
+        int? number =
+            payload.TryGetProperty("connectorId", out var connector)
+            && connector.ValueKind == JsonValueKind.Number
+            && connector.TryGetInt32(out var connectorNumber)
+            && connectorNumber > 0
+                ? connectorNumber
+                : null;
+        var hasTransaction = payload.TryGetProperty("transactionId", out var transaction);
+        int? transactionId =
+            hasTransaction
+            && transaction.ValueKind == JsonValueKind.Number
+            && transaction.TryGetInt32(out var id)
+                ? id
+                : null;
+        var charge = db.OcppChargingTransactions.Local.FirstOrDefault(x =>
+            x.ChargePointId == message.ChargePointId
+            && (
+                x.StartMessageId == message.Id
+                || x.StopMessageId == message.Id
+                || transactionId is not null && x.Ocpp16TransactionId == transactionId
+                || !hasTransaction
+                    && number is not null
+                    && x.ConnectorNumber == number
+                    && x.StoppedAt == null
+            )
+        );
+        number = charge?.ConnectorNumber ?? number;
+        var mapped = db.OcppConnectors.Local.FirstOrDefault(x =>
+            x.ChargePointId == message.ChargePointId && x.ConnectorNumber == number
+        );
+        var physicalSession = db.ChargingSessions.Local.FirstOrDefault(x =>
+            x.ConnectorId == mapped?.BusinessConnectorId && x.EndedAt == null
+        );
+        return new(
+            InboxMessageId: message.Id,
+            SessionId: charge?.SessionId ?? (!hasTransaction ? physicalSession?.Id : null),
+            StationId: charge?.StationId ?? mapped?.StationId,
+            ConnectorId: mapped?.BusinessConnectorId,
+            ConnectorNumber: number
+        );
     }
 
     private async Task StageCommandAsync(

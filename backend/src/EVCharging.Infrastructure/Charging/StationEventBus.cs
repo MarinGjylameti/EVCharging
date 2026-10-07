@@ -35,7 +35,8 @@ public sealed class StationEventBus : IStationEventStream
                                 EntityType: change.EntityType,
                                 EntityId: change.EntityId,
                                 EntityVersion: change.EntityVersion,
-                                OccurredAt: change.OccurredAt
+                                OccurredAt: change.OccurredAt,
+                                TelemetryOnly: change.TelemetryOnly
                             )
                             : change
                     )

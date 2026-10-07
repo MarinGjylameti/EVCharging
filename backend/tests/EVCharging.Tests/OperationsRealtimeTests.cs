@@ -12,6 +12,67 @@ namespace EVCharging.Tests;
 public sealed class OperationsRealtimeTests
 {
     [Fact]
+    public async Task ForecastOnlyUpdatesRemainPublicDeltasWithoutInvalidatingOperationsAnalytics()
+    {
+        await using var factory = new ApiFactory();
+        using var client = factory.CreateClient();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ChargingDbContext>();
+        var projection = scope.ServiceProvider.GetRequiredService<StationProjection>();
+        var now = DateTimeOffset.UtcNow;
+        var station = new EVCharging.Domain.Charging.ChargingStation
+        {
+            Code = "FORECAST",
+            Name = "Forecast",
+            City = "Tirane",
+            Address = "Street",
+            ConnectorCount = 1,
+        };
+        var connector = new EVCharging.Domain.Charging.ChargingConnector
+        {
+            StationId = station.Id,
+            Number = 1,
+            IsOnline = true,
+            Status = EVCharging.Domain.Charging.ChargingState.Charging,
+        };
+        var session = new EVCharging.Domain.Charging.ChargingSession
+        {
+            PointId = station.Id,
+            ConnectorId = connector.Id,
+            ConnectorNumber = 1,
+            StartedAt = now,
+            StartReceivedAt = now,
+            Status = EVCharging.Domain.Charging.ChargingState.Charging,
+            BatteryCapacityKWh = 60,
+            PowerKW = 22,
+            PowerScope = "Total",
+            StateOfCharge = 50,
+            PowerReceivedAt = now,
+            SocReceivedAt = now,
+        };
+        db.AddRange(station, connector, session);
+        await db.SaveChangesAsync();
+        async Task<StationChanged> ProjectAsync()
+        {
+            await projection.RefreshAsync(station.Id, CancellationToken.None);
+            await db.SaveChangesAsync();
+            var entry = await db.RealtimeOutbox.SingleAsync(x =>
+                x.EntityId == station.Id && x.EntityVersion == station.Version
+            );
+            return JsonSerializer.Deserialize<StationChanged>(entry.PayloadJson)!;
+        }
+        Assert.False((await ProjectAsync()).TelemetryOnly);
+        session.StateOfCharge = 55;
+        session.SocReceivedAt = now.AddSeconds(1);
+        var forecast = await ProjectAsync();
+        Assert.True(forecast.TelemetryOnly);
+        Assert.NotNull(forecast.Station);
+        Assert.Equal("StationChanged", forecast.EventType);
+        connector.Status = EVCharging.Domain.Charging.ChargingState.PausedByVehicle;
+        Assert.False((await ProjectAsync()).TelemetryOnly);
+    }
+
+    [Fact]
     public async Task OperationsBusDeliversChangeNoticesWithoutSendingPrivateSessionDataToOtherDrivers()
     {
         var bus = new StationEventBus();
@@ -33,7 +94,8 @@ public sealed class OperationsRealtimeTests
                 privateId,
                 "SessionMeasured",
                 "ChargingSession",
-                Guid.NewGuid()
+                Guid.NewGuid(),
+                TelemetryOnly: true
             )
         );
         Assert.True(await operatorNext);
@@ -41,6 +103,7 @@ public sealed class OperationsRealtimeTests
         Assert.Null(operations.Current.RecipientAccountId);
         Assert.Null(operations.Current.Session);
         Assert.Null(operations.Current.Command);
+        Assert.True(operations.Current.TelemetryOnly);
         bus.Publish(
             new(station, 4, "Changed", EventId: Guid.NewGuid(), EventType: "SessionMeasured"),
             operationsOnly: true
@@ -137,7 +200,8 @@ public sealed class OperationsRealtimeTests
                 "Changed",
                 Guid.NewGuid(),
                 EventId: Guid.NewGuid(),
-                EventType: "SessionMeasured"
+                EventType: "SessionMeasured",
+                TelemetryOnly: true
             )
         );
         string? data = null;
@@ -151,6 +215,7 @@ public sealed class OperationsRealtimeTests
         var notice = JsonDocument.Parse(data!).RootElement;
         Assert.Equal(allowed, notice.GetProperty("stationId").GetGuid());
         Assert.Equal("SessionMeasured", notice.GetProperty("eventType").GetString());
+        Assert.True(notice.GetProperty("telemetryOnly").GetBoolean());
         Assert.False(notice.TryGetProperty("session", out _));
         Assert.False(notice.TryGetProperty("recipientAccountId", out _));
         using (var scope = factory.Services.CreateScope())

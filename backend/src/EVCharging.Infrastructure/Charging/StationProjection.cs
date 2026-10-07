@@ -146,7 +146,8 @@ public sealed class StationProjection(ChargingDbContext db, TimeProvider clock)
             station.Id,
             station.Version,
             now,
-            station: ChargingRealtime.StationDto(station, now)
+            station: ChargingRealtime.StationDto(station, now),
+            telemetryOnly: !statusChanged
         );
     }
 

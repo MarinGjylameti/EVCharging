@@ -192,6 +192,25 @@ public sealed partial class OcppWebSocketTests
         await ClaimAsync(owner);
         var transactionId = await SimulatorStartAsync(socket, DateTimeOffset.UtcNow);
         await StatusAsync(socket, "Charging");
+        await CallAsync(
+            socket,
+            "MeterValues",
+            new
+            {
+                connectorId = 1,
+                transactionId,
+                meterValue = new[]
+                {
+                    new
+                    {
+                        timestamp = DateTimeOffset.UtcNow,
+                        sampledValue = new[] { new { value = "250", unit = "Wh" } },
+                    },
+                },
+            }
+        );
+        var beforeDisconnect = (await ChargingViewAsync(owner)).Session!;
+        Assert.Equal(0.25m, beforeDisconnect.EnergyKWh);
         await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "network lost", timeout.Token);
         var lost = (await ChargingViewAsync(owner)).Session!;
         Assert.Null(lost.StoppedAt);
@@ -214,6 +233,15 @@ public sealed partial class OcppWebSocketTests
             Assert.Contains("reconnection", text.Body);
         }
         using var reconnected = await ConnectAsync();
+        await StatusAsync(reconnected, "Charging");
+        var recovered = (await ChargingViewAsync(owner)).Session!;
+        Assert.Equal(beforeDisconnect.Id, recovered.Id);
+        Assert.Equal(beforeDisconnect.StartedAt, recovered.StartedAt);
+        Assert.Equal(beforeDisconnect.EnergyKWh, recovered.EnergyKWh);
+        Assert.Equal(beforeDisconnect.Cost, recovered.Cost);
+        Assert.Equal("Charging", recovered.Status);
+        Assert.Null(recovered.StoppedAt);
+        Assert.Null((await ChargingViewAsync(observer)).Session);
         await CallAsync(
             reconnected,
             "StopTransaction",
@@ -228,6 +256,7 @@ public sealed partial class OcppWebSocketTests
         Assert.NotNull((await ChargingViewAsync(owner)).Session!.StoppedAt);
         using var finalScope = factory.Services.CreateScope();
         var final = finalScope.ServiceProvider.GetRequiredService<ChargingDbContext>();
+        Assert.Equal(beforeDisconnect.Id, (await final.ChargingSessions.SingleAsync()).Id);
         Assert.Equal("Completed", (await final.ChargingConnectionRequests.SingleAsync()).State);
         Assert.Equal(3, await final.Notifications.CountAsync());
         Assert.All(

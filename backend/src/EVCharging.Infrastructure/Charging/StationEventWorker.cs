@@ -70,8 +70,11 @@ public sealed class StationEventWorker(
                         entry.LastFailureCode = "invalid_event";
                         entry.AvailableAt = clock.GetUtcNow().AddMinutes(5);
                         logger.LogError(
-                            "Realtime event {EventId} has an invalid payload or audience; retry deferred.",
-                            entry.Id
+                            new EventId(1201, "outbox_event_invalid"),
+                            "Realtime event {EventId} has an invalid payload or audience; retry deferred. code={FailureCode}; attempts={Attempts}.",
+                            entry.Id,
+                            entry.LastFailureCode,
+                            entry.Attempts
                         );
                         continue;
                     }

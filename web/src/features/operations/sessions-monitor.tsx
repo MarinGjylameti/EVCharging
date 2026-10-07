@@ -15,7 +15,7 @@ const states:Record<string,[string,string]>={Connecting:["Duke nisur","Connectin
 export function SessionsMonitor({initial,stations,locations,language}:{initial:SessionPage;stations:Station[];locations:Location[];language:Language}){
   const sq=language==="sq";const [data,setData]=useState(initial);const [draft,setDraft]=useState(blank);const [filter,setFilter]=useState(blank);const [error,setError]=useState("");const [now,setNow]=useState(Date.now());
   async function refresh(signal:AbortSignal){const next=await operations<SessionPage>("sessions",signal,sessionQuery(filter));if(!signal.aborted){setData(next);setError("");}}
-  const live=useOperationsLive(refresh);
+  const live=useOperationsLive(refresh,true);
   useEffect(()=>{const controller=new AbortController();void refresh(controller.signal).catch(e=>{if(!controller.signal.aborted)setError(failure(e,sq));});return()=>controller.abort();},[filter,sq]);
   useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer);},[]);
   const fmt=(value:string)=>new Date(value).toLocaleString(sq?"sq-AL":"en-GB");

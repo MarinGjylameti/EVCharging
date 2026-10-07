@@ -220,10 +220,11 @@ public static class OcppEndpoints
                     );
                     return;
                 }
+                var frame = Utf8.GetString(message.ToArray());
                 var reply = await processor.ProcessAsync(
                     deviceId.Value,
                     connectionId.Value,
-                    Utf8.GetString(message.ToArray()),
+                    frame,
                     idle.Token
                 );
                 await socket.SendAsync(
@@ -235,12 +236,19 @@ public static class OcppEndpoints
                 sentReplies++;
                 // Processing commits before SendAsync. This separate event records the successful send.
                 using var replyDocument = JsonDocument.Parse(reply);
-                logger.LogInformation(
+                using var callDocument = JsonDocument.Parse(frame);
+                var action = callDocument.RootElement[2].GetString();
+                var replyType = replyDocument.RootElement[0].GetInt32();
+                logger.Log(
+                    action == "MeterValues" && replyType == 3
+                        ? LogLevel.Debug
+                        : LogLevel.Information,
                     new EventId(1002, "reply_sent"),
-                    "OCPP reply sent for {Identity}: call={CallId}, type={ReplyType}, bytes={FrameBytes}.",
+                    "OCPP reply sent for {Identity}: action={Action}, call={CallId}, type={ReplyType}, bytes={FrameBytes}.",
                     identity,
+                    action,
                     replyDocument.RootElement[1].GetString(),
-                    replyDocument.RootElement[0].GetInt32(),
+                    replyType,
                     Utf8.GetByteCount(reply)
                 );
             }

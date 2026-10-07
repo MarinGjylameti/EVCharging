@@ -23,7 +23,12 @@ public sealed record ApplicationLogContext(
     string? ErrorCode = null,
     long? DurationMs = null,
     int? HttpStatus = null,
-    string? StackTrace = null
+    string? StackTrace = null,
+    Guid? SessionId = null,
+    Guid? StationId = null,
+    Guid? ConnectorId = null,
+    int? ConnectorNumber = null,
+    Guid? InboxMessageId = null
 );
 
 public sealed record ApplicationLogFilter(

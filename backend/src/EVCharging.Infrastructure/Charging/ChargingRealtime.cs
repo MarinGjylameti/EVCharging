@@ -55,7 +55,8 @@ internal static class ChargingRealtime
         DriverStationDto? station = null,
         DriverChargingSession? session = null,
         DriverConnectorState? connector = null,
-        ChargingCommandResult? command = null
+        ChargingCommandResult? command = null,
+        bool telemetryOnly = false
     )
     {
         var entry = new RealtimeOutboxEvent
@@ -84,7 +85,8 @@ internal static class ChargingRealtime
                 station,
                 session,
                 connector,
-                command
+                command,
+                telemetryOnly
             )
         );
         db.RealtimeOutbox.Add(entry);

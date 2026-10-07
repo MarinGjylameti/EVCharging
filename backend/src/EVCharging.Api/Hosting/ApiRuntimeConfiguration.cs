@@ -26,6 +26,17 @@ public sealed class ApiRuntimeConfiguration
         if (!environment.IsDevelopment() && !environment.IsEnvironment("Testing"))
             ValidateProduction(connectionString, origins);
 
+        if (
+            environment.IsProduction()
+            && (
+                configuration.GetValue<bool>("Ocpp:SimulatorEnabled")
+                || configuration.GetValue<bool>("Ocpp:AllowAnonymousSimulators")
+            )
+        )
+            throw new InvalidOperationException(
+                "OCPP simulator options are unavailable in Production."
+            );
+
         return new ApiRuntimeConfiguration(connectionString, origins);
     }
 

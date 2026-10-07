@@ -43,7 +43,8 @@ public sealed record StationChanged(
     DriverStationDto? Station = null,
     DriverChargingSession? Session = null,
     DriverConnectorState? Connector = null,
-    ChargingCommandResult? Command = null
+    ChargingCommandResult? Command = null,
+    bool TelemetryOnly = false
 );
 
 public interface IStationEventStream

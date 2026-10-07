@@ -15,6 +15,119 @@ namespace EVCharging.Tests;
 public sealed partial class OperationsManagementTests
 {
     [Fact]
+    public async Task TransactionLogsCorrelateStoredMessagesAndSessionWithoutNormalMeterNoise()
+    {
+        var (admin, _) = await UserAsync("log-admin@test.com", UserRole.Superadmin);
+        var station = await StationAsync(admin, "LOG-001");
+        var device = (await DeviceAsync(admin, station.Id)).Device;
+        using var socket = await SocketAsync(device.Identity);
+        var started = DateTimeOffset.UtcNow;
+        var start = await CallAsync(
+            socket,
+            "StartTransaction",
+            new
+            {
+                connectorId = 1,
+                idTag = "CARD-001",
+                meterStart = 1000,
+                timestamp = started,
+            }
+        );
+        Assert.Equal(3, start[0].GetInt32());
+        var transactionId = start[2].GetProperty("transactionId").GetInt32();
+        var meter = await CallAsync(
+            socket,
+            "MeterValues",
+            new
+            {
+                connectorId = 1,
+                transactionId,
+                meterValue = new[]
+                {
+                    new
+                    {
+                        timestamp = started.AddSeconds(1),
+                        sampledValue = new[] { new { value = "2000", unit = "Wh" } },
+                    },
+                },
+            }
+        );
+        Assert.Equal(3, meter[0].GetInt32());
+        var rejected = await CallAsync(
+            socket,
+            "MeterValues",
+            new { connectorId = "private-invalid-value", transactionId }
+        );
+        Assert.Equal(4, rejected[0].GetInt32());
+        var stopped = await CallAsync(
+            socket,
+            "StopTransaction",
+            new
+            {
+                transactionId,
+                meterStop = 2000,
+                timestamp = started.AddSeconds(2),
+                reason = "Local",
+            }
+        );
+        Assert.Equal(3, stopped[0].GetInt32());
+        await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", timeout.Token);
+        await factory
+            .Services.GetServices<IHostedService>()
+            .OfType<ApplicationLogWorker>()
+            .Single()
+            .FlushAsync(timeout.Token);
+        var logs = (
+            await admin.GetFromJsonAsync<ApplicationLogHistory>(
+                "/api/v1/admin/logs/history?source=OCPP&identity=" + device.Identity
+            )
+        )!.Entries;
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ChargingDbContext>();
+        var session = await db.ChargingSessions.SingleAsync();
+        foreach (var action in new[] { "StartTransaction", "StopTransaction" })
+        {
+            var entry = Assert.Single(
+                logs,
+                x => x.Context?.Action == action && x.Context.EventName == "message_committed"
+            );
+            Assert.Equal(session.Id, entry.Context!.SessionId);
+            Assert.Equal(station.Id, entry.Context.StationId);
+            Assert.Equal(session.ConnectorId, entry.Context.ConnectorId);
+            Assert.Equal(1, entry.Context.ConnectorNumber);
+            var inbox = await db.OcppInboundMessages.SingleAsync(x =>
+                x.Id == entry.Context.InboxMessageId
+            );
+            Assert.Equal(inbox.CallId, entry.Context.MessageId);
+            Assert.Equal(inbox.ConnectionId, entry.Context.ConnectionId);
+            Assert.NotNull(entry.Context.TraceId);
+        }
+        Assert.DoesNotContain(
+            logs,
+            x => x.Context?.Action == "MeterValues" && x.Context.MessageId == meter[1].GetString()
+        );
+        Assert.Contains(
+            logs,
+            x =>
+                x.Context?.Action == "MeterValues"
+                && x.Context.MessageId == rejected[1].GetString()
+                && x.Level == "Warning"
+                && x.Context.EventName == "message_rejected"
+                && x.Context.InboxMessageId is not null
+        );
+        Assert.DoesNotContain(
+            logs,
+            x => x.Message.Contains("CARD-001") || x.Message.Contains("private-invalid-value")
+        );
+        Assert.Equal(1, await db.OcppMeterSamples.CountAsync());
+        var meterCallId = meter[1].GetString();
+        Assert.Equal(
+            "Processed",
+            (await db.OcppInboundMessages.SingleAsync(x => x.CallId == meterCallId)).ProcessingState
+        );
+    }
+
+    [Fact]
     public async Task SuperadminCanInspectUnknownChargerAttemptsAndProtocolFaultsWithoutExposingCardsOrCredentials()
     {
         var (admin, _) = await UserAsync("admin@test.com", UserRole.Superadmin);
@@ -121,7 +234,10 @@ public sealed partial class OperationsManagementTests
             Assert.Equal("peer_close", closed.CloseReason);
             Assert.Equal(1000, closed.CloseCode);
         }
-        var heartbeat = Assert.Single(logs.Entries, x => x.Context?.Action == "Heartbeat");
+        var heartbeat = Assert.Single(
+            logs.Entries,
+            x => x.Context?.Action == "Heartbeat" && x.Context.EventName == "message_committed"
+        );
         Assert.Equal(connected.Context.TraceId, heartbeat.Context!.TraceId);
         Assert.Equal(connected.Context.ConnectionId, heartbeat.Context.ConnectionId);
         Assert.Contains(

@@ -75,7 +75,7 @@ public static class OperationsEventsEndpoints
                                         .AnyAsync(x => x.Id == change.EntityId, ct);
                     if (allowed)
                         await context.Response.WriteAsync(
-                            $"event: changed\ndata: {JsonSerializer.Serialize(new { stationId = change.StationId, eventId = change.EventId, eventType = change.EventType })}\n\n",
+                            $"event: changed\ndata: {JsonSerializer.Serialize(new { stationId = change.StationId, eventId = change.EventId, eventType = change.EventType, telemetryOnly = change.TelemetryOnly })}\n\n",
                             ct
                         );
                     next = events.MoveNextAsync().AsTask();

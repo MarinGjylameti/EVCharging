@@ -151,7 +151,12 @@ public sealed class ApplicationDiagnostics(
             child?.ErrorCode ?? parent?.ErrorCode,
             child?.DurationMs ?? parent?.DurationMs,
             child?.HttpStatus ?? parent?.HttpStatus,
-            child?.StackTrace ?? parent?.StackTrace
+            child?.StackTrace ?? parent?.StackTrace,
+            child?.SessionId ?? parent?.SessionId,
+            child?.StationId ?? parent?.StationId,
+            child?.ConnectorId ?? parent?.ConnectorId,
+            child?.ConnectorNumber ?? parent?.ConnectorNumber,
+            child?.InboxMessageId ?? parent?.InboxMessageId
         );
 
     private static ApplicationLogContext Sanitize(ApplicationLogContext value) =>
