@@ -108,14 +108,13 @@ public sealed partial class OperationsManagementTests : IDisposable
         )!;
     }
 
-    private async Task<WebSocket> SocketAsync(string identity)
+    private Task<WebSocket> SocketAsync(string identity) => SocketPathAsync("/ws/cs/" + identity);
+
+    private async Task<WebSocket> SocketPathAsync(string path)
     {
         var client = factory.Server.CreateWebSocketClient();
         client.SubProtocols.Add("ocpp1.6");
-        return await client.ConnectAsync(
-            new Uri("ws://localhost/ws/cs/" + identity),
-            timeout.Token
-        );
+        return await client.ConnectAsync(new Uri("ws://localhost" + path), timeout.Token);
     }
 
     private async Task<JsonElement> CallAsync(WebSocket socket, string action, object payload)

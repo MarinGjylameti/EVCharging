@@ -49,6 +49,12 @@ public sealed class ApiErrors(RequestDelegate next, ILogger<ApiErrors> logger)
                     code,
                     context.TraceIdentifier
                 );
+            else if (status != 499)
+                logger.LogWarning(
+                    "API rejection {Code}, trace {TraceId}",
+                    code,
+                    context.TraceIdentifier
+                );
             context.Response.StatusCode = status;
             if (!context.RequestAborted.IsCancellationRequested)
                 await context.Response.WriteAsJsonAsync(

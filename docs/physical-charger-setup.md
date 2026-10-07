@@ -12,9 +12,30 @@ Për një pajisje që regjistron me ID `CP-001`, lidhja përfundimtare është:
 
 Nëse programi i karikuesit bashkon vetë adresën bazë me Charge Point ID,
 vendos adresën bazë dhe ID-në në fushat përkatëse. Nëse pret një URL të plotë,
-vendos lidhjen përfundimtare. ID-ja duhet të shfaqet vetëm një herë në URL.
+vendos lidhjen përfundimtare.
 Paneli e ndërton URL-në nga adresa API që ka të konfiguruar web-i, kështu që
 nuk kërkon ndryshim kodi kur ndryshon domeni.
+
+Backend-i pranon disa formate, duke marrë ID-në nga segmenti i fundit jo bosh,
+si projekti referencë i kolegut:
+
+```text
+/CP-001
+/ws/CP-001
+/cs/CP-001
+/ocpp/CP-001
+/ws/cs/CP-001
+/ws/cs/CP-001/CP-001
+```
+
+Pranohen edhe prefikse të tjera dhe `/` në fund. Nëse pajisja shton ID-në
+përsëri te një URL e plotë, `/ws/cs/CP-001/CP-001` lidhet me të njëjtin
+karikues `CP-001`. Kur segmentet e fundit ndryshojnë, fiton i fundit:
+`/ws/cs/OLD-ID/CP-001` identifikon `CP-001`. Paneli vazhdon të japë formatin
+`/ws/cs/ID`. ID-ja lejon shkronja ASCII, numra, `_`, `-`, deri në 40 karaktere.
+Rrugët `/api/...` dhe `/health/...` janë të rezervuara; adresa pa ID si
+`/`, `/ws`, `/ocpp`, `/ws/cs` nuk lidhin pajisje. Formatet alternative
+pranojnë vetëm WebSocket me `ocpp1.6`, me të njëjtat kontrolle të pajisjes.
 
 | Parametri në karikues | Vlera |
 |---|---|
@@ -198,5 +219,7 @@ payload-e:
 
 Përgjigjja `101` në ekran nuk provon vetë një lidhje të qëndrueshme ose
 pranimin e BootNotification. Mos ndrysho portin, TLS-in ose formatin OCPP
-pa krahasuar loget e të njëjtës tentativë. Shtimi i këtyre logeve kërkon
-publikimin e backend-it, por nuk kërkon migrim databaze.
+pa krahasuar loget e të njëjtës tentativë. Ruajtja e historikut diagnostik
+kërkon migrimin `PersistentApplicationLogs` dhe publikimin e backend-it/web-it.
+Shiko [diagnostikimin dhe historikun e logeve](connection-diagnostics.md)
+për filtrat, eksportin, retention dhe kufijtë e ruajtjes.

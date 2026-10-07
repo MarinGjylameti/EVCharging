@@ -118,6 +118,34 @@ test("application log BFF forwards safe filters and retains Superadmin authoriza
   assert.equal(calls,1);
 });
 
+test("saved log history forwards bounded filters and cursor without exposing another route",async t=>{
+  const route=bff(t)("operations");let calls=0;
+  globalThis.fetch=async(url,init)=>{calls++;const target=new URL(url);assert.equal(target.pathname,"/api/v1/admin/logs/history");assert.equal(target.searchParams.get("beforeId"),"92");assert.equal(target.searchParams.get("traceId"),"trace-1");assert.equal(target.searchParams.get("level"),"Error");assert.equal(init.headers.get("Authorization"),"Bearer private-session");return Response.json({entries:[],nextBeforeId:null,retentionDays:90,storage:{pending:0,dropped:0,lastPersistedAt:null,failureCode:null}});};
+  const response=await route.GET(new Request("https://web.example.test/api/operations?resource=logs&mode=history&level=Error&traceId=trace-1&beforeId=92"));
+  assert.equal(response.status,200);assert.equal(response.headers.get("cache-control"),"no-store");
+  for(const query of ["mode=../audit","mode=history&level=Unknown","mode=history&beforeId=0","mode=history&limit=1001","mode=history&traceId=x%0Ay","mode=history&connectionId=wrong","mode=history&from=wrong","mode=history&from=2026-10-08T00:00:00Z&until=2026-10-07T00:00:00Z"])
+    assert.equal((await route.GET(new Request("https://web.example.test/api/operations?resource=logs&"+query))).status,400);
+  assert.equal(calls,1);
+});
+
+test("history pagination pauses polling and displays persistence loss explicitly",async t=>{
+  const previous={interval:globalThis.setInterval,clear:globalThis.clearInterval,document:globalThis.document};let poll;
+  globalThis.setInterval=fn=>{poll=fn;return 1;};globalThis.clearInterval=()=>{};globalThis.document={visibilityState:"visible"};
+  t.after(()=>{globalThis.setInterval=previous.interval;globalThis.clearInterval=previous.clear;if(previous.document===undefined)delete globalThis.document;else globalThis.document=previous.document;});
+  const state=[];let cursor=0,effect;const calls=[];
+  const {ApplicationLogs}=component("application-logs",{
+    react:{...React,useState(initial){const index=cursor++;if(!(index in state))state[index]=initial;return [state[index],value=>{state[index]=typeof value==="function"?value(state[index]):value;}];},useEffect:fn=>{effect=fn;}},
+    "./api":{operations:async(...args)=>{calls.push(args);return {entries:[],nextBeforeId:92,retentionDays:90,storage:{pending:10,dropped:4,lastPersistedAt:null,failureCode:"DbUpdateException"}};},failure:()=>"Cannot load logs"}
+  });
+  const render=()=>{cursor=0;return ApplicationLogs({language:"en"});};
+  function find(node,predicate){if(!node||typeof node!=="object")return undefined;if(predicate(node))return node;for(const child of React.Children.toArray(node.props?.children)){const found=find(child,predicate);if(found)return found;}}
+  render();const cleanup=effect();await new Promise(resolve=>setImmediate(resolve));
+  assert.match(renderToStaticMarkup(render()),/Dropped from full queue.*4/);
+  find(render(),node=>node.type==="button"&&node.props.children==="Older").props.onClick();cleanup();render();const olderCleanup=effect();await new Promise(resolve=>setImmediate(resolve));
+  assert.match(calls.at(-1)[2],/beforeId=92/);const count=calls.length;poll();await new Promise(resolve=>setImmediate(resolve));assert.equal(calls.length,count);
+  assert.match(renderToStaticMarkup(render()),/automatic refresh paused/);olderCleanup();
+});
+
 test("connection log view polls the backend, renders escaped messages and aborts when closed",async t=>{
   const previous={interval:globalThis.setInterval,clear:globalThis.clearInterval,document:globalThis.document};let poll,cleared=false;
   globalThis.setInterval=(fn,delay)=>{assert.equal(delay,5000);poll=fn;return 123;};globalThis.clearInterval=value=>{assert.equal(value,123);cleared=true;};globalThis.document={visibilityState:"visible"};
@@ -129,8 +157,8 @@ test("connection log view polls the backend, renders escaped messages and aborts
   });
   const render=()=>{cursor=0;return ApplicationLogs({language:"en"});};
   render();const cleanup=effect();await new Promise(resolve=>setImmediate(resolve));
-  const html=renderToStaticMarkup(render());assert.match(html,/NKR2023072805/);assert.match(html,/HTTP 401 &lt;script&gt;/);assert.doesNotMatch(html,/<script>/);assert.match(html,/reset after a restart\/deploy/);
-  assert.equal(calls[0][0],"logs");assert.equal(calls[0][2],"&source=OCPP");poll();await new Promise(resolve=>setImmediate(resolve));assert.equal(calls.length,2);
+  const html=renderToStaticMarkup(render());assert.match(html,/NKR2023072805/);assert.match(html,/HTTP 401 &lt;script&gt;/);assert.doesNotMatch(html,/<script>/);assert.match(html,/database across restarts\/deploys/);assert.match(html,/Export this page/);
+  assert.equal(calls[0][0],"logs");assert.equal(calls[0][2],"&source=OCPP&mode=history");poll();await new Promise(resolve=>setImmediate(resolve));assert.equal(calls.length,2);
   cleanup();assert.equal(calls[0][1].aborted,true);assert.equal(cleared,true);
 });
 

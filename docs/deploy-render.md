@@ -88,6 +88,12 @@ Pas nisjes provo hyrjen me llogarinë demonstrative të Driver-it dhe kontrollo 
 
 ## 5. Kufijtë e provës dhe kalimi te klienti
 
+Për historikun e logeve që mbetet pas restart/deploy, apliko migrimin
+`PersistentApplicationLogs` dhe lexo [udhëzuesin diagnostik](connection-diagnostics.md).
+Default-i ruan loget operative 90 ditë; ruajtja reale varet nga jetëgjatësia
+dhe backup-i i PostgreSQL. `Request logs` në Render kërkon workspace Pro;
+`Application logs` dhe historiku në aplikacion mbeten rrugët e diagnostikimit.
+
 Shërbimet Free flenë pas 15 minutash pa trafik; kërkesa e parë mund të vonojë. Për një CSMS/OCPP që duhet të mbajë lidhje të qëndrueshme me karikuesit, kalimi në plan që qëndron aktiv do të jetë i nevojshëm. Ende nuk ka lidhje OCPP me pajisje reale, ndaj statuset demo nuk janë të dhëna operative.
 
 ### Nëse hyrja dështon pas pasivitetit

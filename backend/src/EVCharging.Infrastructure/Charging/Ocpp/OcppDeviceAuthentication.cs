@@ -27,7 +27,7 @@ public sealed class OcppDeviceAuthentication(
     {
         var settings = options.Value;
         AuthenticatedCredentialVersion = null;
-        if (!System.Text.RegularExpressions.Regex.IsMatch(identity, "^[A-Za-z0-9_-]{1,40}$"))
+        if (!OcppPath.IsValidIdentity(identity))
             return null;
         var physical = await db
             .OcppChargePoints.AsNoTracking()

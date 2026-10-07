@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -96,7 +97,8 @@ public sealed class OcppGateway(
         Guid chargePointId,
         Guid connectionId,
         int? closeCode,
-        CancellationToken ct
+        CancellationToken ct,
+        string? closeReason = null
     )
     {
         await using var transaction = await OcppDeviceUpdate.BeginAsync(db, chargePointId, ct);
@@ -105,6 +107,7 @@ public sealed class OcppGateway(
             return;
         connection.DisconnectedAt = clock.GetUtcNow();
         connection.CloseCode = closeCode;
+        connection.CloseReason = closeReason;
         var device = await db.OcppChargePoints.SingleAsync(x => x.Id == chargePointId, ct);
         device.LastSeenAt = null;
         await projection.InvalidateDeviceAsync(chargePointId, ct);
@@ -139,6 +142,7 @@ public sealed class OcppGateway(
 
         var callId = root[1].GetString()!;
         var action = root[2].GetString()!;
+        var started = Stopwatch.GetTimestamp();
         var hash = Convert.ToHexString(
             SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(root)))
         );
@@ -216,10 +220,13 @@ public sealed class OcppGateway(
                     await transaction.CommitAsync(ct);
                 events.Notify();
                 logger.LogInformation(
-                    "OCPP action {Action} replayed for {Identity}; reusedCallId={Reused}.",
+                    new EventId(1101, "message_replayed"),
+                    "OCPP action {Action} replayed for {Identity}; reusedCallId={Reused}; call={CallId}; connection={ConnectionId}.",
                     action,
                     device.Identity,
-                    reused
+                    reused,
+                    callId,
+                    connectionId
                 );
                 return cached!;
             }
@@ -237,9 +244,13 @@ public sealed class OcppGateway(
                 await transaction.CommitAsync(ct);
             events.Notify();
             logger.LogInformation(
-                "OCPP action {Action} processed and committed for {Identity}.",
+                new EventId(1102, "message_committed"),
+                "OCPP action {Action} processed and committed for {Identity}. call={CallId}; connection={ConnectionId}; elapsedMs={ElapsedMs}.",
                 action,
-                device.Identity
+                device.Identity,
+                callId,
+                connectionId,
+                (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds
             );
             if (action == "BootNotification")
                 logger.LogInformation(
@@ -293,10 +304,13 @@ public sealed class OcppGateway(
                 await transaction.CommitAsync(ct);
             events.Notify();
             logger.LogWarning(
-                "OCPP action {Action} rejected for {Identity}: {FailureCode}.",
+                new EventId(1103, "message_rejected"),
+                "OCPP action {Action} rejected for {Identity}: {FailureCode}. call={CallId}; connection={ConnectionId}.",
                 action,
                 chargePointIdentity,
-                fault.Code
+                fault.Code,
+                callId,
+                connectionId
             );
             return response;
         }

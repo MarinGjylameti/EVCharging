@@ -13,6 +13,7 @@ public static class ApiPipeline
                     app.Services.GetRequiredService<IApplicationDiagnostics>()
                 )
             );
+        app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(20) });
         app.UseMiddleware<ApplicationRequestDiagnostics>();
         app.UseMiddleware<ApiErrors>();
         app.Use(
@@ -24,7 +25,6 @@ public static class ApiPipeline
             }
         );
         app.UseCors();
-        app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(20) });
         app.UseRateLimiter();
         app.UseAuthentication();
         app.UseAuthorization();

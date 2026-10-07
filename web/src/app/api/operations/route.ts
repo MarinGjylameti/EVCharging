@@ -18,9 +18,23 @@ export async function GET(request:Request) {
   const resource = params.get("resource") ?? "";
   if(resource === "logs") {
     const source=params.get("source"),identity=params.get("identity");
-    if(source!==null&&!['OCPP','HTTP'].includes(source) || identity!==null&&(identity.length>40||/[\x00-\x1f\x7f]/.test(identity))) return NextResponse.json({code:"invalid_log_filter"},{status:400});
+    if(source!==null&&!['OCPP','HTTP','Worker','System'].includes(source) || identity!==null&&(identity.length>40||/[\x00-\x1f\x7f]/.test(identity))) return NextResponse.json({code:"invalid_log_filter"},{status:400});
     const query=new URLSearchParams();if(source)query.set("source",source);if(identity)query.set("identity",identity);
-    return proxy(`/admin/logs?${query}`,{signal:request.signal});
+    const mode=params.get("mode");
+    if(mode!==null&&mode!=="history"&&mode!=="live")return NextResponse.json({code:"invalid_log_filter"},{status:400});
+    if(mode==="history") {
+      for(const key of ["level","traceId","connectionId","from","until","beforeId","limit"]) {
+        const value=params.get(key);if(value===null)continue;
+        if(value.length>100||/[\x00-\x1f\x7f]/.test(value)
+          ||key==="level"&&!['Information','Warning','Error','Critical'].includes(value)
+          ||key==="connectionId"&&!guid.test(value)
+          ||(key==="beforeId"||key==="limit")&&(!/^[1-9]\d*$/.test(value)||!Number.isSafeInteger(Number(value))||(key==="limit"&&Number(value)>1000))
+          ||(key==="from"||key==="until")&&!Number.isFinite(Date.parse(value)))return NextResponse.json({code:"invalid_log_filter"},{status:400});
+        query.set(key,value);
+      }
+      if(query.has("from")&&query.has("until")&&Date.parse(query.get("from")!)>Date.parse(query.get("until")!))return NextResponse.json({code:"invalid_log_filter"},{status:400});
+    }
+    return proxy(`/admin/logs${mode==="history"?"/history":""}?${query}`,{signal:request.signal});
   }
   if(resource === "device") {
     const id=params.get("id");

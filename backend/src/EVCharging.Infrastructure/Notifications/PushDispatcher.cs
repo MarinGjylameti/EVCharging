@@ -13,7 +13,8 @@ public sealed class PushDispatcher(
     ChargingDbContext db,
     IPushTransport transport,
     IOptions<PushOptions> options,
-    TimeProvider clock
+    TimeProvider clock,
+    ILogger<PushDispatcher>? logger = null
 )
 {
     public async Task<int> DispatchAsync(CancellationToken ct)
@@ -125,6 +126,23 @@ public sealed class PushDispatcher(
             }
             // Persist each result. Provider delivery remains at-least-once if the process dies after sending.
             await db.SaveChangesAsync(ct);
+            if (delivery.FailureCode is { } failure)
+            {
+                var code =
+                    failure.Length <= 100
+                    && failure.All(c => char.IsAsciiLetterOrDigit(c) || c == '_')
+                        ? failure
+                        : "provider_error";
+                logger?.LogWarning(
+                    new EventId(1301, "push_delivery_failed"),
+                    "Push delivery {DeliveryId}: {FailureCode}; attempts={Attempts}; complete={Completed}; nextAttempt={NextAttemptAt}.",
+                    delivery.Id,
+                    code,
+                    delivery.Attempts,
+                    delivery.CompletedAt is not null,
+                    delivery.NextAttemptAt
+                );
+            }
         }
         await db.SaveChangesAsync(ct);
         return pending.Count;

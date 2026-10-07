@@ -15,14 +15,14 @@ public static class OperationsEndpoints
                 (string? source, string? identity, IApplicationDiagnostics diagnostics) =>
                 {
                     if (
-                        source is not (null or "OCPP" or "HTTP")
+                        source is not (null or "OCPP" or "HTTP" or "Worker" or "System")
                         || identity?.Length > 40
                         || identity?.Any(char.IsControl) == true
                     )
                         throw new RequestFailure(
                             400,
                             "invalid_log_filter",
-                            "Choose OCPP or HTTP and an identity up to 40 characters."
+                            "Choose a diagnostic source and an identity up to 40 characters."
                         );
                     return Results.Ok(
                         diagnostics.Read(

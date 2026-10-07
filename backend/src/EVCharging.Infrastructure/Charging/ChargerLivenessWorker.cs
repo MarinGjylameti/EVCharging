@@ -68,6 +68,14 @@ public sealed class ChargerLivenessWorker(
             }
             if (transaction is not null)
                 await transaction.CommitAsync(ct);
+            if (device.LastSeenAt < cutoff)
+                logger.LogWarning(
+                    new EventId(1201, "heartbeat_expired"),
+                    "OCPP device {Identity} marked offline after {OfflineSeconds} seconds without messages; lastSeen={LastSeenAt}.",
+                    device.Identity,
+                    options.Value.OfflineSeconds,
+                    device.LastSeenAt
+                );
             signal.Notify();
         }
     }

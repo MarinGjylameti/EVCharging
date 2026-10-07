@@ -6,5 +6,5 @@ export default async function LogsPage() {
   const user=await currentUser();
   if(!user)redirect("/");
   if(user.role!=="SUPERADMIN")redirect(user.role==="DRIVER"?"/driver":"/dashboard");
-  return <div className="workspace-body"><span className="eyebrow">SUPERADMIN</span><h1>{user.language==="sq"?"Loget e lidhjes":"Connection logs"}</h1><ApplicationLogs language={user.language}/></div>;
+  return <div className="workspace-body"><span className="eyebrow">SUPERADMIN</span><h1>{user.language==="sq"?"Loget e aplikacionit":"Application logs"}</h1><ApplicationLogs language={user.language}/></div>;
 }

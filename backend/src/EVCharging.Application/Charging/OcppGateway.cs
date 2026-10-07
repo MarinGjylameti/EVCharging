@@ -15,7 +15,13 @@ public interface IOcppGateway
         string frame,
         CancellationToken ct
     );
-    Task CloseAsync(Guid chargePointId, Guid connectionId, int? closeCode, CancellationToken ct);
+    Task CloseAsync(
+        Guid chargePointId,
+        Guid connectionId,
+        int? closeCode,
+        CancellationToken ct,
+        string? closeReason = null
+    );
     Task<bool> IsConnectionCurrentAsync(
         Guid chargePointId,
         Guid connectionId,

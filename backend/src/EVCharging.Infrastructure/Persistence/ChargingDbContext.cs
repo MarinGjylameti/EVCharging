@@ -34,6 +34,7 @@ public sealed class ChargingDbContext(DbContextOptions<ChargingDbContext> option
         Set<OcppChargingTransaction>();
     public DbSet<OcppMeterSample> OcppMeterSamples => Set<OcppMeterSample>();
     public DbSet<RealtimeOutboxEvent> RealtimeOutbox => Set<RealtimeOutboxEvent>();
+    public DbSet<ApplicationLogRecord> ApplicationLogs => Set<ApplicationLogRecord>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {
@@ -59,6 +60,7 @@ public sealed class ChargingDbContext(DbContextOptions<ChargingDbContext> option
         model.ApplyConfiguration(new OcppChargingTransactionConfiguration());
         model.ApplyConfiguration(new OcppMeterSampleConfiguration());
         model.ApplyConfiguration(new RealtimeOutboxEventConfiguration());
+        model.ApplyConfiguration(new ApplicationLogConfiguration());
         foreach (var entity in model.Model.GetEntityTypes())
         foreach (var property in entity.GetProperties())
             property.SetColumnName(

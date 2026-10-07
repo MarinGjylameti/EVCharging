@@ -21,7 +21,26 @@ public static class DependencyInjection
     )
     {
         services.AddSingleton(TimeProvider.System);
-        services.AddSingleton<IApplicationDiagnostics, ApplicationDiagnostics>();
+        services.AddSingleton<ApplicationDiagnostics>();
+        services.AddSingleton<IApplicationDiagnostics>(p =>
+            p.GetRequiredService<ApplicationDiagnostics>()
+        );
+        services
+            .AddOptions<DiagnosticOptions>()
+            .BindConfiguration("Diagnostics")
+            .Validate(
+                x =>
+                    x.RetentionDays is >= 1 and <= 3650
+                    && x.QueueCapacity is >= 200 and <= 100_000
+                    && x.FlushSeconds is >= 1 and <= 30,
+                "Invalid diagnostic retention, queue capacity, or flush interval."
+            )
+            .ValidateOnStart();
+        services.AddScoped<ApplicationLogStore>();
+        services.AddScoped<IApplicationLogHistory>(p =>
+            p.GetRequiredService<ApplicationLogStore>()
+        );
+        services.AddHostedService<ApplicationLogWorker>();
         services.AddLogging(logging =>
             logging.AddFilter<OcppDiagnosticLoggerProvider>(level => level >= LogLevel.Information)
         );
