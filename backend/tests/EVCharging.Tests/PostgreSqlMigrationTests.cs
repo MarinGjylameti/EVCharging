@@ -58,17 +58,18 @@ public sealed partial class PostgreSqlChargingTests
         Assert.Equal(3, transactions.Count);
         Assert.All(transactions, x => Assert.Equal(x.Id, x.SessionId));
 
-        // A retry does not duplicate the audit, and the normal claim flow can adopt a preserved session.
+        // A retry must preserve the audit. Unlinked legacy sessions remain private:
+        // a demo visit is not proof that an already started charge belongs to this Driver.
         await db.Database.MigrateAsync();
         Assert.Equal(2, await db.Audit.CountAsync(x => x.Action == DemoOwnerAudit));
-        Assert.Null(await test.ClaimAsync(driver.Id, first.StationId));
-        var adopted = await db.ChargingConnectionRequests.SingleAsync(x => x.State == "Linked");
-        Assert.Equal(first.Id, adopted.SessionId);
-        Assert.Equal(driver.Id, adopted.DriverId);
-        Assert.Equal(
-            "driver_already_connected",
-            await test.ClaimAsync(driver.Id, second.StationId)
+        Assert.Equal("charger_in_use", await test.ClaimAsync(driver.Id, first.StationId));
+        Assert.Equal("charger_in_use", await test.ClaimAsync(driver.Id, second.StationId));
+        Assert.Empty(
+            await db.ChargingConnectionRequests.Where(x => x.State == "Linked").ToListAsync()
         );
+        Assert.Equal(3, await db.ChargingSessions.CountAsync());
+        Assert.Equal(3, await db.OcppChargingTransactions.CountAsync());
+        Assert.Equal(2, await db.Audit.CountAsync(x => x.Action == DemoOwnerAudit));
         Assert.Empty(await db.Database.GetPendingMigrationsAsync());
     }
 
@@ -221,7 +222,7 @@ public sealed partial class PostgreSqlChargingTests
             Assert.True(
                 await db
                     .Database.SqlQueryRaw<bool>(
-                        """SELECT to_regclass('charging_sessions') IS NULL AS "Value"""
+                        "SELECT to_regclass('charging_sessions') IS NULL AS \"Value\""
                     )
                     .SingleAsync()
             );
