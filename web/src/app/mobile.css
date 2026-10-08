@@ -155,9 +155,6 @@
   .navigation-settings-card { padding: 18px; }
   .navigation-provider-options { grid-template-columns: minmax(0, 1fr); }
   .history-detail-line > * { min-width: 0; overflow-wrap: anywhere; }
-  .history-chart-controls { width: 100%; }
-  .history-chart-controls .map-filter { flex: 1; }
-  .history-chart-controls .map-filter button { flex: 1; }
   .charge-page-navigation { margin-bottom: 20px; gap: 8px; }
   .charge-page-navigation a { display: inline-flex; align-items: center; }
   .charge-point-title, .charge-point-specs { margin-bottom: 20px; }

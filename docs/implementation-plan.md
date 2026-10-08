@@ -1,6 +1,6 @@
 # Plani i implementimit dhe verifikimit
 
-Discovery është përfunduar dhe implementimi ka nisur. Gjendja konkrete është te [implementation-status.md](implementation-status.md). Backend-i dhe web-i kanë përparësi; mobile është shtyrë. Tabela e mëposhtme përshkruan kushtet e pranimit të fazave të plota, jo pretendim që janë përfunduar. Mund të fillojnë me fixture dhe simulator të izoluar; integrimi real dhe pranimi i monitorimit personal presin të dhënat e karikuesit.
+Discovery është përfunduar dhe implementimi ka nisur. Gjendja konkrete është te [implementation-status.md](implementation-status.md). Më 8 tetor përdoruesi kërkoi avancimin paralel të iOS/Android; [gjendja e klientit native](mobile-native-readiness.md) dallon kodin/testet lokale nga build-et dhe provat në pajisje. Tabela e mëposhtme përshkruan kushtet e pranimit të fazave të plota, jo pretendim që janë përfunduar. Mund të fillojnë me fixture dhe simulator të izoluar; integrimi real dhe pranimi i monitorimit personal presin të dhënat e karikuesit.
 
 ## Fazat dhe kushtet e kalimit
 

@@ -90,7 +90,9 @@ Pas nisjes provo hyrjen me llogarinë demonstrative të Driver-it dhe kontrollo 
 
 Për historikun e logeve që mbetet pas restart/deploy, apliko migrimin
 `PersistentApplicationLogs` dhe lexo [udhëzuesin diagnostik](connection-diagnostics.md).
-Default-i ruan loget operative 90 ditë; ruajtja reale varet nga jetëgjatësia
+Default-i ruan loget operative 30 ditë. Nëse shërbimi ka një override ekzistues,
+vendos `EVCHARGING_Diagnostics__RetentionDays=30` për të përdorur kufirin e ri.
+Ruajtja reale varet nga jetëgjatësia
 dhe backup-i i PostgreSQL. `Request logs` në Render kërkon workspace Pro;
 `Application logs` dhe historiku në aplikacion mbeten rrugët e diagnostikimit.
 

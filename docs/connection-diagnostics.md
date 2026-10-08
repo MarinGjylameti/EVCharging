@@ -110,14 +110,19 @@ sipas rendit të ruajtjes; ora UTC brenda çdo eventi është koha e regjistrimi
 ## Ruajtja dhe kufijtë
 
 ```text
-EVCHARGING_Diagnostics__RetentionDays=90
+EVCHARGING_Diagnostics__RetentionDays=30
 EVCHARGING_Diagnostics__QueueCapacity=10000
 EVCHARGING_Diagnostics__FlushSeconds=2
 ```
 
-Default-i ruan diagnostikën 90 ditë. Pas skadimit pastrohen gradualisht vetëm
+Default-i ruan diagnostikën 30 ditë. Pas skadimit pastrohen gradualisht vetëm
 `application_logs`, jo historia e karikimit/auditimi/raw OCPP. Retention mund
 të jetë 1–3650 ditë. Kapaciteti i databazës dhe norma e logeve duhen monitoruar.
+Një vlerë e vendosur në mjedisin e shërbimit ka përparësi ndaj default-it;
+për kufirin 30-ditor vendos `EVCHARGING_Diagnostics__RetentionDays=30`.
+Worker-i kontrollon skadimin rreth çdo minutë dhe fshin deri në 2 000 rreshta
+për kalim, sipas `RecordedAt` në UTC. Kufiri është strikt: një ngjarje fshihet
+kur është më e vjetër se 30 ditë, ndërsa ngjarja saktësisht në kufi ruhet.
 Në ngarkesa të mëdha përdorni arkiv të jashtëm për stdout dhe dimensiononi DB.
 
 Ngjarjet kalojnë në një radhë të kufizuar dhe shkruhen në batch, pa bllokuar

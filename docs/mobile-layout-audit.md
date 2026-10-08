@@ -41,6 +41,10 @@ Rregullat janë në `web/src/app/mobile.css`, me breakpoint 700 px për telefoni
 
 ## Verifikimi dhe kufijtë
 
+Pas këtij kontrolli, grafiku dhe lista e Driver-it u ridizajnuan me filtra të
+përbashkët dhe faqezim edhe në desktop. [Ridizajnimi dhe verifikimi i historikut](driver-history-redesign.md)
+dokumenton ndryshimin dhe zëvendësimin e stileve të vjetra të grafikut.
+
 - Kaluan **156 teste Node**, duke përfshirë dy teste të reja për navigimin dhe ciklin e hapjes/mbylljes së panelit. Testet ekzistuese mbulojnë ndër të tjera formularët, grafiqet, karikimin dhe kufizimet e roleve. Këto janë teste kodi/renderimi React, jo teste të layout-it në shfletues.
 - Kaloi `npm run typecheck` dhe `git diff --check`.
 - `npm run build` me konfigurimin origjinal nuk përfundoi: SWC në mjedisin e kufizuar Windows nuk mund të canonicalize `jsc.baseUrl`, me `Access is denied (os error 5)`. Provimi me konfigurim të përkohshëm Babel u pengua gjithashtu nga gabime EPERM gjatë krijimit të output-it. Konfigurimet e përkohshme u hoqën; `next.config.ts` u rikthye pa ndryshime. Nuk konfirmohet një build production i suksesshëm.

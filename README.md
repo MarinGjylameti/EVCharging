@@ -4,14 +4,14 @@ Platformë për menaxhimin e karikimit elektrik, në një projekt të ri pranë 
 
 ## Gjendja
 
-**Implementimi po vazhdon.** Web-i dhe API-ja kanë përparësi; aplikacioni iOS/Android ka hyrë në fazën e parë të zhvillimit.
+**Implementimi po vazhdon.** Web-i, API-ja dhe aplikacioni iOS/Android zhvillohen në paralel.
 
 - **Backend C#/.NET:** regjistrim Driver, hyrje/dalje, role, profil, gjuhë, ndryshim fjalëkalimi, audit, njoftime dhe radhë push. Migrimet PostgreSQL përfshijnë pikat, historikun, sesionet, pronësinë dhe diagnostikimin live.
 - **Web Next.js:** hyrje Driver/Admin/Superadmin. Driver-i ka hartën me pika karikimi, filtra, detaje të pikës, hapje të udhëzimeve në Google Maps ose Apple Maps, kohën e mbetur të karikimit kur ka vlerësim të freskët dhe historikun personal. Operatori sheh pikat dhe përmbledhjen; Superadmin mund t’i krijojë, ndryshojë dhe arkivojë me audit. Sesioni mbahet në cookie HttpOnly.
 - **Simulatorët:** seed-i përgatit SIM-001…SIM-010. Tre pika janë për provat e përdoruesit kryesor; shtatë kanë përdorues të veçantë testues. Statuset dhe karikimet krijohen nga mesazhet e simulatorit. [Udhëzimi i provës me disa përdorues](docs/demo-simulator-scenario.md).
 - **Demo në Render:** API-ja ka Dockerfile, pranon URL-në e brendshme PostgreSQL dhe mund të krijojë në mënyrë të kontrolluar të dhëna demo në databazë. [Udhëzimet hap pas hapi](docs/deploy-render.md).
 - **OCPP 1.6:** Boot, Authorize, Heartbeat, Status, Start, Meter dhe Stop; sesione persistente, status/paralajmërime publike dhe matje/komanda private me SSE. UI merr deltat drejtpërdrejt; diagnostikimi nuk bën polling. Mbulimi aktual dhe kufijtë janë te [sesionet live](docs/charging-session-realtime.md).
-- **Mobile iOS/Android:** kodi Expo për llogarinë Driver, pikat, historikun, profilin dhe njoftimet ka filluar. Paketat Expo dhe provat në pajisje mbeten të bllokuara nga qasja e mjedisit në npm.
+- **Mobile iOS/Android:** klient Expo Driver me detaje/monitorim karikimi, pika me filtra, historik me kalendar/grafik/faqezim, profil dhe push. Kaluan 39 teste lokale të logjikës/sintaksës; typecheck me paketat Expo dhe build-et/provat në pajisje mbeten për t'u kryer. [Gjendja dhe hapat për build](mobile/README.md).
 - **Ende për t’u ndërtuar/verifikuar:** caktimet e pikave te Admin, statistikat, QR dhe autorizimi i pajisjeve reale, OCPP 2.0.1 dhe shpërndarja në shumë instanca.
 
 **Versioni i plotë ende nuk është gati për përdorim real.** PostgreSQL, pajisjet OCPP dhe rrjedhat vizuale nuk janë verifikuar fund më fund.

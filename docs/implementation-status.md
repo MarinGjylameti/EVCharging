@@ -2,7 +2,7 @@
 
 **Për plotësimin e kërkesave të klientit, më 3 tetor 2026, përdor [kontrollin aktual](client-requirements-audit.md).** Ky raport ruan gjendjen e një hapi të mëparshëm; disa funksione dhe numra testesh kanë ndryshuar.
 
-Prioriteti i konfirmuar: **backend dhe web përpara mobile**. Pas avancimit të web-it, përdoruesi kërkoi nisjen edhe të aplikacionit iOS/Android.
+Prioriteti fillestar ishte backend/web. Më 8 tetor përdoruesi kërkoi zhvillimin paralel të iOS/Android, duke përdorur Houss si referencë. [Kontrolli aktual mobile](mobile-native-readiness.md).
 
 ## Çfarë funksionon në kod
 
@@ -13,7 +13,7 @@ Prioriteti i konfirmuar: **backend dhe web përpara mobile**. Pas avancimit të 
 | Profili/cilësimet | Profil personal, sq/en, preferencë push, version për konfliktet, audit atomik me ndryshimin | Ruajtje gjuhe dhe konflikt 412 të testuara |
 | Web | Hyrje Driver/Admin/Superadmin; Driver ka hartë OpenStreetMap që qendërzohet te pozicioni i lejuar nga shfletuesi, zgjedhje opsionale të 61 bashkive, renditje sipas largësisë dhe zoom me scroll; kohën e mbetur të karikimit kur ka vlerësim të freskët; hapje të pikës së zgjedhur në Google Maps ose Apple Maps; filtra e histori personale; menu llogarie me gjuhën dhe daljen; cookie HttpOnly/SameSite, BFF me Origin check dhe body limit | Typecheck, build dhe teste web për UI/realtime |
 | Menaxhimi i pikave | Admin lexon listën dhe përmbledhjen; Superadmin krijon, ndryshon dhe arkivon pikat me audit, validim dhe version. Koordinatat mund të zgjidhen me klikim në hartë dhe scroll për zmadhim | 3 teste API për rolet/ndryshimet dhe teste të gjeometrisë së hartës |
-| Mobile | Një kod Expo/React Native për iOS/Android: regjistrim/hyrje Driver, profil, cilësime, push scaffold, listë pikash me filtra dhe hapje në hartën e telefonit, histori personale | Sintaksa e 10 skedarëve TS/TSX kaloi; paketat Expo, typecheck i plotë dhe prova në pajisje mbeten të bllokuara |
+| Mobile | Expo Driver: auth/SecureStore, pika/filtra/detaje, matje private karikimi, historik me kalendar/grafik/faqezim, profil/kapacitet baterie, cilësime/push; konfigurime EAS/assets | 39 teste logjike/sintakse kaluan; paketat Expo mungojnë, ndaj typecheck mobile, export/native build dhe provat në pajisje nuk janë kryer |
 | Harta dhe historiku | Lexim i pikave jo të arkivuara dhe i maksimumi 100 seancave të Driver-it të hyrë; host-i lokal krijon 10 pika dhe 6 seanca demo, përfshirë një pikë në Lushnjë me vlerësim ilustrues prej 40 minutash | Teste API për autorizimin, filtrimin e arkivimit, freskinë e vlerësimit dhe izolimin e historikut sipas përdoruesit |
 | Njoftimet | Shtatë tekste sq/en, inbox personal, regjistrim pajisjeje, push queue me retries/receipts | 7 teste të radhës: gjuha aktuale, opt-out, logout, ndërrim llogarie, çaktivizim, retry i kufizuar dhe deduplikim |
 | OCPP | WebSocket 1.6 për BootNotification, Heartbeat, Authorize, StatusNotification, StartTransaction, MeterValues, StopTransaction; inbox, sesione dhe matje persistente | Parser/replay dhe testet WebSocket → DB → stream, disa simulatorë, duplicate dhe status i vjetër |

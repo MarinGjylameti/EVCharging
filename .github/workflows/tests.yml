@@ -52,6 +52,8 @@ jobs:
       - name: Web integration tests and coverage
         working-directory: web
         run: npm run test:coverage
+      - name: Mobile data, lifecycle and API unit tests
+        run: node --test mobile/tests/*.test.mjs
       - name: Web types and production build
         working-directory: web
         run: |

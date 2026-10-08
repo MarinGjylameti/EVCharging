@@ -8,6 +8,8 @@ Te formulari i pikës, Superadmin hap hartën OpenStreetMap, lëviz/zmadho pamje
 
 Përshtatjet për telefonin janë në `src/app/mobile.css`. Admin dhe Superadmin kanë një rresht navigimi me pesë butona dhe panelin **Më shumë** për seksionet e tjera. [Kontrolli i kodit, faqet e shqyrtuara dhe kufijtë e verifikimit](../docs/mobile-layout-audit.md).
 
+Historiku i Driver-it ka grafik ditor/javor/mujor dhe filtra të përbashkët për datat, pikën, energjinë dhe monedhën. Lista shfaq 8 seanca për faqe. Stilet e historikut për desktop dhe telefon janë në `src/app/history.css`. [Sjellja, kërkimi dhe verifikimi](../docs/driver-history-redesign.md).
+
 Regjistrimi i drejtuesit është te `/register`, i lidhur nga faqja e hyrjes. Emri, mbiemri, email-i dhe celulari kërkohen bashkë me fjalëkalimin. Numri përfshin kodin e shtetit, p.sh. `+355691234567`; ruhet në profil. Pas regjistrimit hapet `/driver`.
 
 ```powershell

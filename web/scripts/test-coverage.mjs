@@ -23,7 +23,7 @@ for (const record of readFileSync(resolve(output, "lcov.info"), "utf8").split("e
   const raw = /^SF:(.+)$/m.exec(record)?.[1]?.trim().replaceAll("\\", "/");
   if (!raw) continue;
   const path = raw.startsWith("src/") ? raw : relative(root, raw).replaceAll("\\", "/");
-  if (!path.startsWith("src/") || !/\.tsx?$/.test(path)) continue;
+  if ((!path.startsWith("src/") && !path.startsWith("../shared/")) || !/\.tsx?$/.test(path)) continue;
   const file = files.get(path) ?? { path, lines: new Map(), branches: new Map(), functions: new Map() };
   for (const [, line, count] of record.matchAll(/^DA:(\d+),(\d+)/gm)) file.lines.set(line, Math.max(file.lines.get(line) ?? 0, Number(count)));
   for (const [, key, count] of record.matchAll(/^BRDA:([^\r\n]+),([^,\r\n]+)$/gm)) file.branches.set(key, Math.max(file.branches.get(key) ?? 0, count === "-" ? 0 : Number(count)));
@@ -44,8 +44,8 @@ function inventory(directory) {
     return entry.isDirectory() ? inventory(path) : /\.tsx?$/.test(entry.name) && !entry.name.endsWith(".d.ts") ? [relative(root, path).replaceAll("\\", "/")] : [];
   });
 }
-const source = inventory(resolve(root, "src")).sort();
-const report = { scope: "Loaded production TS/TSX files only; unloaded files have no measured percentage.", sourceFiles: source.length,
+const source = [...inventory(resolve(root, "src")), ...inventory(resolve(root, "../shared"))].sort();
+const report = { scope: "Loaded web/shared production TS/TSX files only; unloaded files have no measured percentage.", sourceFiles: source.length,
   loadedFiles: summary.length, linePercent: percent(totals.lines.hit, totals.lines.total), branchPercent: percent(totals.branches.hit, totals.branches.total),
   totals, files: summary, unloadedFiles: source.filter(path => !files.has(path)) };
 writeFileSync(resolve(output, "summary.json"), JSON.stringify(report, null, 2));

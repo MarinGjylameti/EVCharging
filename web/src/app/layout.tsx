@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import "./mobile.css";
+import "./history.css";
 
 export const metadata: Metadata = { title: "EVCharging · Operations", description: "Menaxhimi i rrjetit të karikimit elektrik", robots: { index: false, follow: false } };
 export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover" };

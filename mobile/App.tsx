@@ -1,98 +1,148 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, AppState, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, BackHandler, Pressable, StatusBar, Text, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import * as Notifications from "expo-notifications";
-import type { AuthResult, ChargingHistory, Language, Notification, Station, User } from "../contracts/account";
-import { readSession, saveSession, clearSession, request } from "./src/api";
+import type { AuthResult, Language, User } from "../contracts/account";
+import { readSession, saveSession, clearSession, request, subscribeSessionExpiry } from "./src/api";
+import { createDriverLoader, type DriverData } from "./src/driver-data";
+import { useForegroundPoll } from "./src/use-foreground-poll";
 import { messages, errorText } from "./src/i18n";
 import { AuthScreen } from "./src/AuthScreen";
 import { ProfileScreen } from "./src/ProfileScreen";
 import { SettingsScreen } from "./src/SettingsScreen";
 import { StationsScreen } from "./src/StationsScreen";
+import { StationChargingScreen } from "./src/StationChargingScreen";
 import { HistoryScreen } from "./src/HistoryScreen";
 import { registerPush } from "./src/push";
-import { Button, Card, Notice, styles, colors } from "./src/ui";
+import { waitForMobileApi } from "./src/wait-for-api";
+import { Brand, Button, Card, Notice, Screen, styles, colors } from "./src/ui";
 
 type Tab = "stations" | "history" | "profile" | "notifications" | "settings";
 function AppContent() {
   const [language, setLanguage] = useState<Language>("sq");
   const [user, setUser] = useState<User | null>(null);
+  const userRef = useRef<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const tokenRef = useRef<string | null>(null);
+  const [expiresAt, setExpiresAt] = useState("");
   const [tab, setTab] = useState<Tab>("stations");
-  const [loading, setLoading] = useState(true); const [error, setError] = useState("");
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [stations, setStations] = useState<Station[]>([]);
-  const [history, setHistory] = useState<ChargingHistory[]>([]);
+  const [stationId, setStationId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [warming, setWarming] = useState(false);
+  const bootController = useRef<AbortController | null>(null);
+  const [error, setError] = useState("");
+  const [data, setData] = useState<Omit<DriverData, "user">>({ notifications: [], stations: [], history: [] });
+  const [dataReady, setDataReady] = useState(false), [networkStale, setNetworkStale] = useState(false);
   const t = messages[language];
-  const expire = useCallback(async () => {
-    tokenRef.current = null; setToken(null); setUser(null); setNotifications([]); setStations([]); setHistory([]); setTab("stations");
+  const updateUser = useCallback((value: User) => {
+    if (userRef.current?.id === value.id && userRef.current.version > value.version) return;
+    userRef.current = value; setUser(value); setLanguage(value.language);
+  }, []);
+  const loaderRef = useRef<ReturnType<typeof createDriverLoader> | null>(null);
+  if (!loaderRef.current) loaderRef.current = createDriverLoader(snapshot => {
+    updateUser(snapshot.user); setData(snapshot); setDataReady(true); setNetworkStale(false); setError("");
+  });
+  const expire = useCallback(async (reason = "") => {
+    tokenRef.current = null; userRef.current = null; loaderRef.current!.setSession(null);
+    setToken(null); setUser(null); setExpiresAt(""); setData({ notifications: [], stations: [], history: [] });
+    setTab("stations"); setStationId(null); setError(reason);
+    setDataReady(false); setNetworkStale(false);
     await clearSession();
   }, []);
-  const updateUser = useCallback((value: User) => { setUser(value); setLanguage(value.language); }, []);
-  const refresh = useCallback(async () => {
-    const value = tokenRef.current;
-    if (!value) return;
-    try {
-      const current = await request<User>("/me", value);
-      if (value !== tokenRef.current) return;
-      updateUser(current);
-      const [inbox,points,sessions] = await Promise.all([
-        request<Notification[]>("/me/notifications", value),
-        request<Station[]>("/driver/stations", value),
-        request<ChargingHistory[]>("/driver/history", value)
-      ]);
-      if (value === tokenRef.current) {
-        setNotifications(inbox); setStations(points); setHistory(sessions); setError("");
-      }
-    } catch (e) {
-      if (value !== tokenRef.current) return;
-      if (e instanceof Error && e.message === "session_expired") await expire();
-      throw e;
+  const refresh = useCallback(async (signal?: AbortSignal) => {
+    const current = tokenRef.current;
+    try { await loaderRef.current!.refresh(signal); }
+    catch (failure) {
+      if (current !== tokenRef.current) return;
+      setNetworkStale(true);
+      if (failure instanceof Error && failure.message === "administratorAccount") { await expire("administratorAccount"); return; }
+      throw failure;
     }
-  }, [expire, updateUser]);
+  }, [expire]);
   const boot = useCallback(async () => {
-    setLoading(true); setError("");
+    if (bootController.current) return;
+    const controller = new AbortController(); bootController.current = controller;
+    setLoading(true); setWarming(false); setError("");
     try {
       const stored = await readSession();
-      tokenRef.current = stored?.token || null; setToken(stored?.token || null);
-      if (stored) await refresh();
-    } catch (e) { setError(e instanceof Error ? e.message : "genericError"); }
-    finally { setLoading(false); }
+      if (controller.signal.aborted) return;
+      tokenRef.current = stored?.token ?? null; setToken(stored?.token ?? null); setExpiresAt(stored?.expiresAt ?? "");
+      loaderRef.current!.setSession(stored?.token ?? null);
+      if (stored) {
+        if (!await waitForMobileApi(controller.signal, () => setWarming(true))) throw new Error("service_unavailable");
+        await refresh(controller.signal);
+      }
+    } catch (failure) { if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : "genericError"); }
+    finally { if (bootController.current === controller) { bootController.current = null; setLoading(false); setWarming(false); } }
   }, [refresh]);
-  useEffect(() => { void boot(); }, [boot]);
+  useEffect(() => { void boot(); return () => { bootController.current?.abort(); bootController.current = null; loaderRef.current!.setSession(null); }; }, [boot]);
+  useEffect(() => subscribeSessionExpiry(value => { if (value === tokenRef.current) return expire("session_expired"); }), [expire]);
   useEffect(() => {
-    const resume = AppState.addEventListener("change", state => {
-      if (state === "active") void refresh().catch(e => setError(e instanceof Error ? e.message : "genericError"));
-    });
+    if (!token || !expiresAt) return;
+    const timer = setTimeout(() => void expire("session_expired").catch(() => setError("genericError")), Math.max(0, Date.parse(expiresAt) - Date.now()));
+    return () => clearTimeout(timer);
+  }, [token, expiresAt, expire]);
+  useForegroundPoll(async signal => { try { await refresh(signal); } catch (failure) { if (!signal.aborted) setError(failure instanceof Error ? failure.message : "genericError"); } }, 15000, !!token && !!user, token ?? "");
+  const pendingNotification = useRef(false);
+  useEffect(() => {
+    const open = () => {
+      if (tokenRef.current) { setTab("notifications"); setStationId(null); void refresh().catch(() => {}); }
+      else pendingNotification.current = true;
+    };
     const received = Notifications.addNotificationReceivedListener(() => { void refresh().catch(() => {}); });
-    const response = Notifications.addNotificationResponseReceivedListener(() => { if (tokenRef.current) { setTab("notifications"); void refresh().catch(() => {}); } });
-    return () => { resume.remove(); received.remove(); response.remove(); };
+    const response = Notifications.addNotificationResponseReceivedListener(open);
+    void Notifications.getLastNotificationResponseAsync().then(value => { if (value) { open(); void Notifications.clearLastNotificationResponseAsync(); } }).catch(() => {});
+    return () => { received.remove(); response.remove(); };
   }, [refresh]);
   useEffect(() => {
-    if (user?.pushEnabled && token) void registerPush(token, false).catch(e => setError(e instanceof Error ? e.message : "genericError"));
+    if (user && pendingNotification.current) { pendingNotification.current = false; setTab("notifications"); }
+  }, [user]);
+  useEffect(() => {
+    if (user?.pushEnabled && token) void registerPush(token, false).catch(failure => {
+      if (tokenRef.current === token) setError(failure instanceof Error ? failure.message : "genericError");
+    });
   }, [user?.pushEnabled, token]);
-  const login = async (auth: AuthResult) => {
+  useEffect(() => {
+    const back = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (stationId) { setStationId(null); return true; }
+      if (tab === "settings" || tab === "notifications") { setTab("profile"); return true; }
+      if (tab !== "stations") { setTab("stations"); return true; }
+      return false;
+    });
+    return () => back.remove();
+  }, [stationId, tab]);
+  async function login(auth: AuthResult) {
     if (auth.user.role !== "DRIVER") {
-      await request("/auth/logout", auth.accessToken, "POST");
+      await request("/auth/logout", auth.accessToken, "POST").catch(() => {});
       throw new Error("administratorAccount");
     }
     await saveSession({ token: auth.accessToken, expiresAt: auth.expiresAt });
-    tokenRef.current = auth.accessToken; setToken(auth.accessToken); updateUser(auth.user); setError("");
-    setTab("stations"); setNotifications([]); setStations([]); setHistory([]);
-    void refresh().catch(e => setError(e instanceof Error ? e.message : "genericError"));
-  };
-  if (loading) return <View style={[styles.content, { flex: 1, justifyContent: "center" }]}><ActivityIndicator color={colors.green}/><Text style={styles.body}>{t.loading}</Text></View>;
-  if (!user && token) return <View style={styles.content}><Text style={styles.brand}>EVCharging</Text><Notice text={errorText(new Error(error), language)}/><Button title={t.retry} onPress={() => { void boot(); }}/></View>;
-  if (!user || !token) return <AuthScreen language={language} setLanguage={setLanguage} onAuthenticated={login}/>;
+    tokenRef.current = auth.accessToken; loaderRef.current!.setSession(auth.accessToken);
+    setToken(auth.accessToken); setExpiresAt(auth.expiresAt); updateUser(auth.user); setError("");
+    setTab("stations"); setStationId(null); setData({ notifications: [], stations: [], history: [] });
+    setDataReady(false); setNetworkStale(false);
+    void refresh().catch(failure => { if (auth.accessToken === tokenRef.current) setError(failure instanceof Error ? failure.message : "genericError"); });
+  }
+  if (loading) return <View style={[styles.content, { justifyContent: "center" }]}><Brand/><ActivityIndicator color={colors.green}/><Text accessibilityLiveRegion="polite" style={styles.body}>{warming ? t.warming : t.loading}</Text></View>;
+  if (!user && token) return <Screen><Text style={styles.brand}>EVCharging</Text><Notice text={errorText(new Error(error), language)}/><Button title={t.retry} onPress={() => void boot()}/><Button title={t.logout} secondary onPress={() => void expire().catch(() => setError("genericError"))}/></Screen>;
+  if (!user || !token) return <View style={{ flex: 1 }}>{error && <View style={{ paddingHorizontal: 20 }}><Notice text={errorText(new Error(error), language)}/></View>}<AuthScreen language={language} setLanguage={setLanguage} onAuthenticated={login}/></View>;
   return <View style={{ flex: 1 }}>
-    {error ? <View style={{ paddingHorizontal: 24 }}><Notice text={errorText(new Error(error), language)}/></View> : null}
-    {tab === "stations" ? <StationsScreen stations={stations} language={language} refresh={refresh}/> :
-    tab === "history" ? <HistoryScreen history={history} language={language} refresh={refresh}/> :
-    tab === "profile" ? <ProfileScreen key={user.version} user={user} token={token} onUpdate={updateUser} language={language} refresh={refresh}/> :
-    tab === "settings" ? <SettingsScreen user={user} token={token} onUpdate={updateUser} onExpired={expire} refresh={refresh} onLogout={async () => { await request("/auth/logout", token, "POST"); await expire(); }}/> :
-    <ScrollView contentContainerStyle={styles.content}><Text style={styles.title}>{t.notifications}</Text>{notifications.length ? notifications.map(item => <Card key={item.id}><Text style={styles.label}>{item.text.title}</Text><Text style={styles.body}>{item.text.body}</Text><Text style={styles.body}>{new Date(item.createdAt).toLocaleString(language === "sq" ? "sq-AL" : "en-GB")}</Text></Card>) : <Card><Text style={styles.body}>{t.emptyNotifications}</Text></Card>}<Button title={t.refresh} secondary onPress={() => { void refresh().catch(e => setError(e instanceof Error ? e.message : "genericError")); }}/></ScrollView>}
-    <View style={styles.tabs}>{(["stations", "history", "profile", "notifications", "settings"] as const).map(value => <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === value }} key={value} onPress={() => { setTab(value); if (value === "notifications") void refresh().catch(e => setError(e instanceof Error ? e.message : "genericError")); }} style={styles.tab}><Text style={[styles.tabText, tab === value && styles.activeTab]} numberOfLines={1}>{t[value]}</Text></Pressable>)}</View>
+    <View style={[styles.row, { paddingHorizontal: 20, paddingVertical: 10, flexWrap: "wrap", backgroundColor: colors.white }]}>
+      <Brand/>
+      <Pressable accessibilityRole="button" onPress={() => { setStationId(null); setTab("notifications"); }} style={{ minHeight: 44, justifyContent: "center" }}><Text style={styles.label}>{t.notifications} · {data.notifications.length}</Text></Pressable>
+    </View>
+    {error ? <View style={{ paddingHorizontal: 20 }}><Notice text={errorText(new Error(error), language)}/></View> : null}
+    {!dataReady && tab !== "profile" && tab !== "settings" ? <Screen language={language}><ActivityIndicator color={colors.green}/><Text style={styles.body}>{t.loading}</Text><Button title={t.retry} secondary onPress={() => void refresh().catch(failure => setError(failure instanceof Error ? failure.message : "genericError"))}/></Screen> :
+      stationId ? <StationChargingScreen key={`${token}:${stationId}`} stationId={stationId} token={token} language={language} onBack={() => setStationId(null)}/> :
+      tab === "stations" ? <StationsScreen stations={data.stations} stale={networkStale} language={language} refresh={refresh} onSelect={setStationId}/> :
+      tab === "history" ? <HistoryScreen history={data.history} language={language} refresh={refresh}/> :
+      tab === "profile" ? <Screen language={language}><View style={styles.row}><Text style={styles.title}>{t.overview}</Text><Button title={t.settings} secondary onPress={() => setTab("settings")}/></View><ProfileScreen key={user.id} user={user} token={token} onUpdate={updateUser} language={language}/></Screen> :
+      tab === "settings" ? <SettingsScreen user={user} token={token} onUpdate={updateUser} onExpired={() => expire("passwordChanged")} onBack={() => setTab("profile")} refresh={refresh} onLogout={async () => { try { await request("/auth/logout", token, "POST"); } finally { await expire(); } }}/> :
+      <Screen language={language} refresh={refresh}><Text style={styles.title}>{t.notifications}</Text>{data.notifications.length ? data.notifications.map(item => <Card key={item.id}><Text style={styles.label}>{item.text.title}</Text><Text style={styles.body}>{item.text.body}</Text><Text style={styles.body}>{new Date(item.createdAt).toLocaleString(language === "sq" ? "sq-AL" : "en-GB", { timeZone: "Europe/Tirane" })}</Text></Card>) : <Card><Text style={styles.body}>{t.emptyNotifications}</Text></Card>}</Screen>}
+    <View style={styles.tabs}>{(["stations", "history", "profile"] as const).map((value, index) => <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === value || (value === "profile" && (tab === "settings" || tab === "notifications")) }} key={value} onPress={() => { setStationId(null); setTab(value); }} style={styles.tab}>
+      <Text style={[styles.tabText, { fontSize: 22 }, (tab === value || (value === "profile" && (tab === "settings" || tab === "notifications"))) && styles.activeTab]}>{["⌖", "◷", "○"][index]}</Text>
+      <Text style={[styles.tabText, (tab === value || (value === "profile" && (tab === "settings" || tab === "notifications"))) && styles.activeTab]}>{value === "profile" ? t.overview : t[value]}</Text>
+    </Pressable>)}</View>
   </View>;
 }
-export default function App() { return <SafeAreaProvider><SafeAreaView style={styles.screen}><AppContent/></SafeAreaView></SafeAreaProvider>; }
+export default function App() { return <SafeAreaProvider><SafeAreaView style={styles.screen}><StatusBar barStyle="dark-content"/><AppContent/></SafeAreaView></SafeAreaProvider>; }

@@ -105,10 +105,38 @@ public sealed class PersistentApplicationLogTests
             ).Entries
         );
         var old = await db.ApplicationLogs.SingleAsync(x => x.Message == "old warning");
-        old.RecordedAt = DateTimeOffset.UtcNow.AddDays(-91);
+        old.RecordedAt = DateTimeOffset.UtcNow.AddDays(-31);
         await db.SaveChangesAsync();
         await store.PruneAsync(default);
         Assert.Equal(2, await db.ApplicationLogs.CountAsync());
+    }
+
+    [Fact]
+    public async Task DefaultRetentionPrunesOnlyEventsOlderThanThirtyDays()
+    {
+        var now = new DateTimeOffset(2026, 10, 8, 12, 0, 0, TimeSpan.Zero);
+        var clock = new FixedClock(now);
+        var diagnostics = new ApplicationDiagnostics(clock);
+        diagnostics.Record("System", "Information", "expired");
+        diagnostics.Record("System", "Information", "boundary");
+        diagnostics.Record("System", "Information", "recent");
+        await using var db = new ChargingDbContext(DatabaseOptions());
+        var store = new ApplicationLogStore(db, diagnostics, Settings, clock);
+        await store.PersistAsync(diagnostics.PendingBatch(), default);
+        var entries = await db.ApplicationLogs.ToListAsync();
+        entries.Single(x => x.Message == "expired").RecordedAt = now.AddDays(-30).AddTicks(-1);
+        entries.Single(x => x.Message == "boundary").RecordedAt = now.AddDays(-30);
+        entries.Single(x => x.Message == "recent").RecordedAt = now.AddDays(-29);
+        await db.SaveChangesAsync();
+
+        await store.PruneAsync(default);
+
+        Assert.Equal(30, Settings.Value.RetentionDays);
+        Assert.Equal(
+            new[] { "boundary", "recent" },
+            await db.ApplicationLogs.OrderBy(x => x.Message).Select(x => x.Message).ToArrayAsync()
+        );
+        Assert.Equal(30, (await store.ReadAsync(new(), default)).RetentionDays);
     }
 
     [Fact]
@@ -185,6 +213,11 @@ public sealed class PersistentApplicationLogTests
         ChargingDbContext db,
         ApplicationDiagnostics diagnostics
     ) => new(db, diagnostics, Settings, TimeProvider.System);
+
+    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
 
     private sealed class FailOnce : SaveChangesInterceptor
     {
