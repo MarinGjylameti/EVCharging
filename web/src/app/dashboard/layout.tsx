@@ -18,6 +18,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <AppNav area="dashboard" language={user.language} superadmin={user.role==="SUPERADMIN"}/>
       <div className="sidebar-bottom"><span className="avatar">{user.firstName[0]}{user.lastName[0]}</span><div>{user.firstName} {user.lastName}<small>{user.role}</small></div></div>
     </aside>
-    <section className="workspace-main"><header><span>{sq ? "Rrjeti i karikimit" : "Charging network"}</span><UserMenu initial={user}/></header><div className="app-page-content">{children}</div><SiteFooter area="dashboard" language={user.language}/></section>
+    <section className="workspace-main"><header><div className="app-mobile-brand"><Brand/></div><span className="workspace-header-title">{sq ? "Rrjeti i karikimit" : "Charging network"}</span><UserMenu initial={user}/></header><div className="app-page-content">{children}</div><SiteFooter area="dashboard" language={user.language}/></section>
   </main>;
 }

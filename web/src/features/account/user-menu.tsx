@@ -61,6 +61,7 @@ export function UserMenu({initial}: {initial: User}) {
     if (event.key === "Escape" && open) { event.preventDefault(); setOpen(false); triggerRef.current?.focus(); }
   }}>
     <button type="button" className="user-menu-trigger" ref={triggerRef} aria-expanded={open}
+      aria-label={sq ? `Opsionet e llogarisë: ${name}` : `Account options: ${name}`}
       aria-controls="user-menu-panel" onClick={()=>{setOpen(value=>!value);setError("");}}>
       <span className="user-menu-avatar" aria-hidden="true">{user.firstName.slice(0,1)}{user.lastName.slice(0,1)}</span>
       <span className="user-menu-identity"><strong>{name}</strong><small>{role}</small></span>

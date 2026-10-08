@@ -1,0 +1,202 @@
+/* Phone-only adaptations; desktop navigation and layout keep their existing styles. */
+.app-mobile-brand,
+.driver-header .app-mobile-brand,
+.app-nav-mobile-icon,
+.app-nav-more,
+.table-scroll-hint { display: none; }
+.driver-header-title { display: grid; gap: 5px; }
+
+@media (max-width: 700px), (max-width: 1000px) and (max-height: 500px) and (pointer: coarse) {
+  :root { --mobile-nav-height: calc(72px + env(safe-area-inset-bottom, 0px)); }
+  html { scroll-padding-top: 84px; scroll-padding-bottom: var(--mobile-nav-height); }
+  .workspace, .driver-shell { min-height: 100dvh; grid-template-columns: minmax(0, 1fr); grid-template-rows: 0 minmax(0, 1fr); }
+  .sidebar > .brand, .driver-sidebar > .brand { display: none; }
+  .sidebar, .driver-sidebar { position: static; height: 0; padding: 0; min-height: 0; border: 0; }
+  .sidebar-caption, .sidebar-bottom, .driver-side-caption, .driver-side-footer { display: none; }
+  .app-mobile-brand, .driver-header .app-mobile-brand { display: block; min-width: 0; }
+  .workspace-header-title, .driver-header-title { display: none; }
+  .workspace-main > header, .driver-header {
+    position: sticky; top: 0; z-index: 20;
+    min-height: 64px; gap: 12px;
+    padding: calc(10px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px));
+  }
+  .app-mobile-brand .brand { font-size: 20px; gap: 8px; }
+  .app-mobile-brand .brand small { font-size: 7px; letter-spacing: 2px; }
+  .app-mobile-brand .brand-icon { width: 36px; height: 36px; flex: none; }
+  .user-menu-trigger { min-width: 44px; width: 44px; min-height: 44px; padding: 5px; justify-content: center; }
+  .user-menu-identity, .user-menu-chevron { display: none; }
+  .user-menu-language-options button, .user-menu-signout { min-height: 44px; font-size: 14px; }
+  .user-menu-person strong { overflow-wrap: anywhere; }
+  .workspace-main, .driver-main { padding-bottom: var(--mobile-nav-height); }
+  .workspace-nav {
+    position: fixed; z-index: 50; left: 0; right: 0; bottom: 0; margin: 0; display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px;
+    padding: 6px max(8px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px));
+    background: #fff; border-top: 1px solid var(--border); box-shadow: 0 -4px 20px #15372e0a;
+  }
+  .workspace-nav .app-nav-secondary, .workspace-nav .app-nav-icon { display: none; }
+  .workspace-nav a, .workspace-nav .app-nav-more {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 59px; min-width: 0; padding: 6px 2px; gap: 5px; border: 0;
+    border-radius: 10px; color: #536f5f; background: transparent; font: inherit;
+  }
+  .workspace-nav a .app-nav-label, .workspace-nav .app-nav-more > span {
+    font-size: 10px; font-weight: 600; line-height: 1.3; color: inherit;
+  }
+  .workspace-nav a[aria-current=page], .workspace-nav .app-nav-more[data-active=true], .workspace-nav .app-nav-more[aria-expanded=true] {
+    background: #eaf3e7; color: #216a4d; font-weight: 700;
+  }
+  .workspace-nav .app-nav-mobile-icon, .workspace-nav .app-nav-more svg { display: block; width: 23px; height: 23px; flex: none; }
+  .workspace-nav .app-nav-label-full { display: none; }
+  .workspace-nav .app-nav-label-short { display: block; }
+  .driver-sidebar nav {
+    position: fixed; z-index: 50; inset: auto 0 0; width: auto; margin: 0; display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; background: #fff; border-top: 1px solid var(--border);
+    padding: 7px max(12px, env(safe-area-inset-right, 0px)) calc(7px + env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px));
+  }
+  .driver-sidebar nav a { min-width: 0; min-height: 56px; flex-direction: column; justify-content: center; gap: 3px; padding: 5px 3px; }
+  .driver-sidebar nav a .app-nav-label { width: auto; max-width: 100%; font-size: 11px; text-align: center; }
+  .driver-sidebar nav .app-nav-label-full { display: none; }
+  .driver-sidebar nav .app-nav-label-short { display: block; }
+  .app-nav-sheet {
+    position: fixed; inset: auto 0 0; margin: 0 auto; width: 100%; max-width: 560px;
+    max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 24px); color: var(--ink);
+    padding: 16px max(16px, env(safe-area-inset-right, 0px)) calc(20px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+    border: 1px solid var(--border); border-bottom: 0; border-radius: 22px 22px 0 0;
+    background: #fff; box-shadow: 0 -12px 48px #15372e24; overflow-y: auto; overscroll-behavior: contain;
+  }
+  .app-nav-sheet::backdrop { background: #102c2399; }
+  .app-nav-sheet-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+  .app-nav-sheet-heading h2 { font-size: 20px; margin: 0; }
+  .app-nav-sheet-heading button { width: 44px; height: 44px; border: 1px solid var(--border); border-radius: 12px; background: #f8faf5; color: var(--ink); font-size: 26px; }
+  .app-nav-sheet nav { display: grid; gap: 5px; }
+  .app-nav-sheet a { display: flex; align-items: center; gap: 14px; min-height: 52px; padding: 12px; border-radius: 10px; text-decoration: none; font-size: 14px; }
+  .app-nav-sheet a[aria-current=page] { color: #216a4d; background: #eaf3e7; font-weight: 700; }
+  .app-nav-sheet a > span:last-child { margin-left: auto; }
+  .app-nav-sheet .app-nav-mobile-icon { display: block; width: 22px; height: 22px; flex: none; }
+
+  .workspace-body, .station-workspace, .driver-content { width: 100%; padding: 24px 16px 32px; }
+  .workspace-body h1, .driver-welcome h1 { font-size: 28px; line-height: 1.2; overflow-wrap: anywhere; }
+  .workspace-body h1 { margin-top: 14px; }
+  .lead, .operations-intro { line-height: 1.7; }
+  .workspace-body, .driver-content, .settings-card, .operations-card, .operations-device, .operations-filters,
+  .station-edit-card, .history-detail, .charging-panel, .charge-process, .analytics-card { min-width: 0; overflow-wrap: anywhere; }
+  .operations-grid, .station-admin-grid, .history-layout, .analytics-chart-grid, .analytics-details-grid { grid-template-columns: minmax(0, 1fr); }
+  .operations-grid > *, .station-admin-grid > *, .history-layout > *, .field-grid > *, .station-form-fields { min-width: 0; }
+  .settings-card, .operations-card, .operations-device, .station-edit-card, .operations-filters { padding: 18px; }
+  .operations-card h2, .settings-card h2 { font-size: 18px; line-height: 1.35; }
+  .account-forms { margin-top: 24px; }
+  .notification-list li { padding: 18px; gap: 12px; }
+  .notification-list li > div:last-child { min-width: 0; overflow-wrap: anywhere; }
+  .field-grid, .station-form-pair, .operations-filter-grid { grid-template-columns: minmax(0, 1fr); }
+  input, select, textarea { max-width: 100%; min-width: 0; font-size: 16px !important; }
+  input, select, textarea, .station-panel, #map-preferences { scroll-margin-top: 84px; scroll-margin-bottom: var(--mobile-nav-height); }
+  input:not([type=checkbox]):not([type=radio]), select { min-height: 44px; }
+  .button-outline, .text-button, .station-archive, .show-password, .language-switch button,
+  .station-picker-close, .app-footer nav a, .charge-page-navigation a { min-height: 44px; }
+  .show-password { width: 44px; top: 2px; right: 2px; }
+  .auth-page { grid-template-columns: minmax(0, 1fr); padding: 0; gap: 0; }
+  .brand-panel { display: none; }
+  .login-panel { display: block; min-height: 100dvh; padding: calc(112px + env(safe-area-inset-top, 0px)) 22px calc(28px + env(safe-area-inset-bottom, 0px)); }
+  .auth-content { margin: 0 auto; }
+  .mobile-brand { display: block; position: absolute; left: 22px; }
+  .language-switch { right: 22px; }
+  .login-footer { position: static; max-width: 380px; margin: 55px auto 0; gap: 10px; }
+  .language-switch button { padding: 8px 10px; }
+  .mobile-brand { top: calc(27px + env(safe-area-inset-top, 0px)); }
+  .language-switch { top: calc(25px + env(safe-area-inset-top, 0px)); }
+  .mobile-brand .brand { font-size: 20px; gap: 8px; }
+  .mobile-brand .brand small { font-size: 7px; letter-spacing: 1.8px; }
+  .mobile-brand .brand-icon { height: 34px; width: 34px; }
+  .auth-names { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .station-admin-row { padding: 14px 12px; }
+  .station-admin-row > span, .station-list button > span { min-width: 0; overflow-wrap: anywhere; }
+  .operations-check { min-height: 44px; }
+  .operations-details { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .operations-credentials { padding: 14px; }
+  .operations-filter-actions .button-primary, .operations-filter-actions .button-outline { min-width: 0; flex: 1 1 100px; }
+  .operations-log-actions .button-outline { white-space: normal; }
+  .operations-pagination { flex-wrap: wrap; }
+  .operations-pagination > span { text-align: center; flex: 1 1 100%; order: -1; }
+  .operations-pagination > button { flex: 1; }
+
+  .operations-table-wrap, .charge-samples-scroll { max-width: 100%; min-width: 0; -webkit-overflow-scrolling: touch; }
+  .operations-table-wrap { overscroll-behavior-x: contain; }
+  .operations-table-wrap:focus-visible { outline: 3px solid #77a53b; outline-offset: 3px; }
+  .operations-table { min-width: 640px; }
+  .operations-sessions-table { min-width: 1000px; }
+  .charge-samples-table { min-width: 800px; }
+  .operations-table th, .operations-table td { padding: 12px; }
+  .operations-table td { overflow-wrap: anywhere; }
+  .analytics-chart-data .operations-table { min-width: 0; }
+  .table-scroll-hint { display: block; margin: 14px 0 8px; color: #617568; font-size: 12px; line-height: 1.5; }
+  .analytics-period-control, .analytics-card { padding: 16px; }
+  .analytics-kpis article { padding: 16px 12px; }
+  .analytics-arrow, .analytics-calendar-navigation button { width: 44px; height: 44px; flex: none; }
+  .analytics-small-tabs button, .analytics-period-tabs button { min-height: 44px; }
+  .analytics-range-actions { flex-wrap: wrap; }
+  .analytics-range-actions > button { flex: 1; }
+  .analytics-range-actions .button-primary { padding: 10px; }
+  .analytics-period-navigation > strong { min-width: 0; }
+  .analytics-calendar-grid > button { min-height: 38px; }
+
+  .driver-welcome { margin: 12px 0 24px; }
+  .driver-kpis { margin-bottom: 24px; }
+  .driver-map-section { padding: 12px; }
+  .map-layout { grid-template-columns: minmax(0, 1fr); }
+  .map-pin { width: 44px; height: 44px; }
+  .map-zoom button { width: 44px; height: 44px; }
+  .station-panel { height: auto; scroll-margin-top: 84px; }
+  .driver-locate-button { flex: 1 1 100%; }
+  .driver-city-select select { min-width: 0; }
+  .map-filter button { min-width: 0; padding: 10px 8px; }
+  .history-detail { padding: 20px; }
+  .workspace-body summary, .driver-content summary { min-height: 44px; padding-block: 10px; }
+  .navigation-settings-card { padding: 18px; }
+  .navigation-provider-options { grid-template-columns: minmax(0, 1fr); }
+  .history-detail-line > * { min-width: 0; overflow-wrap: anywhere; }
+  .history-chart-controls { width: 100%; }
+  .history-chart-controls .map-filter { flex: 1; }
+  .history-chart-controls .map-filter button { flex: 1; }
+  .charge-page-navigation { margin-bottom: 20px; gap: 8px; }
+  .charge-page-navigation a { display: inline-flex; align-items: center; }
+  .charge-point-title, .charge-point-specs { margin-bottom: 20px; }
+  .charge-point-specs, .charge-process-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .charge-connection-steps { flex-wrap: wrap; }
+  .charge-point-notice, .charging-waiting, .charge-fault { overflow-wrap: anywhere; }
+  .charge-process-metrics > *, .charge-energy-display > * { min-width: 0; }
+  .automatic-simulator .simulator-controls > label { min-width: 0; flex: 1 1 100%; }
+  .automatic-simulator .simulator-controls > button { flex: 1 1 100%; }
+  .settings-card .simulator-own-account { min-height: 44px; }
+  .simulator-traffic { padding-left: 16px; }
+  .station-picker-dialog { min-width: 0; }
+  .station-picker-header > div { min-width: 0; }
+  .app-footer-inner { padding: 22px 16px; }
+  .app-footer nav { gap: 0 18px; }
+  .app-footer nav a { display: inline-flex; align-items: center; }
+}
+
+@media (max-width: 1000px) and (max-height: 500px) and (pointer: coarse) {
+  .station-picker-backdrop { padding: 0; align-items: stretch; overflow: hidden; }
+  .station-picker-dialog { width: 100%; height: 100dvh; max-height: none; display: flex; flex-direction: column; border-radius: 0; overflow: hidden; }
+  .station-picker-header { padding: 10px 16px; flex: none; }
+  .station-picker-header p { display: none; }
+  .station-picker-header h2 { margin: 4px 0; font-size: 19px; }
+  .station-picker-map { flex: 1; height: auto; min-height: 100px; }
+  .station-picker-footer { flex: none; padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); }
+  .station-picker-actions button { min-height: 44px; }
+  .map-stage { height: 280px; min-height: 200px; }
+}
+
+@media (max-width: 360px) {
+  .login-panel { padding-left: 16px; padding-right: 16px; }
+  .mobile-brand { left: 16px; }
+  .language-switch { right: 16px; }
+  .mobile-brand .brand small { display: none; }
+  .mobile-brand .brand { font-size: 17px; }
+  .history-row { display: grid; grid-template-columns: 34px minmax(0, 1fr); }
+  .history-row-values { grid-column: 2; text-align: left; display: flex; align-items: center; gap: 12px; }
+  .history-row-values small { margin: 0; }
+  .station-admin-meta { white-space: normal; max-width: 85px; }
+  .charge-energy-display strong { font-size: 32px; }
+}

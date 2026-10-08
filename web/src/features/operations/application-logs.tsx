@@ -1,4 +1,5 @@
 "use client";
+import { TableScrollHint } from "../../components/table-scroll-hint";
 import { useEffect, useState } from "react";
 import type { Language } from "../../../../contracts/account";
 import type { ApplicationLogPage, ApplicationLogHistory } from "../../../../contracts/operations";
@@ -75,7 +76,7 @@ export function ApplicationLogs({language}:{language:Language}) {
         {mode==="history"&&<div className="operations-page-buttons"><button type="button" className="button-outline" disabled={!beforeId||busy} onClick={resetPage}>{sq?"Më të fundit":"Latest"}</button><button type="button" className="button-outline" disabled={!history?.nextBeforeId||busy} onClick={()=>{setBeforeId(history!.nextBeforeId);setPage(null);}}>{sq?"Më të vjetra":"Older"}</button></div>}
       </div>
     </div>
-    <div className="operations-table-wrap"><table className="operations-table operations-log-table"><thead><tr><th>{sq?"Koha":"Time"}</th><th>{sq?"Burimi / Niveli":"Source / Level"}</th><th>Charge Point ID</th><th>{sq?"Mesazhi":"Message"}</th></tr></thead><tbody>
+    <TableScrollHint sq={sq}/><div className="operations-table-wrap" tabIndex={0} role="region" aria-label={sq?"Loget e aplikacionit":"Application logs"}><table className="operations-table operations-log-table"><thead><tr><th>{sq?"Koha":"Time"}</th><th>{sq?"Burimi / Niveli":"Source / Level"}</th><th>Charge Point ID</th><th>{sq?"Mesazhi":"Message"}</th></tr></thead><tbody>
       {page?.entries.map(row=><tr key={row.eventId??`${row.instanceId}-${row.sequence}`}><td title={row.recordedAt}><time dateTime={row.recordedAt}>{fmt(row.recordedAt)}</time></td><td><span className="operations-log-source">{row.source}</span><small className="operations-log-level" data-level={row.level}>{row.level}</small></td><td className="operations-log-identity">{row.identity??"—"}</td><td className="operations-log-message"><pre>{row.message}</pre>{row.context&&<details><summary>{sq?"Detajet e gjurmimit":"Trace details"}</summary><pre>{JSON.stringify({eventId:row.eventId,instanceId:row.instanceId,...row.context},null,2)}</pre></details>}</td></tr>)}
     </tbody></table>{page&&!page.entries.length&&<p className="operations-empty">{sq?"Nuk ka ende loge për këtë filtër. Provo rilidhjen e karikuesit; lëre ID-në bosh për të parë edhe ID të paregjistruara.":"No logs match this filter yet. Reconnect the charger; leave the ID empty to see unregistered identities too."}</p>}</div>
   </div>;

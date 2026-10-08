@@ -22,7 +22,8 @@ export default async function DriverLayout({children}: {children: React.ReactNod
     </aside>
     <section className="driver-main">
       <header className="driver-header">
-        <div><span className="driver-header-kicker">EVCHARGING / {sq ? "DREJTUESI" : "DRIVER"}</span>
+        <div className="app-mobile-brand"><Brand/></div>
+        <div className="driver-header-title"><span className="driver-header-kicker">EVCHARGING / {sq ? "DREJTUESI" : "DRIVER"}</span>
           <strong>{sq ? "Gjej pikën tënde" : "Find your charge"}</strong></div>
         <UserMenu initial={user}/>
       </header>

@@ -1,4 +1,5 @@
 "use client";
+import { TableScrollHint } from "../../components/table-scroll-hint";
 import { useState } from "react";
 import type { Language, Station } from "../../../../contracts/account";
 import type { Audit, Price, Driver } from "../../../../contracts/operations";
@@ -18,7 +19,7 @@ export function HistoryView({initial,kind,stations,language}:{initial:(Audit|Pri
   const fmt=(date:string)=>new Date(date).toLocaleString(sq?"sq-AL":"en-GB");const name=(id:string)=>stations.find(x=>x.id===id)?.name??id;
   const columns=kind==="audit"?[sq?"Koha":"Time",sq?"Veprimi":"Action",sq?"Burimi":"Resource",sq?"Aktori / Roli":"Actor / Role",sq?"Para / Pas / Arsyeja":"Before / After / Reason"]:kind==="prices"?[sq?"Koha":"Time",sq?"Pika":"Station",sq?"Para":"Before",sq?"Pas":"After",sq?"Arsyeja / Aktori":"Reason / Actor"]:[sq?"Emri":"Name","Email",sq?"Celulari":"Phone",sq?"Gjendja":"Status",sq?"Regjistruar":"Registered"];
   return <><p role="status">{live?(sq?"Përditësime aktive":"Live updates"):(sq?"Duke lidhur përditësimet…":"Connecting live updates…")}{kind!=="drivers"?(sq?" · 200 regjistrimet më të fundit":" · Latest 200 records"):""}</p>
-    <div className="operations-table-wrap"><table className="operations-table"><thead><tr>{columns.map(x=><th key={x}>{x}</th>)}</tr></thead><tbody>
+    <TableScrollHint sq={sq}/><div className="operations-table-wrap" tabIndex={0} role="region" aria-label={sq?"Historiku i regjistrimeve":"Records history"}><table className="operations-table"><thead><tr>{columns.map(x=><th key={x}>{x}</th>)}</tr></thead><tbody>
       {items.map(row=>"action" in row?<tr key={row.id}><td>{fmt(row.recordedAt)}</td><td>{actions[row.action]?.[sq?0:1]??row.action}</td><td>{row.resourceName??name(row.entityId)}</td><td>{row.actorRole}<small>{row.actorRole==="Device"?(sq?"Karikuesi":"Charger"):row.actorName??row.actorId}</small></td><td><details><summary>{sq?"Shiko ndryshimet":"View changes"}</summary><pre>{row.changesJson??"—"}</pre></details></td></tr>:"pricePerKWh" in row?<tr key={row.id}><td>{fmt(row.recordedAt)}</td><td>{name(row.stationId)}</td><td>{row.previousPrice??"—"}</td><td>{row.pricePerKWh} {row.currency}/kWh</td><td>{row.reason}<small>{row.actorId}</small></td></tr>:<tr key={row.id}><td>{row.firstName} {row.lastName}</td><td>{row.email}</td><td>{row.phone??"—"}</td><td>{row.isActive?(sq?"Aktiv":"Active"):(sq?"Joaktiv":"Inactive")}</td><td>{fmt(row.createdAt)}</td></tr>)}
     </tbody></table>{!items.length&&<p>{sq?"Nuk ka regjistrime.":"No records."}</p>}</div>
   </>;
