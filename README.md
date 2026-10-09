@@ -7,3 +7,5 @@ An electric vehicle charging platform with a web application, backend API, and m
 - `mobile/` — React Native / Expo mobile application.
 
 The project is under active development.
+
+See [CHANGELOG.md](CHANGELOG.md) for the change history.
