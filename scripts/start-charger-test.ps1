@@ -130,7 +130,9 @@ try {
     Write-Host 'Nisja e Cloudflare Tunnel...'
     $tunnelConfig = Join-Path $runRoot 'cloudflared.yml'
     Set-Content -LiteralPath $tunnelConfig -Value '{}' -Encoding ASCII
-    $tunnel = Start-TestProcess 'cloudflared' $cloudflared @('tunnel', '--config', $tunnelConfig, '--no-autoupdate', '--protocol', 'http2', '--url', 'http://127.0.0.1:5202') $projectRoot $runRoot
+    # The fixture API permits loopback Host headers. Rewrite the tunnel hostname
+    # on the local hop for HTTP and WebSocket requests alike.
+    $tunnel = Start-TestProcess 'cloudflared' $cloudflared @('tunnel', '--config', $tunnelConfig, '--no-autoupdate', '--protocol', 'http2', '--url', 'http://127.0.0.1:5202', '--http-host-header', '127.0.0.1') $projectRoot $runRoot
     $jobs.Add($tunnel)
     $deadline = [DateTime]::UtcNow.AddSeconds(120)
     $publicUrl = $null
