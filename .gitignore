@@ -40,3 +40,11 @@
 *.ipa
 .DS_Store
 Thumbs.db
+
+# Local documentation and agent settings
+*.[mM][dD]
+*.markdown
+*.MARKDOWN
+!/README.md
+.agents/
+.codex/
