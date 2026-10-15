@@ -9,6 +9,15 @@ Ndryshimet në panele të jashtme nuk regjistrohen si commit-e.
 
 ### 2026-10-15
 
+- Shton gjurmim te Worker-i OCPP me fazat e marrjes së kërkesës dhe përgjigjes nga Render, statusin dhe CF-Ray; përgjigjet jashtë upgrade-it shënohen me versionin dhe fazën e proxy-t për të dalluar burimin e refuzimeve.
+- Ruan objektin origjinal të përgjigjes 101, socket-in dhe nënprotokollin; fushat e gjurmimit të shtuar nuk regjistrojnë kredenciale, cookies, query strings, payload-e OCPP ose përmbajtjen e gabimeve. Kjo nuk ndryshon metadatat automatike të logeve të platformës.
+- Aktivizon Workers Observability në konfigurimin Wrangler dhe shton një skript për provën krahasuese Tunnel → i njëjti backend Render, me Host/SNI të përputhur dhe verifikim TLS aktiv. Skripti kërkon cloudflared ekzistues dhe nuk instalon mjete.
+- Verifikimi: kaluan 8 teste të Worker-it, kontrolli i sintaksës JavaScript dhe PowerShell, si dhe `git diff --check`. Testet përdorin upstream të simuluar; nuk u krye deploy, nisje tuneli ose provë e re me karikuesin fizik. U pajtua commit-i `1407712` me historikun.
+
+## 2026-10-15
+
+### `1407712` — Add cloudflare simulator fix
+
 - Drejton WebSocket-in e simulatorit të integruar demo përmes Cloudflare, që prova të përdorë të njëjtën hyrje publike si karikuesi fizik. Kërkesat HTTP të aplikacionit vazhdojnë te API-ja e konfiguruar.
 - Ruan lidhjet lokale të zhvillimit dhe endpoint-et e instalimeve të tjera; shton konfigurimin opsional `EVCHARGING_SIMULATOR_WS_BASE_URL`, me validim të adresës dhe pa fallback të heshtur në rast konfigurimi të gabuar.
 - Shton teste për përzgjedhjen e endpoint-it dhe rrjedhën nga faqja e simulatorit deri te hapja OCPP 1.6 dhe BootNotification.
