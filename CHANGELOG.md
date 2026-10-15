@@ -7,13 +7,19 @@ Ndryshimet në panele të jashtme nuk regjistrohen si commit-e.
 
 ## Unreleased
 
-### 2026-10-09
+### 2026-10-15
 
-- Shton këtë changelog me përmbledhje për të 43 commit-et ekzistuese dhe vendos përditësimin e tij si rutinë pune.
-- Lejon gjurmimin e `CHANGELOG.md` në Git dhe e lidh nga README-ja.
-- Verifikimi: u kontrolluan të 43 hash-et, datat, titujt dhe renditja kundrejt Git-it; `git diff --check` kaloi dhe u kontrolluan përjashtimet e dokumentacionit lokal.
+- Drejton WebSocket-in e simulatorit të integruar demo përmes Cloudflare, që prova të përdorë të njëjtën hyrje publike si karikuesi fizik. Kërkesat HTTP të aplikacionit vazhdojnë te API-ja e konfiguruar.
+- Ruan lidhjet lokale të zhvillimit dhe endpoint-et e instalimeve të tjera; shton konfigurimin opsional `EVCHARGING_SIMULATOR_WS_BASE_URL`, me validim të adresës dhe pa fallback të heshtur në rast konfigurimi të gabuar.
+- Shton teste për përzgjedhjen e endpoint-it dhe rrjedhën nga faqja e simulatorit deri te hapja OCPP 1.6 dhe BootNotification.
+- Verifikimi: kaluan 173 teste web dhe kontrolli TypeScript; testi i lidhjes përdor një WebSocket të simuluar, jo një lidhje live. U pajtuan të 44 hyrjet e historikut me hash-et dhe titujt në Git dhe `git diff --check` kaloi.
 
 ## 2026-10-09
+
+### `3472de8` — Add changelog history
+
+- Shton këtë changelog me përmbledhje për të 43 commit-et ekzistuese.
+- Lejon gjurmimin e `CHANGELOG.md` në Git dhe e lidh nga README-ja.
 
 ### `03d315c` — Test CloudFlare 3
 
