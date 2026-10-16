@@ -2,8 +2,10 @@ namespace EVCharging.Infrastructure.Charging.Ocpp;
 
 public sealed class OcppOptions
 {
-    public bool SimulatorEnabled { get; set; }
-    public bool AllowAnonymousSimulators { get; set; }
+    // These subordinate options are effective only when Features:TestMode is on.
+    public bool SimulatorEnabled { get; set; } = true;
+    public bool AllowAnonymousSimulators { get; set; } = true;
+    public bool TestMode { get; internal set; }
     public static string[] DefaultSimulatorIdentities =>
         Enumerable.Range(1, 10).Select(number => $"SIM-{number:000}").ToArray();
 

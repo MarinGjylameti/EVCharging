@@ -2,13 +2,15 @@ using EVCharging.Application.Charging;
 using EVCharging.Domain.Charging;
 using EVCharging.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace EVCharging.Infrastructure.Charging;
 
 public sealed class DriverQueries(
     ChargingDbContext db,
     TimeProvider clock,
-    IChargingClaimVerification verification
+    IChargingClaimVerification verification,
+    IOptions<RuntimeFeatures> features
 ) : IDriverQueries
 {
     public async Task<DriverChargingState> GetChargingStateAsync(
@@ -23,6 +25,10 @@ public sealed class DriverQueries(
             .Where(x =>
                 x.DriverId == driverId
                 && x.SessionId != null
+                && (
+                    features.Value.TestMode
+                    || db.Stations.Any(s => s.Id == x.StationId && !s.IsDemo)
+                )
                 && (
                     stationId == null
                         ? x.State == "Linked"
@@ -48,7 +54,7 @@ public sealed class DriverQueries(
         var ids = claims.Select(x => x.SessionId).ToArray();
         var sessions = await db
             .ChargingSessions.AsNoTracking()
-            .Where(x => ids.Contains(x.Id))
+            .Where(x => ids.Contains(x.Id) && (features.Value.TestMode || !x.IsDemo))
             .ToDictionaryAsync(x => x.Id, ct);
         var connectorIds = sessions.Values.Select(x => x.ConnectorId).ToArray();
         var connectors = await db
@@ -63,6 +69,7 @@ public sealed class DriverQueries(
         return new(
             verification.DemoBypassEnabled,
             claims
+                .Where(c => sessions.ContainsKey(c.SessionId!.Value))
                 .Select(c => sessions[c.SessionId!.Value])
                 .Select(s =>
                     ChargingRealtime.SessionDto(
@@ -72,6 +79,7 @@ public sealed class DriverQueries(
                         clock.GetUtcNow()
                     )
                 )
+                .Select(s => features.Value.TestMode ? s : s with { Readings = null })
                 .ToArray()
         );
     }
@@ -80,7 +88,7 @@ public sealed class DriverQueries(
     {
         var stations = await db
             .Stations.AsNoTracking()
-            .Where(x => !x.IsArchived)
+            .Where(x => !x.IsArchived && (features.Value.TestMode || !x.IsDemo))
             .OrderBy(x => x.City)
             .ThenBy(x => x.Name)
             .ToListAsync(ct);
@@ -93,7 +101,10 @@ public sealed class DriverQueries(
     ) =>
         await db
             .ChargingHistory.AsNoTracking()
-            .Where(x => x.DriverId == driverId)
+            .Where(x =>
+                x.DriverId == driverId
+                && (features.Value.TestMode || !x.IsDemo && !x.Station.IsDemo)
+            )
             .OrderByDescending(x => x.StartedAt)
             .ThenByDescending(x => x.Id)
             .Take(100)

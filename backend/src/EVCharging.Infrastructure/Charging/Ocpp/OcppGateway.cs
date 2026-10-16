@@ -430,6 +430,8 @@ public sealed class OcppGateway(
         CancellationToken ct
     )
     {
+        if (!options.Value.TestMode)
+            return;
         var device = await db.OcppChargePoints.SingleAsync(x => x.Id == deviceId, ct);
         var version = ++device.CommandVersion;
         // Cached original replies retain their original sequence. Conflicting retries

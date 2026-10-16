@@ -1,0 +1,17 @@
+# Optional, separately applied Blueprint. This creates a PAID worker.
+# Configure a named Cloudflare Tunnel and its routes before using this file.
+# See the root README. TUNNEL_TOKEN is supplied privately in Render.
+services:
+  - type: worker
+    name: evcharging-ocpp-tunnel
+    runtime: image
+    region: frankfurt
+    plan: 0.5c-512mb
+    numInstances: 1
+    image:
+      url: docker.io/cloudflare/cloudflared:2026.9.0
+    dockerCommand: tunnel --protocol http2 --grace-period 30s run
+    maxShutdownDelaySeconds: 60
+    envVars:
+      - key: TUNNEL_TOKEN
+        sync: false

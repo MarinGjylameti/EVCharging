@@ -2,15 +2,17 @@ import { redirect } from "next/navigation";
 import { Brand } from "@/components/brand";
 import { AppNav } from "@/components/app-nav";
 import { SiteFooter } from "@/components/site-footer";
+import { runtimeFeatures } from "@/lib/runtime-features";
+import { RuntimeFeaturesProvider } from "@/components/runtime-features";
 import { currentUser } from "@/lib/backend";
 import { UserMenu } from "@/features/account/user-menu";
 
 export default async function DriverLayout({children}: {children: React.ReactNode}) {
-  const user = await currentUser();
+  const [user, features] = await Promise.all([currentUser(), runtimeFeatures()]);
   if (!user) redirect("/");
   if (user.role !== "DRIVER") redirect("/dashboard");
   const sq = user.language === "sq";
-  return <main className="driver-shell" lang={user.language}>
+  return <RuntimeFeaturesProvider testMode={features.testMode}><main className="driver-shell" lang={user.language}>
     <aside className="driver-sidebar">
       <Brand/>
       <div className="driver-side-caption">{sq ? "HAPËSIRA E DREJTUESIT" : "DRIVER WORKSPACE"}</div>
@@ -30,5 +32,5 @@ export default async function DriverLayout({children}: {children: React.ReactNod
       <div className="app-page-content">{children}</div>
       <SiteFooter area="driver" language={user.language}/>
     </section>
-  </main>;
+  </main></RuntimeFeaturesProvider>;
 }

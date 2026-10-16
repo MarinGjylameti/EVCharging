@@ -1,3 +1,4 @@
+using EVCharging.Application.Charging;
 using EVCharging.Infrastructure.Charging.Ocpp;
 using EVCharging.Infrastructure.Persistence;
 using Microsoft.AspNetCore.DataProtection;
@@ -18,7 +19,8 @@ public sealed class ApiFactory(
     bool anonymousSimulators = false,
     string? postgresConnection = null,
     SaveChangesInterceptor? saveInterceptor = null,
-    TimeProvider? clock = null
+    TimeProvider? clock = null,
+    bool? testMode = null
 ) : WebApplicationFactory<Program>
 {
     private readonly string database = Guid.NewGuid().ToString();
@@ -41,15 +43,15 @@ public sealed class ApiFactory(
                 services.AddSingleton(clock);
             }
             services.AddDataProtection().UseEphemeralDataProtectionProvider();
-            if (simulator)
+            services.Configure<RuntimeFeatures>(options =>
+                options.TestMode = testMode ?? simulator
+            );
+            services.Configure<OcppOptions>(options =>
             {
-                services.PostConfigure<OcppOptions>(options =>
-                {
-                    options.SimulatorEnabled = true;
-                    options.AllowAnonymousSimulators = anonymousSimulators;
-                    options.SimulatorPassword = "simulator-test-passphrase";
-                });
-            }
+                options.SimulatorEnabled = simulator;
+                options.AllowAnonymousSimulators = anonymousSimulators;
+                options.SimulatorPassword = "simulator-test-passphrase";
+            });
             services.RemoveAll<DbContextOptions<ChargingDbContext>>();
             services.RemoveAll<IDbContextOptionsConfiguration<ChargingDbContext>>();
             services.RemoveAll<ChargingDbContext>();

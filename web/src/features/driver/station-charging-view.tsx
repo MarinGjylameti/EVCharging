@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useTestMode } from "../../components/runtime-features";
 import type { Language, StationCharging } from "../../../../contracts/account";
 import { useLiveSnapshot } from "./use-live-snapshot";
 import { ChargingProgress, chargingLabels } from "./charging-progress";
@@ -12,6 +13,7 @@ import { createChargingTestReport, downloadChargingTestReport } from "./charging
 import { AvailabilityCard } from "./station-availability";
 
 export function StationChargingView({ initial, language }: { initial: StationCharging; language: Language }) {
+  const testMode = useTestMode();
   const sq = language === "sq";
   const stationId = initial.station.id;
   const selectedConnector = initial.connector?.number ?? 1;
@@ -22,6 +24,8 @@ export function StationChargingView({ initial, language }: { initial: StationCha
   const [now, setNow] = useState(0);
   const mounted = useRef(false);
   const station = snapshot.station;
+  const canConnect = testMode && snapshot.canConnect;
+  const driverAccessMode = !testMode && snapshot.driverAccessMode === "Demo" ? null : snapshot.driverAccessMode;
   const session = snapshot.inUse || snapshot.connectionRequest && snapshot.session?.stoppedAt ? null : snapshot.session;
   const active = session && session.stoppedAt === null;
   const waiting = snapshot.connectionRequest !== null;
@@ -75,9 +79,9 @@ export function StationChargingView({ initial, language }: { initial: StationCha
         className="button-outline" aria-current={number === selectedConnector ? "page" : undefined}
         href={`/driver/stations/${stationId}?connector=${number}`}>{sq ? "Lidhësi" : "Connector"} {number}</Link>)}
     </nav>}
-    {snapshot.driverAccessMode && <p className="charge-point-notice">{snapshot.driverAccessMode === "Demo"
+    {driverAccessMode && <p className="charge-point-notice">{driverAccessMode === "Demo"
       ? (sq ? "Demonstrim: sinjalet dhe karikimet e reja të kësaj pajisjeje të caktohen automatikisht. Nuk ke nevojë të shtypësh Lidhu." : "Demonstration: device signals and new charges are assigned to you automatically. You do not need to press Connect.")
-      : (sq ? "Karikimi të caktohet automatikisht kur pajisja dërgon kodin e kartës së lidhur me llogarinë tënde." : "Charging is assigned automatically when the charger sends the card code linked to your account.")}</p>}
+      : (sq ? "Përdor kartën e lidhur me llogarinë tënde te karikuesi. Karikimi do të shfaqet këtu." : "Use the card linked to your account at the charger. Your charging session will appear here.")}</p>}
     {error && <div className="form-error" role="alert">{error}</div>}
     {snapshot.connector?.deviceStatus && <section aria-label={sq ? "Pajisja qendrore e pikës" : "Station controller"}>
       <p className="charge-point-notice" role="status">{sq ? "Statusi i pajisjes qendrore" : "Station controller status"}: {chargingLabels[snapshot.connector.deviceStatus]?.[sq ? 0 : 1] ?? snapshot.connector.deviceStatus}</p>
@@ -107,20 +111,20 @@ export function StationChargingView({ initial, language }: { initial: StationCha
           <li className={snapshot.deviceConnected ? "is-done" : ""}><i aria-hidden="true">{snapshot.deviceConnected ? "✓" : "2"}</i><span>{sq ? "Pajisja u lidh" : "Charger connected"}</span></li>
           <li><i aria-hidden="true">3</i><span>{sq ? "Nis karikimi" : "Charge starts"}</span></li>
         </ol>
-        {snapshot.canConnect && <div className="charge-connect-actions">
+        {canConnect && <div className="charge-connect-actions">
           {waiting && !requestExpired ? <button type="button" className="button-outline" disabled={busy} onClick={() => void mutate("DELETE")}>{sq ? "Anulo pritjen" : "Cancel waiting"}</button>
             : <button type="button" className="driver-history-link" disabled={busy || snapshot.inUse} onClick={() => void mutate("POST")}>{sq ? "Lidhu me pikën" : "Connect to charger"}</button>}
         </div>}
       </section>}
-    {session?.stoppedAt && snapshot.canConnect && !snapshot.inUse && <div className="charge-connect-actions">
+    {session?.stoppedAt && canConnect && !snapshot.inUse && <div className="charge-connect-actions">
       <button type="button" className="driver-history-link" disabled={busy} onClick={() => void mutate("POST")}>{sq ? "Përgatit karikim të ri" : "Prepare a new charge"} ↗</button>
     </div>}
-    {snapshot.canConnect && !snapshot.inUse && !active && <p className="charge-test-instruction">{sq
+    {canConnect && !snapshot.inUse && !active && <p className="charge-test-instruction">{sq
       ? `Për testin aktual, QR anashkalohet. Lidh simulatorin ${station.code} dhe shtyp Start charging me TAG-001, lidhësi 1.`
       : `QR is bypassed for this test. Connect simulator ${station.code}, then press Start charging with TAG-001, connector 1.`}</p>}
-    {snapshot.canConnect && station.isDemo && <p><a href={`/driver/simulator?station=${encodeURIComponent(station.code)}`} target="_blank" rel="noopener noreferrer">{sq ? "Hap simulatorin automatik ↗" : "Open automatic simulator ↗"}</a></p>}
-    {!snapshot.canConnect && !snapshot.driverAccessMode && !session && !snapshot.inUse && <p className="charge-point-notice">{sq ? "Lidhja pa QR është e aktivizuar vetëm për pikat e testimit." : "Connection without QR is enabled only for test charge points."}</p>}
-    {!snapshot.inUse && snapshot.diagnostics && <SimulatorDiagnostics key={session?.id ?? stationId} initial={snapshot.diagnostics} session={session} language={language} physical={!station.isDemo}>
+    {canConnect && station.isDemo && <p><a href={`/driver/simulator?station=${encodeURIComponent(station.code)}`} target="_blank" rel="noopener noreferrer">{sq ? "Hap simulatorin automatik ↗" : "Open automatic simulator ↗"}</a></p>}
+    {!canConnect && !driverAccessMode && !session && !snapshot.inUse && <p className="charge-point-notice">{sq ? "Përdor kartën tënde të karikimit. Për ta lidhur kartën me llogarinë, kontakto operatorin e pikës." : "Use your charging card. Contact the station operator to link the card to your account."}</p>}
+    {testMode && !snapshot.inUse && snapshot.diagnostics && <SimulatorDiagnostics key={session?.id ?? stationId} initial={snapshot.diagnostics} session={session} language={language} physical={!station.isDemo}>
       <button type="button" className="button-outline" onClick={() => {
         try { downloadChargingTestReport(createChargingTestReport({ source: "charger-view", station, view: snapshot, stream: { connected, unavailable } }), station.code); }
         catch { setError(sq ? "Shkarkimi i diagnostikimit dështoi. Provo përsëri." : "Diagnostic download failed. Please retry."); }

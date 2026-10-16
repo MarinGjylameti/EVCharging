@@ -23,6 +23,7 @@ var app = builder.Build();
 app.UseApiPipeline();
 app.MapHealthEndpoints();
 app.MapAccountEndpoints();
+app.MapFeatureEndpoints();
 app.MapDriverEndpoints();
 app.MapStationManagementEndpoints();
 app.MapOperationsEndpoints();

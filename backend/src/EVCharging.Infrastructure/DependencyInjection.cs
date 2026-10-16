@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace EVCharging.Infrastructure;
 
@@ -21,6 +22,7 @@ public static class DependencyInjection
     )
     {
         services.AddSingleton(TimeProvider.System);
+        services.AddOptions<RuntimeFeatures>().BindConfiguration("Features");
         services.AddSingleton<ApplicationDiagnostics>();
         services.AddSingleton<IApplicationDiagnostics>(p =>
             p.GetRequiredService<ApplicationDiagnostics>()
@@ -66,6 +68,14 @@ public static class DependencyInjection
         services
             .AddOptions<OcppOptions>()
             .BindConfiguration("Ocpp")
+            .PostConfigure<IOptions<RuntimeFeatures>>(
+                (options, features) =>
+                {
+                    options.TestMode = features.Value.TestMode;
+                    options.SimulatorEnabled &= options.TestMode;
+                    options.AllowAnonymousSimulators &= options.SimulatorEnabled;
+                }
+            )
             .Validate(
                 x =>
                     !x.SimulatorEnabled

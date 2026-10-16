@@ -9,12 +9,26 @@ Ndryshimet në panele të jashtme nuk regjistrohen si commit-e.
 
 ### 2026-10-15
 
+- Shton flag-un qendror `EVCHARGING_Features__TestMode`, OFF si parazgjedhje, dhe një endpoint të autentikuar për aftësitë e ndërfaqes. Konfigurimi vjen nga backend-i; web-i kalon në OFF nëse nuk mund ta lexojë.
+- Me OFF bllokon simulatorët dhe lidhjen demo, fsheh pikat/historikun/sesionet demo nga API-ja dhe analizat, dhe heq diagnostikimin e Driver-it si nga përgjigjet HTTP ashtu edhe nga eventet live. Loget operative dhe menaxhimi normal mbeten të mbrojtura sipas roleve; loget e aplikacionit mbeten vetëm për Superadmin.
+- Ruan komunikimin OCPP dhe karikimin fizik me kartë. Caktimi pa kartë lejohet vetëm në testim; caktimet e vjetra pa kartë nuk autorizojnë ose marrin pronësinë e karikimeve të reja kur flag-u është OFF. Historiku dhe pronësia ekzistuese ruhen.
+- Pastron udhëzimet e testimit nga pamja normale web, kërkon kartën në formularin e caktimit dhe mbron hyrjen direkte te simulatori. Mobile merr të njëjtat kufizime nga API-ja.
+- Kushtëzon seed-in demo me flag-un; flag-et e vjetra të simulatorit/seed-it nuk e riaktivizojnë testimin kur master-i është OFF. Dokumenton konfigurimin, rinisjen, provën e koordinuar dhe kufijtë e gatishmërisë për prodhim.
+- Verifikimi i këtij ndryshimi: build-i .NET kaloi; 273 raste backend kaluan me ekzekutuesin lokal brenda procesit, pas korrigjimit të dy fixture-ve dhe riekzekutimit të 72 rasteve të prekura. 16 raste me varësi të jashtme u anashkaluan. Kaluan 178 teste web, 39 teste mobile, TypeScript web dhe formatimi CSharpier. Provat përfshijnë OCPP fizik me kartë kur flag-u është OFF, bllokimin e autorizimit demo dhe filtrimin HTTP/live.
+- Kufizimet lokale të verifikimit: VSTest nuk komunikoi me testhost-in; build-i i plotë Next dhe nisja e Bash u bllokuan nga lejet e ambientit Windows. Testet shell të përditësuara nuk u ekzekutuan. Typecheck-u i plotë mobile nuk u krye sepse varësitë lokale mobile mungojnë. Nuk u krye provë e re me pajisjen fizike ose deploy.
+- Përgatit një Blueprint opsional për cloudflared si Background Worker në Render dhe konfigurimin shembull të një tuneli të emërtuar, me të njëjtën origjinë HTTPS, Host/SNI dhe verifikim TLS si prova krahasuese.
+- Dokumenton domain-in e nevojshëm, worker-in me pagesë, token-in sekret, kalimin gradual të karikuesit dhe simulatorit, si dhe verifikimin e rilidhjes dhe karikimit. Skedarët janë për konfigurim të ardhshëm; nuk aktivizojnë shërbime ose DNS.
+- Verifikimi: kaluan leximi JSON, 9 raste të filtrimit të rrugëve, përputhja HTTPS/Host/SNI dhe parametrat TLS/HTTP të origjinës, si dhe `git diff --check`. Blueprint-i u rishikua kundrejt dokumentacionit zyrtar; validimi me CLI dhe nisja e container-it nuk u kryen. Nuk u krijua shërbim, domain ose deploy.
+- Pajton commit-in `a24565d` me historikun më poshtë.
+
+## 2026-10-15
+
+### `a24565d` — Add cloudflare simulator fix 2
+
 - Shton gjurmim te Worker-i OCPP me fazat e marrjes së kërkesës dhe përgjigjes nga Render, statusin dhe CF-Ray; përgjigjet jashtë upgrade-it shënohen me versionin dhe fazën e proxy-t për të dalluar burimin e refuzimeve.
 - Ruan objektin origjinal të përgjigjes 101, socket-in dhe nënprotokollin; fushat e gjurmimit të shtuar nuk regjistrojnë kredenciale, cookies, query strings, payload-e OCPP ose përmbajtjen e gabimeve. Kjo nuk ndryshon metadatat automatike të logeve të platformës.
 - Aktivizon Workers Observability në konfigurimin Wrangler dhe shton një skript për provën krahasuese Tunnel → i njëjti backend Render, me Host/SNI të përputhur dhe verifikim TLS aktiv. Skripti kërkon cloudflared ekzistues dhe nuk instalon mjete.
 - Verifikimi: kaluan 8 teste të Worker-it, kontrolli i sintaksës JavaScript dhe PowerShell, si dhe `git diff --check`. Testet përdorin upstream të simuluar; nuk u krye deploy, nisje tuneli ose provë e re me karikuesin fizik. U pajtua commit-i `1407712` me historikun.
-
-## 2026-10-15
 
 ### `1407712` — Add cloudflare simulator fix
 

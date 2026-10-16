@@ -1,15 +1,23 @@
 using System.Text.Json;
+using EVCharging.Application.Charging;
 using EVCharging.Application.Common;
 using EVCharging.Domain.Auditing;
 using EVCharging.Domain.Charging;
 using EVCharging.Domain.Identity;
 using EVCharging.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace EVCharging.Infrastructure.Charging;
 
-public sealed class OperationsAccess(ChargingDbContext db, TimeProvider clock)
+public sealed class OperationsAccess(
+    ChargingDbContext db,
+    TimeProvider clock,
+    IOptions<RuntimeFeatures> features
+)
 {
+    public bool TestMode => features.Value.TestMode;
+
     public async Task<Account> ActorAsync(Guid id, CancellationToken ct, bool superadmin = false)
     {
         var actor = await db.Accounts.SingleOrDefaultAsync(
@@ -30,14 +38,19 @@ public sealed class OperationsAccess(ChargingDbContext db, TimeProvider clock)
     }
 
     public IQueryable<ChargingStation> Stations(Account actor) =>
-        actor.Role == UserRole.Superadmin
-            ? db.Stations
-            : db.Stations.Where(s =>
-                db.AdministratorGrants.Any(g =>
-                    g.AdministratorId == actor.Id
-                    && (g.StationId == s.Id || s.LocationId != null && g.LocationId == s.LocationId)
+        (
+            actor.Role == UserRole.Superadmin
+                ? db.Stations
+                : db.Stations.Where(s =>
+                    db.AdministratorGrants.Any(g =>
+                        g.AdministratorId == actor.Id
+                        && (
+                            g.StationId == s.Id
+                            || s.LocationId != null && g.LocationId == s.LocationId
+                        )
+                    )
                 )
-            );
+        ).Where(s => features.Value.TestMode || !s.IsDemo);
 
     public IQueryable<ChargingLocation> Locations(Account actor) =>
         actor.Role == UserRole.Superadmin

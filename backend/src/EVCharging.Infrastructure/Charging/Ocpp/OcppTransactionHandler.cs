@@ -129,7 +129,10 @@ public sealed class OcppTransactionHandler(
                 connector.BusinessConnectorId,
                 now,
                 AssignedDriverId: device.ProvisionedSerialNumber is not null
-                && (device.DriverCardIdTag is null || device.DriverCardIdTag == idTag)
+                && (
+                    options.Value.TestMode && device.DriverCardIdTag is null
+                    || device.DriverCardIdTag == idTag
+                )
                     ? device.AssignedDriverId
                     : null
             ),

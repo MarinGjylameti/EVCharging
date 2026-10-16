@@ -1,4 +1,5 @@
 "use client";
+import { useTestMode } from "../../components/runtime-features";
 import { TableScrollHint } from "../../components/table-scroll-hint";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -16,6 +17,7 @@ function Comparison({value,sq}:{value:number|null;sq:boolean}) {
 }
 
 export function OperationsOverview({initial,language,superadmin}:{initial:OperationsAnalytics;language:Language;superadmin:boolean}) {
+  const testMode=useTestMode();
   const sq=language==="sq",locale=sq?"sq-AL":"en-GB";
   const initialFilter:AnalyticsFilter={period:initial.period.kind,timeZone:initial.period.timeZone};
   if(initial.period.kind==="Custom") {initialFilter.from=initial.period.startDate;initialFilter.until=initial.period.endDate;}
@@ -75,7 +77,7 @@ export function OperationsOverview({initial,language,superadmin}:{initial:Operat
           <div className="analytics-peak"><h3>{sq?"Intervali me më shumë nisje":"Busiest start interval"}</h3>{data.peakUsage?<><strong>{data.peakUsage.sessions} {sq?"sesione":"sessions"}</strong><span>{bucketLabel(data.peakUsage.from,period,locale)} – {bucketLabel(data.peakUsage.until,period,locale)}</span></>:<p className="analytics-empty">{sq?"Nuk ka nisje në këtë periudhë.":"No session starts in this period."}</p>}</div>
         </article>
       </div>
-      <p className="analytics-note analytics-attribution">{sq?"Sesionet numërohen sipas datës së nisjes. Energjia dhe kostoja caktohen në datën e përfundimit të sesionit; nuk përfaqësojnë matje të shpërndara sipas orës. Përfshihen edhe testet demo. Kostoja llogaritet nga tarifa e ruajtur e çdo sesioni.":"Sessions are counted by start date. Energy and cost are assigned to the session’s completion date; they do not represent hourly meter readings. Demo tests are included. Cost uses each session’s saved tariff."}{data.metrics.unverifiedEnergySessions>0&&` ${data.metrics.unverifiedEnergySessions} ${sq?"sesione të përfunduara pa energji të verifikuar; nuk përfshihen në energji dhe kosto.":"completed sessions have no verified energy; excluded from energy and cost."}`}</p>
+      <p className="analytics-note analytics-attribution">{sq?"Sesionet numërohen sipas datës së nisjes. Energjia dhe kostoja caktohen në datën e përfundimit të sesionit; nuk përfaqësojnë matje të shpërndara sipas orës. Kostoja llogaritet nga tarifa e ruajtur e çdo sesioni.":"Sessions are counted by start date. Energy and cost are assigned to the session’s completion date; they do not represent hourly meter readings. Cost uses each session’s saved tariff."}{testMode && (sq ? " Përfshihen edhe testet demo." : " Demo tests are included.")}{data.metrics.unverifiedEnergySessions>0&&` ${data.metrics.unverifiedEnergySessions} ${sq?"sesione të përfunduara pa energji të verifikuar; nuk përfshihen në energji dhe kosto.":"completed sessions have no verified energy; excluded from energy and cost."}`}</p>
     </section>}
     <section className="analytics-current" aria-label={sq?"Gjendja aktuale":"Current network status"}><div className="analytics-section-heading"><h2>{sq?"Gjendja tani":"Network now"}</h2><span>{sq?"Vlera aktuale, të pavarura nga periudha":"Current values, independent of selected period"}</span></div>
       <div className="operations-stats"><article><span>{sq?"Karikime aktive tani":"Active sessions now"}</span><strong>{current.activeSessions}</strong></article><article><span>{sq?"Pika të lira tani":"Available chargers now"}</span><strong>{current.statusCounts.Available}</strong></article><article><span>{sq?"Pika aktive tani":"Active stations now"}</span><strong>{current.stations}</strong></article><article><span>{sq?"Vendndodhje aktive tani":"Active locations now"}</span><strong>{current.locations}</strong></article>{superadmin&&<><article><span>{sq?"Administratorë aktivë":"Active administrators"}</span><strong>{current.administrators}</strong></article><article><span>{sq?"Drejtues aktivë":"Active drivers"}</span><strong>{current.drivers}</strong></article></>}</div>

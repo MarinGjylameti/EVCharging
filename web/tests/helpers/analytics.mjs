@@ -6,7 +6,7 @@ const dateRange=loadTypescript(path("analytics-date-range.tsx"),{"./analytics-ca
 const selector=loadTypescript(path("analytics-period-selector.tsx"),{"./analytics-calendar":calendar,"./analytics-date-range":dateRange});
 const trend=loadTypescript(path("analytics-trend.tsx"),{"./analytics-calendar":calendar});
 const tableHint=loadTypescript(new URL("../../src/components/table-scroll-hint.tsx",import.meta.url));
-export const analyticsDependencies={"./analytics-calendar":calendar,"./analytics-period-selector":selector,"./analytics-trend":trend,"../../components/table-scroll-hint":tableHint};
+export const analyticsDependencies={"../../components/runtime-features":{useTestMode:()=>false},"./analytics-calendar":calendar,"./analytics-period-selector":selector,"./analytics-trend":trend,"../../components/table-scroll-hint":tableHint};
 export function analyticsFixture() {
   const metrics={sessions:3,completedSessions:2,energyKWh:4,calculatedCost:1.4,unverifiedEnergySessions:0};
   return {

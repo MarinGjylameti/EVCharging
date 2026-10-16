@@ -4,6 +4,7 @@ using EVCharging.Application.Charging;
 using EVCharging.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace EVCharging.Api.Endpoints;
 
@@ -16,7 +17,8 @@ public static class StationEventsEndpoints
         HttpContext context,
         IStationEventStream stream,
         IServiceScopeFactory scopes,
-        TimeProvider clock
+        TimeProvider clock,
+        IOptions<RuntimeFeatures> features
     )
     {
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(
@@ -60,28 +62,49 @@ public static class StationEventsEndpoints
                 {
                     if (!await next)
                         break;
+                    var current = events.Current;
+                    next = events.MoveNextAsync().AsTask();
+                    // Apply the current policy even to persisted events produced
+                    // before a restart with test mode disabled.
+                    if (
+                        !features.Value.TestMode
+                        && (
+                            current.EventType == "DeviceCommandChanged"
+                            || current.Station?.IsDemo == true
+                            || current.Session?.IsDemo == true
+                            || await db.Stations.AnyAsync(
+                                s => s.Id == current.StationId && s.IsDemo,
+                                ct
+                            )
+                        )
+                    )
+                        continue;
                     // The bus filters private deltas by owner. Transport omits
                     // recipient identities and raw protocol fields entirely.
                     var data = JsonSerializer.Serialize(
                         new
                         {
-                            stationId = events.Current.StationId,
-                            version = events.Current.Version,
-                            eventId = events.Current.EventId,
-                            eventType = events.Current.EventType,
-                            entityType = events.Current.EntityType,
-                            entityId = events.Current.EntityId,
-                            entityVersion = events.Current.EntityVersion,
-                            occurredAt = events.Current.OccurredAt,
-                            station = events.Current.Station,
-                            session = events.Current.Session,
-                            connector = events.Current.Connector,
-                            command = events.Current.Command,
+                            stationId = current.StationId,
+                            version = current.Version,
+                            eventId = current.EventId,
+                            eventType = current.EventType,
+                            entityType = current.EntityType,
+                            entityId = current.EntityId,
+                            entityVersion = current.EntityVersion,
+                            occurredAt = current.OccurredAt,
+                            station = current.Station,
+                            session = features.Value.TestMode || current.Session is null
+                                ? current.Session
+                                : current.Session with
+                                {
+                                    Readings = null,
+                                },
+                            connector = current.Connector,
+                            command = features.Value.TestMode ? current.Command : null,
                         },
                         new JsonSerializerOptions(JsonSerializerDefaults.Web)
                     );
                     await context.Response.WriteAsync($"event: changed\ndata: {data}\n\n", ct);
-                    next = events.MoveNextAsync().AsTask();
                 }
                 else
                     await context.Response.WriteAsync("event: heartbeat\ndata: {}\n\n", ct);

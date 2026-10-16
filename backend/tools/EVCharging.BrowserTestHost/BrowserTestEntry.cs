@@ -18,7 +18,7 @@ internal static class BrowserTestEntry
             throw new InvalidOperationException(
                 "Pass --local-browser-test to run this disposable fixture host."
             );
-        await using var factory = new ApiFactory();
+        await using var factory = new ApiFactory(testMode: true);
         factory.UseKestrel(options => options.Listen(IPAddress.Loopback, 5202));
         using var client = factory.CreateClient();
         await using var scope = factory.Services.CreateAsyncScope();

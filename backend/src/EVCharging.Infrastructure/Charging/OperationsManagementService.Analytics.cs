@@ -27,7 +27,7 @@ public sealed partial class OperationsManagementService
         var stationIds = stations.Select(x => x.Id);
         var sessions = db
             .ChargingSessions.AsNoTracking()
-            .Where(x => stationIds.Contains(x.PointId));
+            .Where(x => stationIds.Contains(x.PointId) && (access.TestMode || !x.IsDemo));
         var from = period.From;
         var until = period.EffectiveUntil;
         var metrics = await AnalyticsMetricsAsync(sessions, from, until, ct);

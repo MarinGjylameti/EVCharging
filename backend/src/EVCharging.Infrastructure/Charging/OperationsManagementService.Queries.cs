@@ -17,7 +17,9 @@ public sealed partial class OperationsManagementService
             .Select(g => new { State = g.Key, Count = g.Count() })
             .ToListAsync(ct);
         var ids = access.Stations(actor).Select(x => x.Id);
-        var sessions = db.ChargingSessions.AsNoTracking().Where(x => ids.Contains(x.PointId));
+        var sessions = db
+            .ChargingSessions.AsNoTracking()
+            .Where(x => ids.Contains(x.PointId) && (access.TestMode || !x.IsDemo));
         var active = await sessions.CountAsync(x => x.EndedAt == null, ct);
         var completed = await sessions.CountAsync(x => x.EndedAt != null, ct);
         var energy = await sessions.SumAsync(x => x.EnergyKWh ?? 0, ct);
@@ -73,7 +75,9 @@ public sealed partial class OperationsManagementService
         if (filter.LocationId is { } lid)
             stations = stations.Where(x => x.LocationId == lid);
         var ids = stations.Select(x => x.Id);
-        var query = db.ChargingSessions.AsNoTracking().Where(x => ids.Contains(x.PointId));
+        var query = db
+            .ChargingSessions.AsNoTracking()
+            .Where(x => ids.Contains(x.PointId) && (access.TestMode || !x.IsDemo));
         if (filter.Status == "Active")
             query = query.Where(x => x.EndedAt == null);
         else if (filter.Status == "Completed")

@@ -12,7 +12,7 @@ namespace EVCharging.Tests;
 
 public sealed class DriverApiTests : IDisposable
 {
-    private readonly ApiFactory factory = new();
+    private readonly ApiFactory factory = new(testMode: true);
 
     private async Task<(HttpClient Client, AuthResult Auth)> Register(string email)
     {

@@ -1,3 +1,4 @@
+using EVCharging.Application.Charging;
 using EVCharging.Application.Identity;
 using EVCharging.Domain.Auditing;
 using EVCharging.Domain.Identity;
@@ -5,6 +6,7 @@ using EVCharging.Infrastructure.Charging.Ocpp;
 using EVCharging.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace EVCharging.Api;
 
@@ -27,6 +29,8 @@ public static class DemoDataSeeder
 
     public static async Task SeedAsync(IServiceProvider services, IConfiguration configuration)
     {
+        if (!services.GetRequiredService<IOptions<RuntimeFeatures>>().Value.TestMode)
+            throw new InvalidOperationException("Demo seed requires Features:TestMode=true.");
         var environment = services.GetRequiredService<IHostEnvironment>();
         if (!environment.IsDevelopment() && !environment.IsEnvironment("Testing"))
             throw new InvalidOperationException(

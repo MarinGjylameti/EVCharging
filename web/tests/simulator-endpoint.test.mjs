@@ -7,6 +7,21 @@ const { simulatorSocketBase } = endpoint;
 const demoApi = "https://vcharging-api-demo.onrender.com";
 const cloudflareBase = "wss://evcharging-ocpp.evcharging-demo.workers.dev/ws/cs/";
 
+test("the simulator route rejects direct navigation when backend test capability is off", async () => {
+  const { default: SimulatorPage } = loadTypescript(new URL("../src/app/driver/simulator/page.tsx", import.meta.url), {
+    "@/lib/backend": {
+      currentUser: async () => ({ language: "en" }),
+      backend: async path => Response.json(path === "/driver/charging-sessions" ? { canTestSimulator: false } : [{ code: "SIM-001", isDemo: true }]),
+      apiOrigin: () => assert.fail("Disabled simulator must not resolve a socket"),
+    },
+    "@/lib/simulator-endpoint": endpoint,
+    "@/features/driver/automatic-simulator-panel": { AutomaticSimulatorPanel: () => assert.fail("Disabled simulator rendered") },
+    "../../simulator.css": {},
+    "next/navigation": { notFound: () => { throw new Error("route-not-found"); }, redirect: () => assert.fail("Unexpected redirect") },
+  });
+  await assert.rejects(SimulatorPage({ searchParams: Promise.resolve({}) }), /route-not-found/);
+});
+
 test("the Render demo simulator uses Cloudflare while local and other deployments keep their own API", () => {
   assert.equal(simulatorSocketBase(demoApi), cloudflareBase);
   assert.equal(simulatorSocketBase(demoApi, "   "), cloudflareBase);

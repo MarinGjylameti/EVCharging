@@ -26,16 +26,8 @@ public sealed class ApiRuntimeConfiguration
         if (!environment.IsDevelopment() && !environment.IsEnvironment("Testing"))
             ValidateProduction(connectionString, origins);
 
-        if (
-            environment.IsProduction()
-            && (
-                configuration.GetValue<bool>("Ocpp:SimulatorEnabled")
-                || configuration.GetValue<bool>("Ocpp:AllowAnonymousSimulators")
-            )
-        )
-            throw new InvalidOperationException(
-                "OCPP simulator options are unavailable in Production."
-            );
+        // Features:TestMode is an explicit opt-in, independent of the host
+        // environment. Legacy simulator settings alone cannot enable it.
 
         return new ApiRuntimeConfiguration(connectionString, origins);
     }

@@ -95,7 +95,7 @@ public class DemoDataSeederTests
     [Fact]
     public async Task ArchivesUnusedLegacyFillerAndPreservesHistoryAndOperationalRows()
     {
-        await using var factory = new ApiFactory();
+        await using var factory = new ApiFactory(testMode: true);
         using var client = factory.CreateClient();
         Guid historicalStationId;
         Guid claimedStationId;

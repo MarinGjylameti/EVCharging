@@ -14,7 +14,8 @@ namespace EVCharging.Tests;
 
 public sealed partial class OperationsManagementTests : IDisposable
 {
-    private readonly ApiFactory factory = new();
+    // These management fixtures exercise both operational and demo tools.
+    private ApiFactory factory = new(testMode: true);
     private readonly CancellationTokenSource timeout = new(TimeSpan.FromSeconds(40));
 
     private async Task<(HttpClient Client, Guid Id)> UserAsync(string email, UserRole role)

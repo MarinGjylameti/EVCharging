@@ -3,6 +3,7 @@ using EVCharging.Application.Common;
 using EVCharging.Domain.Charging;
 using EVCharging.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Npgsql;
 
 namespace EVCharging.Infrastructure.Charging;
@@ -13,7 +14,8 @@ public sealed class DriverChargingService(
     TimeProvider clock,
     StationEventSignal events,
     IChargingClaimVerification verification,
-    IChargingDiagnostics diagnostics
+    IChargingDiagnostics diagnostics,
+    IOptions<RuntimeFeatures> features
 ) : IDriverCharging
 {
     public async Task<DriverStationCharging> GetAsync(
@@ -26,7 +28,13 @@ public sealed class DriverChargingService(
         var station =
             await db
                 .Stations.AsNoTracking()
-                .SingleOrDefaultAsync(x => x.Id == stationId && !x.IsArchived, ct)
+                .SingleOrDefaultAsync(
+                    x =>
+                        x.Id == stationId
+                        && !x.IsArchived
+                        && (features.Value.TestMode || !x.IsDemo),
+                    ct
+                )
             ?? throw new RequestFailure(404, "station_not_found", "Station not found.");
         if (connectorNumber is < 1 || connectorNumber > station.ConnectorCount)
             throw new RequestFailure(
@@ -39,6 +47,8 @@ public sealed class DriverChargingService(
         ).Sessions.FirstOrDefault(s => connectorNumber is null || s.ConnectorId == connectorNumber);
         var selectedNumber = connectorNumber ?? own?.ConnectorId ?? 1;
         var assigned = await DeviceDriverAssignment.ForDriverAsync(db, driverId, stationId, ct);
+        if (!features.Value.TestMode && assigned?.DriverCardIdTag is null)
+            assigned = null;
         var demoAccess = assigned is { DriverCardIdTag: null };
         var connector = await db
             .ChargingConnectors.AsNoTracking()
@@ -80,7 +90,8 @@ public sealed class DriverChargingService(
                 : null,
             own,
             connector is null ? null : ChargingRealtime.ConnectorDto(connector),
-            !inUse
+            features.Value.TestMode
+            && !inUse
             && connector is not null
             && (
                 demoAccess

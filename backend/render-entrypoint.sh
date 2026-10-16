@@ -3,10 +3,9 @@ set -eu
 
 export ASPNETCORE_URLS="http://0.0.0.0:${PORT:-10000}"
 
-# These flags explicitly select a demo. Keep an explicitly configured host
+# The master flag explicitly selects testing. Keep an explicitly configured host
 # environment authoritative, including DOTNET_ENVIRONMENT's precedence.
-if [ "${EVCHARGING_SEED_DEMO_ON_START:-false}" = "true" ] ||
-   [ "${EVCHARGING_Ocpp__SimulatorEnabled:-false}" = "true" ]; then
+if [ "${EVCHARGING_Features__TestMode:-false}" = "true" ]; then
   if [ -z "${DOTNET_ENVIRONMENT:-}" ] && [ -z "${ASPNETCORE_ENVIRONMENT:-}" ]; then
     export DOTNET_ENVIRONMENT=Development
     export ASPNETCORE_ENVIRONMENT=Development
@@ -14,7 +13,7 @@ if [ "${EVCHARGING_SEED_DEMO_ON_START:-false}" = "true" ] ||
   fi
 fi
 
-if [ "${EVCHARGING_SEED_DEMO_ON_START:-false}" = "true" ]; then
+if [ "${EVCHARGING_Features__TestMode:-false}" = "true" ] && [ "${EVCHARGING_SEED_DEMO_ON_START:-false}" = "true" ]; then
   startup_environment=$(printf '%s' "${DOTNET_ENVIRONMENT:-${ASPNETCORE_ENVIRONMENT:-Production}}" | tr '[:upper:]' '[:lower:]')
   case "$startup_environment" in
     development|testing) ;;
@@ -33,7 +32,7 @@ if [ "${EVCHARGING_BOOTSTRAP_SUPERADMIN_ON_START:-false}" = "true" ]; then
   dotnet EVCharging.Api.dll --bootstrap-superadmin
 fi
 
-if [ "${EVCHARGING_SEED_DEMO_ON_START:-false}" = "true" ]; then
+if [ "${EVCHARGING_Features__TestMode:-false}" = "true" ] && [ "${EVCHARGING_SEED_DEMO_ON_START:-false}" = "true" ]; then
   dotnet EVCharging.Api.dll --seed-demo
 fi
 

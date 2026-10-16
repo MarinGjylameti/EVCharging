@@ -16,6 +16,8 @@ public sealed partial class OperationsManagementService
     {
         var actor = await access.ActorAsync(actorId, ct, true);
         var tag = DeviceDriverAssignment.ParseCard(input.CardInput);
+        if (!access.TestMode && input.DriverId is not null && tag is null)
+            throw new RequestFailure(400, "card_required", "A card is required outside test mode.");
         if (tag is not null && input.DriverId is null)
             throw new RequestFailure(
                 400,

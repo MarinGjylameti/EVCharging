@@ -193,6 +193,7 @@ test("Driver assignment form explains empty demo mode, accepts JSON and submits 
   const state=[];let cursor=0,effect;const saved=[],calls=[];
   const device={version:3,assignedDriverId:id,cardIdTag:null};
   const {DeviceDriverForm}=component("device-driver-form",{
+    "../../components/runtime-features":{useTestMode:()=>true},
     react:{...React,useState(initial){const index=cursor++;if(!(index in state))state[index]=initial;return [state[index],value=>{state[index]=value;}];},useEffect:fn=>{effect=fn;}},
     "./api":{operations:async()=>[{id,firstName:"Demo",lastName:"Driver",email:"demo@example.test",isActive:true}],failure:()=>"Invalid card input",mutate:async(...args)=>{calls.push(args);return {...device,version:4,cardIdTag:"CARD-001"};}}
   });

@@ -5,7 +5,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 function compile(path, dependencies = {}) {
-  return loadTypescript(new URL(path, import.meta.url), dependencies);
+  return loadTypescript(new URL(path, import.meta.url), { "../../components/runtime-features": { useTestMode: () => true }, ...dependencies });
 }
 
 const fault = compile("../src/features/driver/charging-fault.tsx");
@@ -28,6 +28,23 @@ const render = (changes = {}, props = {}) => renderToStaticMarkup(createElement(
   session: { ...session, ...changes }, language: "en", now: Date.parse("2026-10-01T13:02:00Z"),
   stale: false, ...props,
 }));
+
+test("production station view hides test actions and diagnostics even in a stale test snapshot", () => {
+  const live = { station: { id: "station-1", code: "CP-001", name: "Station One", address: "Address", city: "Tirana", connectorType: "CCS2", isDemo: false, powerKW: 22, pricePerKWh: .35, currency: "EUR" },
+    canConnect: true, inUse: false, deviceConnected: true, connectionRequest: null, session: null,
+    driverAccessMode: "Card", diagnostics: { samples: [], lastCommand: { action: "Heartbeat", receivedAt: "2026-10-15T10:00:00Z" } } };
+  const { StationChargingView } = compile("../src/features/driver/station-charging-view.tsx", {
+    "../../components/runtime-features": { useTestMode: () => false },
+    "next/link": { default: ({ href, children }) => createElement("a", { href }, children) },
+    "./use-live-snapshot": { useLiveSnapshot: () => ({ snapshot: live, setSnapshot: () => {}, connected: true, unavailable: false }) },
+    "./charging-progress": progress, "./charging-fault": fault, "./simulator-diagnostics": diagnostics,
+    "./charging-test-report": report, "./station-availability": availability,
+    "./live-update-policy": compile("../src/features/driver/live-update-policy.ts"),
+  });
+  const html = renderToStaticMarkup(createElement(StationChargingView, { initial: live, language: "en" }));
+  assert.match(html, /Use the card linked to your account/);
+  assert.doesNotMatch(html, /Heartbeat|Download diagnostics|Connect to charger|simulator|QR is bypassed/);
+});
 
 test("missing battery level and remaining time never produce an invented percentage or countdown", () => {
   const html = render();

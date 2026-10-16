@@ -1,0 +1,20 @@
+{
+  "config": {
+    "ingress": [
+      {
+        "hostname": "ocpp.example.com",
+        "path": "^/(health/ready|ws/cs/[A-Za-z0-9_-]{1,40}/?)$",
+        "service": "https://vcharging-api-demo.onrender.com",
+        "originRequest": {
+          "httpHostHeader": "vcharging-api-demo.onrender.com",
+          "originServerName": "vcharging-api-demo.onrender.com",
+          "noTLSVerify": false,
+          "http2Origin": false
+        }
+      },
+      {
+        "service": "http_status:404"
+      }
+    ]
+  }
+}

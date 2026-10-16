@@ -16,6 +16,7 @@ export function failure(error:unknown,sq:boolean):string {
     invalid_device_identity:["Shkruaj Charge Point ID të plotë: 2–40 shkronja, numra, _ ose -.","Enter the complete Charge Point ID: 2–40 letters, digits, _ or -."],
     invalid_log_filter:["Zgjidh OCPP ose HTTP dhe një ID deri në 40 karaktere.","Choose OCPP or HTTP and an ID up to 40 characters."],
     invalid_card_input:["Shkruaj kodin e kartës (1–20 karaktere) ose JSON të vlefshëm me idTag tekst.","Enter the card code (1–20 characters) or valid JSON with a string idTag."],
+    card_required:["Vendos kartën e përdoruesit. Caktimi pa kartë lejohet vetëm në mënyrën e testimit.","Enter the account’s card. Assignment without a card is available only in test mode."],
     driver_required:["Zgjidh përdoruesin që ka këtë kartë.","Choose the account that owns this card."],
     invalid_driver:["Zgjidh një llogari Driver aktive.","Choose an active Driver account."],
     version_conflict:["Të dhënat kanë ndryshuar. Rifresko para se të ruash.","The resource changed. Refresh before saving."],
