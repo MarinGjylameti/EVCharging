@@ -62,26 +62,164 @@ payment-provider verification, change physical device admission/credentials,
 or certify unattended hardware reconnection. Those are separate production
 requirements. Operational logs remain available to Superadmin to investigate them.
 
-### Next coordinated charger test
+## Three-route charger test — 17 October 2026
 
-Keep the current deployed version and temporary tunnel running until the planned
-test on Saturday, 17 October 2026. These local changes do not change its hostname,
-Cloudflare settings, Render services, or deployment configuration.
+Deploy this backend Docker image and the web once before the test. All three
+approaches then use that same code, API, database, card configuration and charger
+identity. Switching requires environment changes/redeploys and updating the
+charger's URL, not another code edit. An API deploy interrupts existing sockets.
+Keep one API instance, upgrade its compute plan before the test, and retain the
+previous working connector until a new route has been verified.
 
-1. During the test window, push/deploy the API and web together with
-   `EVCHARGING_Features__TestMode=true`. Keep the existing charger URL for the
-   first regression check.
-2. To exercise the browser simulator through that same temporary tunnel, set
-   the **web** variable `EVCHARGING_SIMULATOR_WS_BASE_URL` to the current tunnel's
-   `wss://<current-host>/ws/cs/` address. This is a deployment choice, not a
-   hardcoded temporary hostname. Verify simulator and physical IDs separately.
-3. Verify real charging with the assigned card, StopTransaction/history, and
-   disconnection/reconnection. Then set the backend master flag to `false`,
-   restart/reload, and repeat the physical card flow. Verify that simulator
-   access, no-card assignments and Driver diagnostic tools are unavailable.
-4. Prepare the persistent tunnel below once a domain is available. Validate its
-   hostname with the physical charger before retiring the temporary tunnel. The
-   feature flag does not select or replace the network route.
+The **backend** environment variable `EVCHARGING_Tunnel__Mode` selects where the
+connector runs. Its default is `direct`; a misspelled mode fails configuration
+validation. It is independent of `EVCHARGING_Features__TestMode`. Direct OCPP
+access to the API remains available in every mode for rollback.
+
+| Order | Backend mode | Physical charger URL | Extra connector service |
+| --- | --- | --- | --- |
+| 1 | `direct` | `wss://vcharging-api-demo.onrender.com/ws/cs/NKR2023072805` | None |
+| 2 | `embedded` | `wss://<embedded-host-from-API-logs>.trycloudflare.com/ws/cs/NKR2023072805` | None; API manages cloudflared |
+| 3, only if 1 and 2 fail | `external` | `wss://<external-host-from-worker-logs>.trycloudflare.com/ws/cs/NKR2023072805` | Paid Background Worker, created only for this fallback |
+
+Both Quick Tunnel variants use the pinned `cloudflared:2026.9.0`, HTTP/2 to
+Cloudflare, the public API's HTTPS origin, matching Host/SNI, verified TLS and
+HTTP/1.1 to origin. The embedded route deliberately forwards to the same public
+API origin as the separate connector, rather than introducing a fourth,
+loopback-only topology during the comparison.
+
+### Common preparation
+
+1. In the existing API service's **Environment**, set:
+
+   ```text
+   EVCHARGING_Tunnel__Mode=direct
+   EVCHARGING_Tunnel__Origin=https://vcharging-api-demo.onrender.com
+   EVCHARGING_Features__TestMode=true
+   EVCHARGING_SEED_DEMO_ON_START=false
+   ```
+
+   Origin is required only for `embedded`; when absent on Render it defaults to
+   `RENDER_EXTERNAL_URL`. Keep the existing database, credentials, allowed hosts
+   and HTTPS CORS settings. No migration, bootstrap or demo re-seed is required
+   for route switching. If legacy `Ocpp:SimulatorEnabled` or
+   `Ocpp:AllowAnonymousSimulators` variables are explicitly false, set them true
+   for the built-in simulator during this test.
+2. Deploy the API and web from this same code revision. Use **Environment > Save
+   only**, then **Manual Deploy > Deploy latest commit** if selecting the new
+   revision manually. Once only the environment changes, **Save and deploy** is
+   sufficient. Set the API health check path to `/health/ready` if not already set.
+3. Use the read-only PowerShell helper to generate matching URLs and environment
+   values. It does not access the network or change a service or device:
+
+   ```powershell
+   .\scripts\ocpp-route-plan.ps1 -Mode direct | Format-List
+   ```
+
+### Trial 1 — direct Render API
+
+Keep `EVCHARGING_Tunnel__Mode=direct`. Set the **web** environment variable
+explicitly and redeploy the web:
+
+```text
+EVCHARGING_SIMULATOR_WS_BASE_URL=wss://vcharging-api-demo.onrender.com/ws/cs/
+```
+
+Configure the physical URL shown in row 1. If the charger appends its identity
+itself, enter only `wss://vcharging-api-demo.onrender.com/ws/cs`. Probe readiness
+and OCPP as described under "Checks for every route" below. If the physical
+charger passes the entire flow, stop the comparison here.
+
+### Trial 2 — Quick Tunnel inside the existing API
+
+Set **backend** `EVCHARGING_Tunnel__Mode=embedded` and **Save and deploy**. The
+API starts cloudflared after the HTTP host starts. Its stdout/stderr go to the
+API service's **Render Logs**. Search for `OCPP embedded Quick Tunnel` to find
+the new HTTPS hostname, then generate the matching configuration:
+
+```powershell
+.\scripts\ocpp-route-plan.ps1 -Mode embedded -TunnelBaseUrl "https://<embedded-host>.trycloudflare.com" | Format-List
+```
+
+Set the generated **web** variable, redeploy the web, and update the physical
+charger URL. Keep the normal web application's API base pointed at Render;
+only the simulator WebSocket base uses the tunnel. This variant uses the
+existing API compute plan and needs neither a domain nor another paid worker.
+The API and connector share that instance's CPU/RAM; monitor memory during the
+physical test. Use a paid, always-on API instance for these comparisons.
+
+The .NET host manages the child process and stops it on shutdown. A connector
+exit or startup failure is logged and retried after five seconds while the API
+continues serving direct requests. Each connector restart can create a **new
+hostname**; update both charger and simulator settings after that happens. An
+API deploy also restarts the embedded connector. Disabling TestMode does not
+stop the tunnel or physical charging. Set mode back to `direct` and redeploy
+to stop the embedded connector.
+
+### Trial 3 — separate Quick Tunnel worker, last fallback
+
+Set the **backend** mode to `external` and redeploy so it stops any embedded
+connector. This mode does not create, pay for, or stop an external service.
+Only if the first two physical trials fail, create the separate worker:
+
+| Render field | Value |
+| --- | --- |
+| Service type / source | Background Worker / Existing Image |
+| Image | `docker.io/cloudflare/cloudflared:2026.9.0` |
+| Name | `evcharging-ocpp-quick-tunnel` |
+| Region / instances | Frankfurt / 1 |
+| Compute | Smallest paid instance; review the displayed price |
+| Docker Command | `tunnel --protocol http2 --url https://vcharging-api-demo.onrender.com --http-host-header vcharging-api-demo.onrender.com --origin-server-name vcharging-api-demo.onrender.com --no-tls-verify=false --http2-origin=false --grace-period 10s` |
+
+No connector token, Cloudflare account or domain is needed for this Quick
+Tunnel. Alternatively apply [render.quick.yaml](tools/cloudflare-tunnel/render.quick.yaml)
+as a **separate** Blueprint, using that exact path, only when ready for the paid
+fallback. Use one creation method. Do not apply the named-tunnel `render.yaml`
+for this trial, and do not create a second API or database. The image supplies
+the `cloudflared --no-autoupdate` entrypoint; Docker Command contains its arguments.
+
+Read the random HTTPS hostname from this **worker's Render Logs**, then run:
+
+```powershell
+.\scripts\ocpp-route-plan.ps1 -Mode external -TunnelBaseUrl "https://<external-host>.trycloudflare.com" | Format-List
+```
+
+Update the charger and the web's simulator base using that output. Worker
+restarts change this URL too. Reverting the backend mode alone does **not**
+stop the worker or its bill; remove the separate worker after a failed trial.
+Deleting this disposable connector does not remove the API or database.
+
+### Checks for every route
+
+1. Open that route's `/health/ready` and confirm HTTP 200 with `{"status":"ready"}`.
+   This tests HTTP only, not physical charger compatibility.
+2. Run the OCPP probe with a separate setup identity:
+
+   ```powershell
+   . .\scripts\charger-test-tools.ps1
+   Test-PublicOcpp -BaseUrl "https://<host-of-current-trial>"
+   ```
+
+   It throws on handshake/subprotocol/BootNotification failure. `VoidTaskResult`
+   output alone can occur on success. A simulator passing does not establish
+   that the physical device passes.
+3. With the physical charger idle, change its URL, note the exact test time and
+   allow at least five minutes for the observed hardware reconnect delay. In
+   Superadmin logs confirm identity `NKR2023072805`, accepted BootNotification
+   and continuing Heartbeat replies. Record the actual HTTP status/CF-Ray when
+   a handshake fails; do not treat a missing Worker event as a diagnosis.
+4. Test a brief idle network interruption and automatic recovery. Then test an
+   actual authorized charging session, MeterValues, StopTransaction and saved
+   history. Register the correct card first: a StartTransaction `SecurityError`
+   is separate from successful WebSocket connectivity. Do not reuse the physical
+   identity in a simulator/probe because it can replace its connection.
+5. On the successful route, set **backend** `EVCHARGING_Features__TestMode=false`,
+   redeploy/reload, and repeat the authorized physical flow. The simulator and
+   Driver diagnostics should be hidden. Keep the route mode unchanged.
+
+Quick Tunnels have temporary hostnames and no uptime guarantee. These three
+trials are prepared alternatives, not proof that any untested hardware route
+will succeed. The named tunnel below is a later option for a stable hostname.
 
 ## Persistent OCPP tunnel
 

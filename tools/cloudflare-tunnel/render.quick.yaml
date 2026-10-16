@@ -1,0 +1,13 @@
+# Optional last-resort trial. Apply separately ONLY when the first two routes fail.
+# This creates a PAID worker and a NEW random hostname on every connector restart.
+services:
+  - type: worker
+    name: evcharging-ocpp-quick-tunnel
+    runtime: image
+    region: frankfurt
+    plan: 0.5c-512mb
+    numInstances: 1
+    image:
+      url: docker.io/cloudflare/cloudflared:2026.9.0
+    dockerCommand: tunnel --protocol http2 --url https://vcharging-api-demo.onrender.com --http-host-header vcharging-api-demo.onrender.com --origin-server-name vcharging-api-demo.onrender.com --no-tls-verify=false --http2-origin=false --grace-period 10s
+    maxShutdownDelaySeconds: 30

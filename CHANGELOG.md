@@ -7,7 +7,18 @@ Ndryshimet në panele të jashtme nuk regjistrohen si commit-e.
 
 ## Unreleased
 
-### 2026-10-15
+### 2026-10-16
+
+- Përgatit tri prova OCPP me të njëjtin kod: hyrjen direkte në Render, Quick Tunnel brenda API-së dhe connector-in e jashtëm si alternativë të fundit. `EVCHARGING_Tunnel__Mode=direct|embedded|external` është i pavarur nga TestMode dhe ruan hyrjen direkte e autorizimin fizik në çdo variant.
+- Përfshin binarin cloudflared 2026.9.0 në imazhin e API-së; nis procesin embedded vetëm pasi API-ja ka nisur, përcjell loget/linkun në Render, riprovon dështimet pa ndalur API-në dhe përfundon procesin fëmijë gjatë ndalimit të host-it. Ruan HTTPS, Host/SNI, verifikimin TLS dhe origjinën publike të njëjtë me connector-in e veçantë për krahasim të kontrolluar.
+- Shton Blueprint të veçantë Quick Tunnel për provën e tretë me pagesë, dhe një gjenerues PowerShell pa akses rrjeti për konfigurimin e backend-it, simulatorit dhe URL-së fizike. Udhëzuesi dokumenton rendin e provave, rikthimin, kartën, rilidhjen dhe ndryshimin e hostname-it pas rinisjes; kalimi bëhet me variabla/deploy dhe URL të re në pajisje.
+- Verifikimi: build-i .NET kaloi pa gabime/paralajmërime; kaluan 105 raste backend në ekzekutimin fillestar dhe riekzekutimin e 24 rasteve të tunelit me ekzekutuesin lokal brenda procesit. Provat përfshijnë pritjen e nisjes së API-së, riprovimin, pavarësinë nga TestMode, HTTP readiness pas dështimit të connector-it dhe ndalimin/pastrimin real të një procesi lokal fëmijë me përcjelljen e URL-së nga stderr. Kaluan 28 kontrolle PowerShell të planit të rrugëve dhe 5 teste web për konfigurimin/lidhjen e simulatorit; u verifikuan përputhja e komandës/imazhit të connector-it, CSharpier dhe `git diff --check`.
+- Kufijtë: Docker engine nuk ishte i arritshëm nga ambienti lokal, ndaj imazhi me cloudflared nuk u ndërtua/nis këtu. Bash mbetet i bllokuar nga lejet Windows. Nuk u krijua tunel publik ose shërbim me pagesë dhe nuk u krye push, deploy apo provë e re me karikuesin fizik.
+- Pajton commit-in `b1063ca` me historikun më poshtë.
+
+## 2026-10-16
+
+### `b1063ca` — Add tunel on render
 
 - Shton flag-un qendror `EVCHARGING_Features__TestMode`, OFF si parazgjedhje, dhe një endpoint të autentikuar për aftësitë e ndërfaqes. Konfigurimi vjen nga backend-i; web-i kalon në OFF nëse nuk mund ta lexojë.
 - Me OFF bllokon simulatorët dhe lidhjen demo, fsheh pikat/historikun/sesionet demo nga API-ja dhe analizat, dhe heq diagnostikimin e Driver-it si nga përgjigjet HTTP ashtu edhe nga eventet live. Loget operative dhe menaxhimi normal mbeten të mbrojtura sipas roleve; loget e aplikacionit mbeten vetëm për Superadmin.

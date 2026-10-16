@@ -3,11 +3,13 @@ using EVCharging.Application.Notifications;
 using EVCharging.Domain.Identity;
 using EVCharging.Infrastructure.Charging;
 using EVCharging.Infrastructure.Charging.Ocpp;
+using EVCharging.Infrastructure.Hosting;
 using EVCharging.Infrastructure.Identity;
 using EVCharging.Infrastructure.Notifications;
 using EVCharging.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -23,6 +25,23 @@ public static class DependencyInjection
     {
         services.AddSingleton(TimeProvider.System);
         services.AddOptions<RuntimeFeatures>().BindConfiguration("Features");
+        services
+            .AddOptions<CloudflareTunnelOptions>()
+            .BindConfiguration("Tunnel")
+            .PostConfigure<IConfiguration>(
+                (options, configuration) =>
+                {
+                    if (string.IsNullOrWhiteSpace(options.Origin))
+                        options.Origin = configuration["RENDER_EXTERNAL_URL"] ?? "";
+                }
+            )
+            .Validate(
+                options => options.IsValid(),
+                "Tunnel:Mode must be direct, embedded, or external. Embedded mode also requires a public HTTPS Tunnel:Origin (or RENDER_EXTERNAL_URL), without credentials, path, query, or fragment."
+            )
+            .ValidateOnStart();
+        services.AddSingleton<CloudflareTunnelProcess>();
+        services.AddHostedService<CloudflareTunnelWorker>();
         services.AddSingleton<ApplicationDiagnostics>();
         services.AddSingleton<IApplicationDiagnostics>(p =>
             p.GetRequiredService<ApplicationDiagnostics>()
