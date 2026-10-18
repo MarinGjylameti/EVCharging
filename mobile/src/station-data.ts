@@ -1,4 +1,5 @@
 import type { DriverChargingSession, Language, Station, StationCharging } from "../../contracts/account";
+import { directionsUrl, type MapProvider } from "../../shared/map-directions";
 
 export const stationStates: Record<Station["status"], [string, string, string]> = {
   Available: ["E lirë", "Available", "#287d57"], Occupied: ["E zënë", "Occupied", "#946017"],
@@ -14,10 +15,11 @@ export function selectStations(stations: Station[], city: string | null, availab
     && (!availableOnly || item.status === "Available")
     && (power === "all" || (power === "ac" ? item.powerKW <= 22 : item.powerKW > 22)));
 }
-export function navigationUrls(station: Station, ios: boolean) {
+export function navigationUrls(station: Station, provider: MapProvider, ios: boolean) {
   if (!Number.isFinite(station.latitude) || !Number.isFinite(station.longitude) || Math.abs(station.latitude) > 90 || Math.abs(station.longitude) > 180) throw new Error("mapUnavailable");
   const position = `${station.latitude.toFixed(6)},${station.longitude.toFixed(6)}`;
-  return { primary: ios ? `https://maps.apple.com/?daddr=${position}&dirflg=d` : `geo:${position}?q=${position}(${encodeURIComponent(station.name)})`, fallback: `https://www.google.com/maps/dir/?api=1&destination=${position}&travelmode=driving` };
+  const fallback = directionsUrl(provider, station);
+  return { primary: provider === "apple" ? fallback : ios ? `comgooglemaps://?daddr=${position}&directionsmode=driving` : `google.navigation:q=${position}&mode=d`, fallback };
 }
 export function ownChargingSession(snapshot: StationCharging): DriverChargingSession | null {
   return snapshot.inUse || (snapshot.connectionRequest && snapshot.session?.stoppedAt) ? null : snapshot.session;

@@ -98,6 +98,7 @@ export class AutomaticSimulator {
     if (this.disposed) throw new Error("Simulator closed.");
     if (this.state.connected) return;
     if (this.socket) throw new Error("A connection is already in progress.");
+    this.log("SYS", "ConnectionAttempt", JSON.stringify({ endpoint: this.config.url, protocol: "ocpp1.6" }));
     const socket = this.socketFactory(this.config.url, "ocpp1.6");
     this.socket = socket;
     try {

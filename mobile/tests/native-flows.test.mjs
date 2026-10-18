@@ -28,17 +28,26 @@ test("foreground polling never overlaps slow requests", async t => {
   const cleanup = effect(); t.mock.timers.tick(20000); assert.equal(calls, 1);
   resolve(); await tick(); t.mock.timers.tick(5000); assert.equal(calls, 2); cleanup(); resolve(); await tick();
 });
-function pushClient({ ios = false, ownership = "standalone", projectId = "11111111-2222-3333-4444-555555555555", permission = { granted: false, canAskAgain: true }, requested = { granted: true } } = {}) {
+function pushClient({ ios = false, pushEnabled = true, ownership = "standalone", projectId = "11111111-2222-3333-4444-555555555555", permission = { granted: false, canAskAgain: true }, requested = { granted: true } } = {}) {
   const events = [];
-  const notifications = { setNotificationHandler() {}, AndroidImportance: { DEFAULT: 3 }, IosAuthorizationStatus: { PROVISIONAL: 3 },
+  let handlers = 0;
+  const notifications = { setNotificationHandler() { handlers++; }, AndroidImportance: { DEFAULT: 3 }, IosAuthorizationStatus: { PROVISIONAL: 3 },
     setNotificationChannelAsync: async () => events.push("channel"), getPermissionsAsync: async () => { events.push("permission"); return permission; }, requestPermissionsAsync: async () => { events.push("request"); return requested; },
     getExpoPushTokenAsync: async () => { events.push("expo-token"); return { data: "ExponentPushToken[test]" }; },
   };
-  const client = compile("../../src/push.ts", { "react-native": { Platform: { OS: ios ? "ios" : "android" } }, "expo-constants": { default: { easConfig: { projectId }, appOwnership: ownership } }, "expo-device": { isDevice: true }, "expo-notifications": notifications,
+  const client = compile("../../src/push.ts", { "react-native": { Platform: { OS: ios ? "ios" : "android" } }, "expo-constants": { default: { easConfig: { projectId }, appOwnership: ownership, expoConfig: { extra: { pushEnabled } } } }, "expo-device": { isDevice: true }, "expo-notifications": notifications,
     "./api": { request: async (...args) => events.push(args) },
   });
-  return { ...client, events };
+  return { ...client, events, handlers };
 }
+
+test("UI previews never initialize push handlers, request permissions or register a device", async () => {
+  const client = pushClient({ pushEnabled: false });
+  assert.equal(client.pushAvailable, false); assert.equal(client.handlers, 0);
+  await client.registerPush("driver-token", false);
+  await assert.rejects(client.registerPush("driver-token", true), /pushSetup/);
+  assert.deepEqual(client.events, []);
+});
 test("Android creates its notification channel before requesting permission", async () => {
   const client = pushClient(); await client.registerPush("driver-token", true);
   assert.deepEqual(client.events.slice(0, 4), ["channel", "permission", "request", "expo-token"]);
@@ -66,6 +75,23 @@ const ui = Object.fromEntries(["Button", "Card", "ChoiceField", "Chip", "Field",
 ui.styles = {}; ui.colors = { ink: "green", muted: "gray", green: "green", border: "gray" };
 const historyData = compile("../../../shared/history.ts"), i18n = compile("../../src/i18n.ts");
 const native = { Pressable: "Pressable", ScrollView: "ScrollView", Text: "Text", View: "View" };
+
+test("UI preview explains unavailable push and language changes retain the account's push preference", async () => {
+  const state = hooks(), requests = [];
+  const user = { language: "en", pushEnabled: true, version: 4 };
+  const { SettingsScreen } = compile("../../src/SettingsScreen.tsx", {
+    react: state.react, "react/jsx-runtime": jsx, "react-native": { ...native, Switch: "Switch" }, "./ui": ui, "./i18n": i18n,
+    "./PrivacyLinks": { PrivacyLinks: "PrivacyLinks" }, "./NavigationSettings": { NavigationSettings: "NavigationSettings" }, "./push": { pushAvailable: false, registerPush: async () => assert.fail("Preview must not register push") },
+    "./api": { request: async (...args) => { requests.push(args); return user; } },
+  });
+  const tree = SettingsScreen({ user, token: "driver-token", onUpdate() {}, onLogout() {}, onExpired() {}, refresh() {}, onBack() {} });
+  const toggle = nodes(tree, item => item.type === "Switch")[0];
+  assert.equal(toggle.props.disabled, true); assert.equal(toggle.props.value, false);
+  assert.match(JSON.stringify(tree), /not enabled in this preview build/);
+  nodes(tree, item => item.type === "Chip" && item.props.title === "Shqip")[0].props.onPress(); await tick();
+  assert.deepEqual(requests, [["/me/settings", "driver-token", "PATCH", { language: "sq", pushEnabled: true, version: 4 }]]);
+});
+
 function mountHistory(history) {
   const state = hooks();
   const { HistoryScreen } = compile("../../src/HistoryScreen.tsx", { react: state.react, "react/jsx-runtime": jsx, "react-native": native, "../../shared/history": historyData, "./i18n": i18n, "./ui": ui, "./DateField": { DateField: "DateField" } });

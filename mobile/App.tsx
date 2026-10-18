@@ -13,9 +13,10 @@ import { SettingsScreen } from "./src/SettingsScreen";
 import { StationsScreen } from "./src/StationsScreen";
 import { StationChargingScreen } from "./src/StationChargingScreen";
 import { HistoryScreen } from "./src/HistoryScreen";
-import { registerPush } from "./src/push";
+import { NotificationsScreen } from "./src/NotificationsScreen";
+import { registerPush, pushAvailable } from "./src/push";
 import { waitForMobileApi } from "./src/wait-for-api";
-import { Brand, Button, Card, Notice, Screen, styles, colors } from "./src/ui";
+import { Brand, Button, Notice, Screen, styles, colors } from "./src/ui";
 
 type Tab = "stations" | "history" | "profile" | "notifications" | "settings";
 function AppContent() {
@@ -85,6 +86,7 @@ function AppContent() {
   useForegroundPoll(async signal => { try { await refresh(signal); } catch (failure) { if (!signal.aborted) setError(failure instanceof Error ? failure.message : "genericError"); } }, 15000, !!token && !!user, token ?? "");
   const pendingNotification = useRef(false);
   useEffect(() => {
+    if (!pushAvailable) return;
     const open = () => {
       if (tokenRef.current) { setTab("notifications"); setStationId(null); void refresh().catch(() => {}); }
       else pendingNotification.current = true;
@@ -138,7 +140,7 @@ function AppContent() {
       tab === "history" ? <HistoryScreen history={data.history} language={language} refresh={refresh}/> :
       tab === "profile" ? <Screen language={language}><View style={styles.row}><Text style={styles.title}>{t.overview}</Text><Button title={t.settings} secondary onPress={() => setTab("settings")}/></View><ProfileScreen key={user.id} user={user} token={token} onUpdate={updateUser} language={language}/></Screen> :
       tab === "settings" ? <SettingsScreen user={user} token={token} onUpdate={updateUser} onExpired={() => expire("passwordChanged")} onBack={() => setTab("profile")} refresh={refresh} onLogout={async () => { try { await request("/auth/logout", token, "POST"); } finally { await expire(); } }}/> :
-      <Screen language={language} refresh={refresh}><Text style={styles.title}>{t.notifications}</Text>{data.notifications.length ? data.notifications.map(item => <Card key={item.id}><Text style={styles.label}>{item.text.title}</Text><Text style={styles.body}>{item.text.body}</Text><Text style={styles.body}>{new Date(item.createdAt).toLocaleString(language === "sq" ? "sq-AL" : "en-GB", { timeZone: "Europe/Tirane" })}</Text></Card>) : <Card><Text style={styles.body}>{t.emptyNotifications}</Text></Card>}</Screen>}
+      <NotificationsScreen notifications={data.notifications} language={language} refresh={refresh}/>}
     <View style={styles.tabs}>{(["stations", "history", "profile"] as const).map((value, index) => <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === value || (value === "profile" && (tab === "settings" || tab === "notifications")) }} key={value} onPress={() => { setStationId(null); setTab(value); }} style={styles.tab}>
       <Text style={[styles.tabText, { fontSize: 22 }, (tab === value || (value === "profile" && (tab === "settings" || tab === "notifications"))) && styles.activeTab]}>{["⌖", "◷", "○"][index]}</Text>
       <Text style={[styles.tabText, (tab === value || (value === "profile" && (tab === "settings" || tab === "notifications"))) && styles.activeTab]}>{value === "profile" ? t.overview : t[value]}</Text>

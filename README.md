@@ -6,6 +6,95 @@ An electric vehicle charging platform with a web application, backend API, and m
 - `web/` — Next.js web application.
 - `mobile/` — React Native / Expo mobile application.
 
+### Preview on a physical phone
+
+The project now uses Expo SDK 57, matching the reported iPhone's Expo Go version.
+The user confirmed that it opens on that iPhone. Full TypeScript, 63 local tests
+and Hermes exports for iOS/Android pass on SDK 57. Exports are JavaScript/native
+bytecode bundles, not signed APK/IPA files or complete physical-device tests.
+
+From `mobile/`, run `npm run upgrade:expo-go` in a terminal with npm access. This
+targets SDK 57 explicitly, upgrades through 55 and 56, checks dependency versions,
+runs TypeScript and mobile tests after each step, then exports iOS and Android.
+It backs up the dependency files under the ignored `.local/` directory, first
+finishes alignment/checks for an interrupted SDK, and stops at the first failure.
+The date picker plugin is explicitly registered in the dynamic Expo config.
+The TypeScript config includes Node types for the build configuration; native
+sources use the current React Native style API. Compiler temporary files stay
+under `.local/mobile-build-tmp` to avoid Windows temporary-directory write errors.
+`npm run upgrade:expo-go -- --plan` only prints the steps.
+A failed migration may leave dependency changes that need inspection. The
+current checkout has already completed the migration; it need not be repeated.
+
+Set `EXPO_PUBLIC_API_BASE_URL` to an API the phone can reach before running
+`npm run upgrade:expo-go -- --start` to open the tunnel only after the whole
+upgrade and its checks succeed. Alternatively, after a successful upgrade run
+`npm run start:tunnel`. This explicitly selects Expo Go
+and clears Metro's cache. The required ngrok package is a local development
+dependency. Keep the terminal running while using the QR shown by Expo. The
+tunnel serves Metro; it does not expose the API automatically. Expo Go is a UI
+preview, not verification of push delivery or a signed app build.
+
+### Android APK for a colleague
+
+In a network-connected terminal, from `mobile/`, run:
+
+```powershell
+npm.cmd run build:apk
+```
+
+The command checks TypeScript/tests, installs EAS CLI inside the ignored
+`.local/mobile-tools` folder if missing, and creates or links the `evcharging`
+project under the selected Expo account. Sign in if prompted, choose the intended
+account if several are available, and allow EAS to generate the Android keystore
+when asked. No global installation is required.
+
+Initialization uses a small static configuration under `.local/` because EAS
+cannot automatically rewrite the app's dynamic configuration. The actual ID
+returned by EAS is saved in `mobile/config/eas-project.json`; retain this public
+project binding in version control. Subsequent runs reuse it. A conflicting
+environment ID or unexpected project slug stops the workflow.
+
+The `preview-ui` profile builds an internal, signed APK against the existing
+demo API. It disables push registration/listeners and explains the unavailable
+push switch in Settings, without changing the account's saved preference. The
+regular `preview` and `production` profiles retain their Firebase/push setup.
+This UI build does not validate real-charger behavior or store readiness.
+
+After the Android export check, EAS uploads the required mobile/shared source
+and builds the APK. `.easignore` excludes local settings, dependencies, signing
+files, Git history and unrelated backend/web folders. The command waits for EAS
+and prints its actual installation/download link on success. Send that link or
+the downloaded APK to the colleague; the installed app needs network access to
+the API, but no Expo Go, Metro tunnel or running laptop. See the
+[official APK installation guide](https://docs.expo.dev/build-reference/apk/).
+
+`npm.cmd run build:apk -- --plan` prints the workflow without changes. No store
+submission, commit or push is performed. The EAS project and signed APK have not
+yet been created: this agent environment cannot resolve npm/Expo hosts, so the
+cloud steps must run from the network-connected terminal.
+
+### Station map, navigation and notification dates
+
+The mobile Stations screen opens on the embedded map and offers a List tab for
+station details/charging. Both views use the same city, availability and charger
+rating filters. The map reuses the web's OpenStreetMap tiles and shared projection
+math, with dragging, pinch/zoom controls, visible attribution and a list fallback
+when tiles fail. Only visible tiles are requested, with an application User-Agent
+and the native image cache; no new package, location permission or map API key is
+required. Map tiles remain an external network dependency; see the
+[OpenStreetMap tile policy](https://operations.osmfoundation.org/policies/tiles/).
+
+Settings now contains Google Maps / Apple Maps preference, saved on this phone
+using the existing storage module; Google Maps matches the web's default. A map
+marker or a list navigation button uses the saved choice and the exact station
+coordinates. Google Maps falls back to its website if its app is unavailable.
+The map and preference must still be exercised on both physical platforms.
+
+Notifications are newest first, grouped and filterable by the Albanian calendar
+day, with eight cards per page. Times use `Europe/Tirane` and the 24-hour clock,
+including daylight-saving changes. Charging start timestamps also use 24 hours.
+
 The project is under active development.
 
 See [CHANGELOG.md](CHANGELOG.md) for the change history.
@@ -68,10 +157,10 @@ Before submission, the release owner must complete:
   large text/VoiceOver/TalkBack, keyboard and Back, connection loss/recovery,
   notifications allowed/declined, own-versus-other-user data, and charging history.
   Test iPad too while `supportsTablet` remains enabled.
-- Resolve the existing native-map acceptance gap: the Expo screen currently lists
-  stations and opens the phone's map; it does not contain the embedded station map
-  described in the client's specification. Do not advertise embedded maps, QR
-  scanning, payments or remote start as completed native features.
+- Verify the newly implemented mobile map on physical devices: filtering,
+  dragging/pinching, station taps, saved Google/Apple preference and unavailable
+  external apps/tiles. QR scanning, payments and remote start remain outside the
+  implemented native features.
 
 ## QR, card and ownership boundary
 
@@ -225,6 +314,16 @@ explicitly and redeploy the web:
 ```text
 EVCHARGING_SIMULATOR_WS_BASE_URL=wss://vcharging-api-demo.onrender.com/ws/cs/
 ```
+
+The simulator now defaults to the configured API origin when this web variable
+is absent. Older web builds special-cased the demo API to a legacy Cloudflare
+Worker; changing only the API's `Tunnel__Mode` did not change that browser URL.
+An existing explicit web value still takes precedence and must match the route
+being tested. `ConnectionAttempt` in new simulator logs records the validated
+endpoint and `ocpp1.6` protocol before the handshake. Browser WebSocket errors do
+not reveal its HTTP rejection status; use the API's OCPP logs to distinguish
+admission failure (401), an existing connection (409), or other causes. No live
+connection is established merely by the local tests or this configuration fix.
 
 Configure the physical URL shown in row 1. If the charger appends its identity
 itself, enter only `wss://vcharging-api-demo.onrender.com/ws/cs`. Probe readiness

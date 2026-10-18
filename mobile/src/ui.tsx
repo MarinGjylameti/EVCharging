@@ -18,7 +18,7 @@ export function Card({ children }: PropsWithChildren) { return <View style={styl
 export function Notice({ text, success = false }: { text: string; success?: boolean }) {
   return text ? <Text accessibilityRole="alert" style={[styles.notice, success && { color: colors.green, backgroundColor: "#e9f3e0" }]}>{text}</Text> : null;
 }
-export function Screen({ children, language = "sq", refresh }: PropsWithChildren<{ language?: Language; refresh?: () => Promise<void> }>) {
+export function Screen({ children, language = "sq", refresh, scrollEnabled = true }: PropsWithChildren<{ language?: Language; refresh?: () => Promise<void>; scrollEnabled?: boolean }>) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const pending = useRef(false);
@@ -29,7 +29,7 @@ export function Screen({ children, language = "sq", refresh }: PropsWithChildren
     finally { pending.current = false; setBusy(false); }
   }
   return <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-    <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={styles.content}
+    <ScrollView scrollEnabled={scrollEnabled} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={styles.content}
       refreshControl={refresh ? <RefreshControl refreshing={busy} onRefresh={() => void reload()} tintColor={colors.green} /> : undefined}>
       <Notice text={error}/>{children}
     </ScrollView>
@@ -48,7 +48,7 @@ export function ChoiceField({ label, value, options, onChange, language }: {
     <Pressable accessibilityRole="button" accessibilityLabel={`${label}: ${options.find(item => item.value === value)?.label ?? value}`} onPress={() => setOpen(true)} style={[styles.input, styles.row]}><Text style={[styles.body, { color: colors.ink, flex: 1 }]}>{options.find(item => item.value === value)?.label ?? value}</Text><Text>⌄</Text></Pressable>
     <Modal transparent visible={open} animationType="slide" onRequestClose={() => setOpen(false)}>
       <View style={{ flex: 1, justifyContent: "flex-end" }}>
-        <Pressable accessibilityRole="button" accessibilityLabel={close} onPress={() => setOpen(false)} style={[StyleSheet.absoluteFillObject, { backgroundColor: "#0006" }]}/>
+        <Pressable accessibilityRole="button" accessibilityLabel={close} onPress={() => setOpen(false)} style={[StyleSheet.absoluteFill, { backgroundColor: "#0006" }]}/>
         <View accessibilityViewIsModal style={{ maxHeight: "80%", backgroundColor: colors.white, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 20, paddingBottom: insets.bottom + 20 }}>
           <View style={styles.row}><Text style={[styles.label, { fontSize: 18, flex: 1 }]}>{label}</Text><Button title={close} secondary onPress={() => setOpen(false)}/></View>
           <ScrollView>{options.map(item => <Pressable key={item.value} accessibilityRole="button" accessibilityState={{ selected: item.value === value }} onPress={() => { onChange(item.value); setOpen(false); }} style={[styles.row, { minHeight: 52, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border }]}><Text style={[styles.body, { flex: 1, color: colors.ink }]}>{item.label}</Text>{item.value === value && <Text style={styles.label}>✓</Text>}</Pressable>)}</ScrollView>

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { createRequire, Module } from "node:module";
 import { fileURLToPath } from "node:url";
 const required = createRequire(import.meta.url);
+const testCompilerOptions = ts => ({ module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true });
 let ts;
 try { ts = required("typescript"); }
 catch (error) {
@@ -13,20 +14,26 @@ export function compile(path, dependencies = {}) {
   const source = fileURLToPath(new URL(path, import.meta.url));
   const output = ts.transpileModule(readFileSync(source, "utf8"), {
     fileName: source, reportDiagnostics: true,
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
+    compilerOptions: testCompilerOptions(ts),
   });
   const errors = output.diagnostics?.filter(item => item.category === ts.DiagnosticCategory.Error) ?? [];
   if (errors.length) throw new Error(ts.formatDiagnosticsWithColorAndContext(errors, { getCanonicalFileName: file => file, getCurrentDirectory: () => "", getNewLine: () => "\n" }));
   const localRequire = createRequire(source), module = new Module(source + ".cjs");
   module.filename = source + ".cjs";
-  module.require = name => Object.hasOwn(dependencies, name) ? dependencies[name] : localRequire(name);
+  module.require = name => {
+    if (!Object.hasOwn(dependencies, name)) return localRequire(name);
+    const dependency = dependencies[name];
+    // A mock with an explicit default export represents an ES module. Mark it
+    // accordingly so TS 6 interop does not wrap that export a second time.
+    return dependency && Object.hasOwn(dependency, "default") ? { ...dependency, __esModule: true } : dependency;
+  };
   module._compile(output.outputText, module.filename);
   return module.exports;
 }
 export const jsx = { jsx: (type, props, key) => ({ type, props, key }), jsxs: (type, props, key) => ({ type, props, key }), Fragment: "Fragment" };
 export function syntaxErrors(sourceUrl) {
   const source = fileURLToPath(sourceUrl);
-  return ts.transpileModule(readFileSync(source, "utf8"), { fileName: source, reportDiagnostics: true, compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).diagnostics?.filter(item => item.category === ts.DiagnosticCategory.Error) ?? [];
+  return ts.transpileModule(readFileSync(source, "utf8"), { fileName: source, reportDiagnostics: true, compilerOptions: testCompilerOptions(ts) }).diagnostics?.filter(item => item.category === ts.DiagnosticCategory.Error) ?? [];
 }
 export const nodes = (tree, predicate) => !tree || typeof tree !== "object" ? [] : [...(predicate(tree) ? [tree] : []), ...[tree.props?.children].flat(10).flatMap(child => nodes(child, predicate))];
 export function hooks() {

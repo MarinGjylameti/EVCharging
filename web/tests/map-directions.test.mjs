@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { directionsUrl, mapProviderFromPreference } from "../src/lib/map-directions.ts";
+import { directionsUrl, mapProviderFromPreference } from "../../shared/map-directions.ts";
 
 test("Google Maps is the default and Apple Maps needs an explicit preference", () => {
   assert.equal(mapProviderFromPreference(null), "google");

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { compile } from "./helpers/compile.mjs";
 const config = compile("../../src/config.ts");
-const stations = compile("../../src/station-data.ts");
+const stations = compile("../../src/station-data.ts", { "../../shared/map-directions": compile("../../../shared/map-directions.ts") });
 const account = compile("../../src/account-inputs.ts");
 const history = compile("../../../shared/history.ts");
 const { buildEnvironment } = createRequire(import.meta.url)("../config/build-environment.cjs");
@@ -30,12 +30,14 @@ test("station filters combine city, availability, rating and archival", () => {
   assert.deepEqual(stations.selectStations(items, "Tirana", true, "fast").map(item => item.id), ["2"]);
   assert.deepEqual(stations.selectStations(items, "Tirana", true, "ac").map(item => item.id), ["1"]);
 });
-test("map links escape station labels and validate coordinates", () => {
+test("map links honor the selected provider, retain exact coordinates and validate them", () => {
   const station = { name: "Central & 2", latitude: 41.3275, longitude: 19.8187 };
-  assert.match(stations.navigationUrls(station, true).primary, /^https:\/\/maps.apple.com/);
-  assert.match(stations.navigationUrls(station, false).primary, /Central%20%26%202/);
-  assert.throws(() => stations.navigationUrls({ ...station, latitude: NaN }, true), /mapUnavailable/);
-  assert.throws(() => stations.navigationUrls({ ...station, longitude: 181 }, false), /mapUnavailable/);
+  assert.match(stations.navigationUrls(station, "apple", true).primary, /^https:\/\/maps.apple.com/);
+  assert.match(stations.navigationUrls(station, "google", false).primary, /^google.navigation:q=41.327500,19.818700/);
+  assert.match(stations.navigationUrls(station, "google", true).primary, /^comgooglemaps:\/\//);
+  assert.match(stations.navigationUrls(station, "google", true).fallback, /^https:\/\/www.google.com\/maps/);
+  assert.throws(() => stations.navigationUrls({ ...station, latitude: NaN }, "apple", true), /mapUnavailable/);
+  assert.throws(() => stations.navigationUrls({ ...station, longitude: 181 }, "google", false), /mapUnavailable/);
 });
 const session = { stoppedAt: null, status: "Charging", energyKWh: 5, powerKW: 43, stateOfCharge: 75, cost: 1.75, powerValidUntil: "2026-10-08T12:01:00Z", stateOfChargeValidUntil: "2026-10-08T12:01:00Z" };
 test("other-driver sessions and previous completed sessions are private", () => {

@@ -4,6 +4,10 @@
     "development": { "developmentClient": true, "distribution": "internal", "environment": "development" },
     "simulator": { "extends": "development", "ios": { "simulator": true } },
     "preview": { "distribution": "internal", "environment": "preview", "android": { "buildType": "apk" } },
+    "preview-ui": {
+      "extends": "preview",
+      "env": { "EXPO_PUBLIC_API_BASE_URL": "https://vcharging-api-demo.onrender.com" }
+    },
     "production": { "environment": "production", "autoIncrement": true, "android": { "buildType": "app-bundle" } }
   }
 }

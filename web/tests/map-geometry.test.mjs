@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { coordinateAtPixel, distanceKm, fromWorldPixels, pinchMapView, toWorldPixels, visibleTiles, zoomAroundPixel } from "../src/lib/map-geometry.ts";
+import { coordinateAtPixel, distanceKm, fromWorldPixels, pinchMapView, toWorldPixels, visibleTiles, zoomAroundPixel } from "../../shared/map-geometry.ts";
 
 test("map projection returns the clicked geographic point", () => {
   const center = {latitude:41.3275,longitude:19.8187};

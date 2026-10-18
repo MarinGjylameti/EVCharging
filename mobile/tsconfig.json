@@ -1,5 +1,5 @@
 {
   "extends": "expo/tsconfig.base",
-  "compilerOptions": { "strict": true, "noEmit": true },
+  "compilerOptions": { "strict": true, "noEmit": true, "types": ["node", "react"] },
   "include": ["**/*.ts", "**/*.tsx", "../contracts/**/*.ts", "../shared/**/*.ts"]
 }

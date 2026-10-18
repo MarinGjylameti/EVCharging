@@ -9,6 +9,24 @@ Ndryshimet në panele të jashtme nuk regjistrohen si commit-e.
 
 ### 2026-10-18
 
+- Përditëson aplikacionin nga Expo SDK 54 në SDK 57 për përputhje me Expo Go në iPhone. Komanda `upgrade:expo-go` kalon gradualisht në 55/56/57, ruan kopje të manifestit/lockfile-it, kontrollon varësitë, TypeScript-in dhe testet pas çdo hapi, eksporton të dyja platformat dhe ndalon në dështimin e parë.
+- Shton `start:tunnel` që zgjedh shprehimisht Expo Go dhe pastron cache-in, ngrok si varësi lokale zhvillimi dhe lockfile-in mobile. Dokumenton dallimin mes QR-së së preview-t, API-së së arritshme dhe APK-së së nënshkruar.
+- Korrigjon ndalimin pas instalimit të SDK 55: regjistron shprehimisht plugin-in e kalendarit në konfigurimin dinamik. Rifillimi përfundon varësitë dhe kontrollon SDK-në aktuale përpara kalimit më tej. Opsioni `--start` hap tunelin vetëm pas suksesit të të gjithë hapave, duke shmangur nisjen aksidentale nga komandat e ngjitura veçmas në PowerShell.
+- Përshtat SDK 56/TypeScript 6: deklaron tipet Node për konfigurimin, përdor `StyleSheet.absoluteFill` dhe shënon saktë eksportet default të moduleve të simuluara në teste. Nuk fsheh gabime me përjashtime të compiler-it. Përcakton Node 20.19.4 si minimum dhe mban skedarët e përkohshëm të compiler-it brenda projektit për të shmangur gabimin e shkrimit të Hermes në Windows.
+- Shton `build:apk` dhe profilin e brendshëm `preview-ui`: përdor API-në demo, instalon EAS CLI lokalisht sipas nevojës, krijon/lidh projektin Expo, ruan UUID-në reale për ripërdorim, kontrollon konfigurimin, eksporton Android dhe nis build-in APK në EAS. Refuzon identitet kontradiktor ose slug të papritur dhe ndalon pas gabimeve; nuk kryen dorëzim në dyqane, commit ose push. `.easignore` kufizon arkivin te burimet e nevojshme dhe përjashton konfigurimet lokale, kredencialet dhe historikun Git.
+- Vetëm profili `preview-ui` çaktivizon push për të lejuar provën e pamjes pa konfigurim Firebase. Cilësimet shpjegojnë kufizimin; preferenca e ruajtur në llogari nuk ndryshon nga ky kufizim. Profilet e tjera ruajnë push dhe kontrollet ekzistuese të publikimit.
+- Shton hartën brenda aplikacionit mobile, kalimin Harta/Lista, lëvizjen/zmadhimin dhe hapjen e navigimit nga pika. Filtrat janë të njëjtë në të dyja pamjet; ndryshimi i statusit nuk e rikthen pozicionin e hartës. Përbashkon llogaritjet e hartës dhe URL-të e navigimit me web-in. Përdor OpenStreetMap me atribuim, kërkesa vetëm për pamjen e dukshme dhe identifikim aplikacioni, pa varësi të reja ose leje vendndodhjeje.
+- Shton te cilësimet zgjedhjen Google Maps/Apple Maps, të ruajtur në telefon. Hap koordinatat e sakta sipas preferencës dhe përdor faqen Google kur aplikacioni mungon. Gabimi i ruajtjes nuk shfaqet si sukses; prekjet e përsëritura të navigimit bashkohen.
+- Organizon njoftimet nga më të rejat, me grupim/filtër sipas ditës dhe nga tetë karta për faqe. Ndryshimi i ditës rikthen faqen e parë; kalimi i faqes rikthen listën në krye. Ora është 24-orëshe në `Europe/Tirane`, përfshirë ndryshimet verë/dimër; edhe koha e nisjes së karikimit nuk shfaq më shënimin 12-orësh.
+- Korrigjon parazgjedhjen e simulatorit web që ende dërgonte API-në demo te Worker-i i vjetër Cloudflare: tani përdor origjinën e API-së, ndërsa tuneli kërkon konfigurim të shprehur të web-it. Ruan refuzimin e URL-ve të pavlefshme dhe nuk bën fallback të fshehtë. Logu `ConnectionAttempt` regjistron endpoint-in e validuar dhe protokollin përpara lidhjes. Ndryshimi lokal nuk është deploy ose konfirmim i shkakut të refuzimit live.
+- Verifikimi: kaluan TypeScript-i mobile/web, 63 teste mobile në SDK 57, 183 teste web, konfigurimi prebuild dhe eksportet Hermes iOS/Android. Kaluan edhe 15 kontrolle të fokusuara pas plotësimit të logut të lidhjes. Testet mbulojnë hartën/preferencën, navigimin, prekjet/zmadhimin, ditën/orën shqiptare me DST, filtrimin/faqëzimin dhe rrugën direkte të simulatorit me WebSocket të simuluar. Përfshihen migrimi, rrjedha APK me EAS të simuluar, kontrollet e paketimit, sintaksa, manifest/lockfile dhe `git diff --check`. Kontrolli offline i varësive raportoi përputhje me kufizimin e vet të besueshmërisë.
+- Kufijtë: ambienti i agentit nuk arrin npm/Expo (`ENOTFOUND`); instalimet u kryen nga terminali i përdoruesit. Krijimi real i projektit EAS dhe build-i i nënshkruar APK mbeten për ekzekutim nga terminali me rrjet. Përdoruesi konfirmoi hapjen e SDK 57 në iPhone përpara shtimit të hartës/njoftimeve; këto ndryshime mbeten për provë në pajisje. Eksportet/testet e simuluara nuk janë APK/IPA, push delivery, lidhje live e simulatorit ose testim fizik. Nuk u krye deploy, commit ose push.
+- Pajton commit-in `b1d1a66` me historikun më poshtë.
+
+## 2026-10-18
+
+### `b1d1a66` — Refactor for apple and android versions
+
 - Përmirëson përdorimin mobile të funksioneve ekzistuese: admini hap detajet e pikës veçmas nga lista, kthehet me një veprim dhe konfirmon braktisjen e ndryshimeve të paruajtura. Rifreskimet e serverit përditësojnë formularin e paprekur; konfliktet ofrojnë ngarkimin e versionit aktual.
 - Karikimet e adminit paraqiten si karta me etiketa në telefon; filtrat hapen sipas nevojës. Refuzon intervalet e pavlefshme dhe nuk lejon përgjigjet e vjetra të zëvendësojnë rezultatet e filtrit të ri. Formulari i kartës mund të riprovojë ngarkimin dhe bllokon dërgimet e dyfishta.
 - Përbashkon udhëzimin Driver në web/native për pikë offline, gjendje të vjetruar, mirëmbajtje, lidhës të zënë/rezervuar dhe kartë të lidhur. Nuk krijon pronësi nga hapja e pikës. Ruhet shfaqja e defekteve të pajisjes; udhëzimet teknike kufizohen në testim.
@@ -18,8 +36,6 @@ Ndryshimet në panele të jashtme nuk regjistrohen si commit-e.
 - Pajton commit-in `e206009` me historikun më poshtë.
 - Verifikimi: kaluan 183 teste web, 45 teste mobile me module native të simuluara, TypeScript web dhe `git diff --check`. Përfshihen udhëzimet e karikimit, formulari mobile i adminit, përgjigjet e vonuara, gabimet e ngarkimit, tarifa e seancës, push i refuzuar dhe kontrollet/veprimet e privatësisë. Kontrolli store iOS refuzoi konfigurimin lokal të paplotësuar, siç pritet.
 - Kufijtë: Next.js nuk u nis për shkak të gabimit Windows `Access is denied` gjatë zgjidhjes së rrugës së projektit. Kontrolli vizual në browser nuk u krye për shkak të refuzimit të aksesit localhost. Varësitë Expo nuk janë të instaluara; typecheck i plotë mobile, export Metro, build native, prova me pajisje/karikues dhe dorëzimi në dyqane nuk janë kryer. Backend-i dhe skema nuk ndryshojnë; nuk u krye migrim, commit, push ose deploy.
-
-## 2026-10-18
 
 ### `e206009` — Add 3 versions for testing with actual charger 2
 

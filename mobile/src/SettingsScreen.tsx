@@ -2,10 +2,11 @@ import { useRef, useState } from "react";
 import { Linking, View, Text, Switch } from "react-native";
 import type { Language, User } from "../../contracts/account";
 import { request } from "./api";
-import { registerPush } from "./push";
+import { registerPush, pushAvailable } from "./push";
 import { messages, errorText } from "./i18n";
 import { Field, Button, Notice, Card, Chip, Screen, styles, colors } from "./ui";
 import { PrivacyLinks } from "./PrivacyLinks";
+import { NavigationSettings } from "./NavigationSettings";
 
 export function SettingsScreen({ user, token, onUpdate, onLogout, onExpired, refresh, onBack }: { user: User; token: string; onUpdate: (value: User) => void; onLogout: () => Promise<void>; onExpired: () => Promise<void>; refresh: () => Promise<void>; onBack: () => void }) {
   const busyRef = useRef(false);
@@ -30,7 +31,8 @@ export function SettingsScreen({ user, token, onUpdate, onLogout, onExpired, ref
     <Button title={user.language === "sq" ? "← Kthehu te llogaria" : "← Back to account"} secondary onPress={onBack}/>
     <Text style={styles.title}>{t.settings}</Text>
     <Card><Text style={styles.label}>{t.language}</Text><View style={styles.wrap}>{(["sq", "en"] as const).map(language => <Chip title={language === "sq" ? "Shqip" : "English"} selected={language === user.language} disabled={busy} key={language} onPress={() => void update(language, user.pushEnabled)}/>)}</View></Card>
-    <Card><View style={styles.row}><Text style={[styles.label, { flex: 1 }]}>{t.push}</Text><Switch accessibilityLabel={t.push} value={user.pushEnabled} disabled={busy} onValueChange={value => void update(user.language, value)} trackColor={{ true: colors.green }}/></View><Text style={styles.body}>{t.pushHint}</Text></Card>
+    <Card><View style={styles.row}><Text style={[styles.label, { flex: 1 }]}>{t.push}</Text><Switch accessibilityLabel={t.push} value={pushAvailable && user.pushEnabled} disabled={busy || !pushAvailable} onValueChange={value => void update(user.language, value)} trackColor={{ true: colors.green }}/></View><Text style={styles.body}>{pushAvailable ? t.pushHint : user.language === "sq" ? "Njoftimet push nuk janë aktive në këtë version prove." : "Push notifications are not enabled in this preview build."}</Text></Card>
+    <NavigationSettings language={user.language}/>
     <Notice text={error ? errorText(new Error(error), user.language) : ""}/>
     {error === "pushDenied" && <Button title={user.language === "sq" ? "Hap cilësimet e telefonit" : "Open phone settings"} secondary onPress={() => void Linking.openSettings().catch(() => setError("genericError"))}/>}
     <Card><Text style={[styles.label, { fontSize: 18 }]}>{t.changePassword}</Text>

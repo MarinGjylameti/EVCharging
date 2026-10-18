@@ -69,7 +69,7 @@ export function StationChargingScreen({ stationId, token, language, onBack }: { 
         <Text style={styles.eyebrow}>{sq ? "KARIKIMI YT" : "YOUR CHARGE"}</Text>
         <Text style={[styles.label, { fontSize: 19 }]}>{session.stoppedAt ? (sq ? "Karikimi përfundoi" : "Charge completed") : stale ? (sq ? "Në pritje të përditësimit" : "Waiting for an update") : sessionLabels[session.status]?.[sq ? 0 : 1] ?? (sq ? "Në pritje të statusit" : "Awaiting status")}</Text>
         <View style={[styles.row, { flexWrap: "wrap" }]}><Text style={styles.body}>{sq ? "Kohëzgjatja" : "Duration"}</Text><Text style={styles.metric}>{chargingDuration(session, now)}</Text></View>
-        <Text style={styles.body}>{t.started}: {new Date(session.isDemo ? session.startReceivedAt ?? session.startedAt : session.startedAt).toLocaleString(sq ? "sq-AL" : "en-GB", { timeZone: "Europe/Tirane" })}</Text>
+        <Text style={styles.body}>{t.started}: {new Date(session.isDemo ? session.startReceivedAt ?? session.startedAt : session.startedAt).toLocaleString(sq ? "sq-AL" : "en-GB", { timeZone: "Europe/Tirane", hourCycle: "h23" })}</Text>
         <View style={[styles.row, { flexWrap: "wrap" }]}><Text style={styles.body}>{t.energy}</Text><Text style={styles.metric}>{number(values.energy)} kWh</Text></View>
         <View style={[styles.row, { flexWrap: "wrap" }]}><Text style={styles.body}>{sq ? "Fuqia e matur" : "Measured power"}</Text><Text style={styles.metric}>{number(values.power)} kW</Text></View>
         <View style={[styles.row, { flexWrap: "wrap" }]}><Text style={styles.body}>{sq ? "Bateria" : "Battery"}</Text><Text style={styles.metric}>{number(values.battery)}%</Text></View>

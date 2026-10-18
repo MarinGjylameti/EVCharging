@@ -1,8 +1,10 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Linking, Platform, Text, View } from "react-native";
 import type { Language, Station } from "../../contracts/account";
 import { messages, errorText } from "./i18n";
 import { navigationUrls, selectStations, stationState } from "./station-data";
+import { readMapProvider } from "./map-preference";
+import { StationMap } from "./StationMap";
 import { Button, Card, ChoiceField, Chip, Notice, Screen, styles } from "./ui";
 
 export function StationsScreen({ stations, language, refresh, onSelect, stale = false }: { stations: Station[]; language: Language; refresh: () => Promise<void>; onSelect: (stationId: string) => void; stale?: boolean }) {
@@ -11,23 +13,30 @@ export function StationsScreen({ stations, language, refresh, onSelect, stale = 
   const [availableOnly, setAvailableOnly] = useState(false);
   const [power, setPower] = useState<"all" | "ac" | "fast">("all");
   const [error, setError] = useState("");
+  const [mode, setMode] = useState<"map" | "list">("map"), [interacting, setInteracting] = useState(false);
+  const navigating = useRef(false);
   const cities = useMemo(() => [...new Set(stations.filter(item => !item.isArchived).map(item => item.city))].sort(), [stations]);
   const shown = selectStations(stations, city, availableOnly, power);
   async function openMap(station: Station) {
+    if (navigating.current) return;
+    navigating.current = true;
     try {
-      const urls = navigationUrls(station, Platform.OS === "ios");
+      const provider = await readMapProvider();
+      const urls = navigationUrls(station, provider, Platform.OS === "ios");
       try { await Linking.openURL(urls.primary); } catch { await Linking.openURL(urls.fallback); }
       setError("");
     } catch (failure) { setError(errorText(failure, language)); }
+    finally { navigating.current = false; }
   }
-  return <Screen language={language} refresh={refresh}>
+  return <Screen language={language} refresh={refresh} scrollEnabled={!interacting}>
     <Text style={styles.eyebrow}>{sq ? "RRJETI I KARIKIMIT" : "CHARGING NETWORK"}</Text><Text style={styles.title}>{t.stations}</Text><Text style={styles.body}>{t.stationIntro}</Text>
+    <View style={styles.wrap}><Chip title={sq ? "Harta" : "Map"} selected={mode === "map"} onPress={() => setMode("map")}/><Chip title={sq ? "Lista" : "List"} selected={mode === "list"} onPress={() => setMode("list")}/></View>
     <ChoiceField label={sq ? "Qyteti" : "City"} value={city} options={[{ value: "", label: t.allCities }, ...cities.map(value => ({ value, label: value }))]} onChange={setCity} language={language}/>
     <ChoiceField label={sq ? "Fuqia e pikës" : "Charger rating"} value={power} options={[{ value: "all", label: sq ? "Çdo fuqi" : "Any rating" }, { value: "ac", label: "≤ 22 kW" }, { value: "fast", label: "> 22 kW" }]} onChange={value => setPower(value as typeof power)} language={language}/>
     <Chip title={`${availableOnly ? "✓ " : ""}${t.availableOnly}`} selected={availableOnly} onPress={() => setAvailableOnly(value => !value)}/>
     <Text style={styles.body}>{shown.length} {t.stations.toLowerCase()}</Text><Notice text={error}/>
     {stale && <Notice text={sq ? "Lidhja është ndërprerë. Gjendjet e pikave janë nga përditësimi i fundit." : "Connection lost. Station statuses are from the last update."}/>}
-    {shown.length ? shown.map(station => {
+    {shown.length && mode === "map" ? <StationMap stations={shown} language={language} stale={stale} onNavigate={station => void openMap(station)} onInteraction={setInteracting}/> : shown.length ? shown.map(station => {
       const status = stationState(station.status, language);
       return <Card key={station.id}>
         <View style={[styles.row, { flexWrap: "wrap" }]}><Text style={[styles.label, { fontSize: 17, flexShrink: 1 }]}>{station.name}</Text><Text style={[styles.label, { color: stale ? "#536b5e" : status.color }]}>{stale ? `${sq ? "Gjendja e fundit" : "Last status"}: ` : ""}{status.text}</Text></View>

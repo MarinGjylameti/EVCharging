@@ -1,9 +1,6 @@
-const DEMO_API_ORIGIN = "https://vcharging-api-demo.onrender.com";
-const DEMO_OCPP_ORIGIN = "https://evcharging-ocpp.evcharging-demo.workers.dev";
-
 export function simulatorSocketBase(apiBase: string, configuredBase?: string) {
   const api = new URL(apiBase);
-  const defaultSocket = new URL("/ws/cs/", api.origin === DEMO_API_ORIGIN ? DEMO_OCPP_ORIGIN : api.origin);
+  const defaultSocket = new URL("/ws/cs/", api.origin);
   defaultSocket.protocol = defaultSocket.protocol === "https:" ? "wss:" : "ws:";
   const socket = new URL(configuredBase?.trim() || defaultSocket.href);
 

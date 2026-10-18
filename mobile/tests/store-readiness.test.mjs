@@ -22,6 +22,18 @@ test("store links reject insecure URLs, secrets, private addresses and placehold
   assert.deepEqual(storeLinks({}, false), { privacy: "", deletion: "" });
 });
 
+test("only the UI preview disables push and it still validates HTTPS and project identity", () => {
+  const { EXPO_PUBLIC_EAS_PROJECT_ID: id, ...env } = setup;
+  const preview = { ...env, EAS_BUILD_PROFILE: "preview-ui" };
+  assert.equal(buildEnvironment(preview, id).pushEnabled, false);
+  assert.equal(buildEnvironment({ ...env, ...pages }, id).pushEnabled, true);
+  assert.equal(buildEnvironment({ ...env, EAS_BUILD_PROFILE: "preview" }, id).pushEnabled, true);
+  assert.throws(() => buildEnvironment(preview), /project ID/);
+  assert.throws(() => buildEnvironment({ ...preview, EXPO_PUBLIC_API_BASE_URL: "http://localhost:5201" }, id), /HTTPS/);
+  assert.throws(() => buildEnvironment({ ...preview, EXPO_PUBLIC_EAS_PROJECT_ID: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" }, id), /differs/);
+  assert.throws(() => buildEnvironment(env, id), /PRIVACY_URL/);
+});
+
 test("privacy is available before login; account settings open only the configured deletion page", async t => {
   const previous = Object.fromEntries(Object.keys(pages).map(key => [key, process.env[key]]));
   Object.assign(process.env, pages);

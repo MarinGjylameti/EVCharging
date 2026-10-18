@@ -7,7 +7,7 @@ function screen(read) {
   const { StationChargingScreen } = compile("../../src/StationChargingScreen.tsx", {
     react: state.react, "react/jsx-runtime": jsx, "react-native": { ActivityIndicator: "ActivityIndicator", Text: "Text", View: "View" },
     "./api": { request: read }, "./config": compile("../../src/config.ts"), "./i18n": compile("../../src/i18n.ts"),
-    "./station-data": compile("../../src/station-data.ts"), "../../shared/charging-guidance": compile("../../../shared/charging-guidance.ts"),
+    "./station-data": compile("../../src/station-data.ts", { "../../shared/map-directions": compile("../../../shared/map-directions.ts") }), "../../shared/charging-guidance": compile("../../../shared/charging-guidance.ts"),
     "./use-foreground-poll": { useForegroundPoll: (run, interval) => { if (interval === 5000) refresh = run; } },
     "./ui": { Button: "Button", Card: "Card", Chip: "Chip", Notice: "Notice", Screen: "Screen", colors: {}, styles: {} },
   });

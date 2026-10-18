@@ -4,13 +4,15 @@ import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import { request } from "./api";
 
-Notifications.setNotificationHandler({
+export const pushAvailable = Constants.expoConfig?.extra?.pushEnabled !== false;
+
+if (pushAvailable) Notifications.setNotificationHandler({
   handleNotification: async () => ({ shouldPlaySound: true, shouldSetBadge: false, shouldShowBanner: true, shouldShowList: true })
 });
 
 export async function registerPush(token: string, askPermission: boolean) {
   const projectId = Constants.easConfig?.projectId ?? Constants.expoConfig?.extra?.eas?.projectId;
-  if (!Device.isDevice || typeof projectId !== "string" || !/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(projectId) || Constants.appOwnership === "expo") {
+  if (!pushAvailable || !Device.isDevice || typeof projectId !== "string" || !/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(projectId) || Constants.appOwnership === "expo") {
     if (askPermission) throw new Error("pushSetup");
     return;
   }

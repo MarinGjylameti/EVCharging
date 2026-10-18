@@ -5,7 +5,7 @@ import { loadTypescript } from "./helpers/load-typescript.mjs";
 const endpoint = loadTypescript(new URL("../src/lib/simulator-endpoint.ts", import.meta.url));
 const { simulatorSocketBase } = endpoint;
 const demoApi = "https://vcharging-api-demo.onrender.com";
-const cloudflareBase = "wss://evcharging-ocpp.evcharging-demo.workers.dev/ws/cs/";
+const directBase = "wss://vcharging-api-demo.onrender.com/ws/cs/";
 
 test("the simulator route rejects direct navigation when backend test capability is off", async () => {
   const { default: SimulatorPage } = loadTypescript(new URL("../src/app/driver/simulator/page.tsx", import.meta.url), {
@@ -22,9 +22,9 @@ test("the simulator route rejects direct navigation when backend test capability
   await assert.rejects(SimulatorPage({ searchParams: Promise.resolve({}) }), /route-not-found/);
 });
 
-test("the Render demo simulator uses Cloudflare while local and other deployments keep their own API", () => {
-  assert.equal(simulatorSocketBase(demoApi), cloudflareBase);
-  assert.equal(simulatorSocketBase(demoApi, "   "), cloudflareBase);
+test("all simulators default to their API origin, including Render in direct mode", () => {
+  assert.equal(simulatorSocketBase(demoApi), directBase);
+  assert.equal(simulatorSocketBase(demoApi, "   "), directBase);
   assert.equal(simulatorSocketBase("http://127.0.0.1:5202"), "ws://127.0.0.1:5202/ws/cs/");
   assert.equal(simulatorSocketBase("http://localhost:5201"), "ws://localhost:5201/ws/cs/");
   assert.equal(simulatorSocketBase("https://api.example.test"), "wss://api.example.test/ws/cs/");
@@ -36,7 +36,7 @@ test("an explicit socket base takes precedence and normalizes the station separa
     "wss://vcharging-api-demo.onrender.com/ws/cs/");
 });
 
-test("invalid endpoints, credentials, preselected identities and TLS downgrades fail instead of bypassing Cloudflare", () => {
+test("invalid explicit endpoints and TLS downgrades fail without silently trying another route", () => {
   for (const base of ["/ws/cs/", "https://ocpp.example.test/ws/cs/", "wss://ocpp.example.test/",
     "wss://ocpp.example.test/ws/cs/SIM-007", "wss://user:password@ocpp.example.test/ws/cs/",
     "wss://ocpp.example.test/ws/cs/?token=secret", "wss://ocpp.example.test/ws/cs/#fragment",
@@ -45,7 +45,7 @@ test("invalid endpoints, credentials, preselected identities and TLS downgrades 
   }
 });
 
-test("the simulator page connects SIM-007 through Cloudflare with OCPP 1.6 and sends BootNotification", async t => {
+test("the simulator page connects SIM-007 directly with OCPP 1.6 and sends BootNotification", async t => {
   const previousBase = process.env.EVCHARGING_SIMULATOR_WS_BASE_URL;
   delete process.env.EVCHARGING_SIMULATOR_WS_BASE_URL;
   t.after(() => {
@@ -71,16 +71,16 @@ test("the simulator page connects SIM-007 through Cloudflare with OCPP 1.6 and s
     "next/navigation": { notFound: () => assert.fail("Unexpected 404"), redirect: () => assert.fail("Unexpected redirect") },
   });
   const page = await SimulatorPage({ searchParams: Promise.resolve({ station: "SIM-007" }) });
-  assert.equal(page.props.socketBase, cloudflareBase);
+  assert.equal(page.props.socketBase, directBase);
   assert.equal(page.props.selected, "SIM-007");
   assert.deepEqual(calls, ["/driver/charging-sessions", "/driver/stations"]);
 
   const { AutomaticSimulator } = loadTypescript(new URL("../src/features/driver/automatic-simulator.ts", import.meta.url));
-  const messages = [];
+  const messages = [], logs = [];
   const simulator = new AutomaticSimulator({ url: page.props.socketBase + page.props.selected, stationCode: page.props.selected,
     capacityKWh: 60, initialSoc: 20, targetSoc: 80, powerKW: 22, meterStartWh: 0, intervalSeconds: 5, speed: 1 },
-    () => {}, () => {}, (url, protocol) => {
-      assert.equal(url, cloudflareBase + "SIM-007");
+    () => {}, log => logs.push(log), (url, protocol) => {
+      assert.equal(url, directBase + "SIM-007");
       assert.equal(protocol, "ocpp1.6");
       const socket = {
         send(data) {
@@ -97,6 +97,7 @@ test("the simulator page connects SIM-007 through Cloudflare with OCPP 1.6 and s
   t.after(() => simulator.dispose());
   await simulator.connect();
   assert.equal(simulator.snapshot.connected, true);
+  assert.deepEqual(JSON.parse(logs.find(log => log.action === "ConnectionAttempt").detail), { endpoint: directBase + "SIM-007", protocol: "ocpp1.6" });
   assert.deepEqual(messages.map(frame => frame[2]), ["BootNotification", "StatusNotification"]);
   assert.equal(messages[0][3].chargePointSerialNumber, "SIM-007");
 });
