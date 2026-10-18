@@ -9,6 +9,15 @@ Ndryshimet në panele të jashtme nuk regjistrohen si commit-e.
 
 ### 2026-10-18
 
+- Në pamjen Lista të Pikave, kartat ruajnë detajet të dukshme dhe fshehin Hap karikimin/Hap në hartë kur ka disa rezultate. Prekja hap butonat vetëm te karta e zgjedhur; prekja e një karte tjetër mbyll të parën, ndërsa prekja e së njëjtës i fsheh përsëri. Me vetëm një rezultat butonat janë menjëherë të dukshëm, edhe pas filtrimit. Shton treguesin e hapjes dhe gjendjen e aksesueshme; veprimet mbeten jashtë zonës që hap/mbyll kartën.
+- Përmirëson pinch-in native në iOS/Android: heq rrumbullakosjen në nivele të plota, ruan pikën gjeografike nën gishta dhe bashkon lëvizjet në një përditësim për frame. Pllakat e hartës shkallëzohen në mënyrë të vazhdueshme, por URL-të përdorin vetëm nivele të plota. Çaktivizon fade-in e imazheve në Android; përfundimi/anulimi i gjestit ruan pozicionin final dhe rikthen scroll-in e faqes. Sjellja e parazgjedhur e helper-it në web ruhet.
+- Verifikimi: kaluan TypeScript-i mobile/web, 82 teste mobile, 8 teste të gjeometrisë dhe eksportet Hermes iOS/Android. Provat kontrollojnë zmadhime të vogla, pikën nën gishta, kufijtë e zoom-it, bashkimin e frame-ve dhe pozicionin pas lëshimit. Nuk u mat frame-rate në pajisje fizike; ngarkimi i pllakave mbetet i varur nga rrjeti. Nuk u shtuan varësi, APK, deploy, commit ose push.
+- Pajton commit-in `d3a22eb` me historikun më poshtë.
+
+## 2026-10-18
+
+### `d3a22eb` — Fixes for ios and android
+
 - Riorganizon ekranin Pikat në iOS/Android: titull kompakt, kalim Harta/Lista, kontrolle mbi hartë dhe karta të përbashkëta me statusin, adresën, fuqinë, lidhësit e tarifën. Qyteti, fuqia dhe Vetëm të lira janë të fshehura fillimisht te Filtrat; zgjedhjet ruhen kur paneli mbyllet dhe mund të pastrohen.
 - Prekja e një pike zgjedh/shënon pikën dhe zbulon detajet poshtë hartës. Navigimi i jashtëm bëhet vetëm me Hap në hartë, sipas preferencës së ruajtur. Hap karikimin çon te rrjedha ekzistuese e lidhjes/seancës. Kur ka vetëm një pikë, detajet hapen fillimisht; karta mund të mbyllet. Rifreskimi i statusit nuk detyron zhvendosje të faqes.
 - Shton Shko te karikimi sipër navigimit mobile, vetëm për seancat e përdoruesit që raportohen Në karikim. Hap pikën dhe lidhësin e saktë; fshihet kur përdoruesi ndodhet aty, gjatë pauzës/shkëputjes/defektit, kur të dhënat nuk rifreskohen dhe pas përfundimit. Rikthehet me konfirmimin e rifillimit. Konfirmimi i ndalimit në ekranin e karikimit e heq menjëherë; një përgjigje më e vjetër e listës nuk e rikthen. Dalja/ndërrimi i llogarisë pastron seancat dhe refuzon përgjigjet e vjetra.
@@ -17,8 +26,6 @@ Ndryshimet në panele të jashtme nuk regjistrohen si commit-e.
 - Dokumenton kërkesën për Dynamic Island/Live Activity si të papërfunduar: Expo Go nuk e mbështet; nevojiten build iOS i nënshkruar dhe cikli i përditësimeve ActivityKit/APNs në sfond. Llogaria Apple Developer ende mungon. Nuk shton implementim native ose pretendon verifikim të kësaj veçorie.
 - Verifikimi: kaluan TypeScript-i mobile/web, 82 teste mobile, 32 teste të fokusuara web dhe eksportet Hermes iOS/Android. Testet mbulojnë filtrat e fshehur, zgjedhjen e pikës pa navigim të menjëhershëm, lidhësin e saktë, statuset e shënimit, mbylljen/rikthimin e seancës, përgjigjet e vonuara të llogarive dhe përqindjen e vjetruar. Modulet native janë të simuluara në teste; prova fizike Android mbetet e pakryer. Nuk u nis APK, nuk u instalua varësi dhe nuk u bë deploy, migrim, commit ose push.
 - Pajton commit-in `380153d` me historikun më poshtë.
-
-## 2026-10-18
 
 ### `380153d` — Refactor for apple and android versions 3
 

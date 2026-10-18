@@ -141,7 +141,16 @@ test("Albania notification dates and 24-hour times handle midnight and daylight 
   assert.equal(notificationsData.notificationTime("bad"), "—");
 });
 
-test("map gestures pan and pinch without resetting on status refresh, and release page scrolling", () => {
+test("map gestures pan and pinch continuously, coalesce frames and release page scrolling", t => {
+  const originals = [globalThis.requestAnimationFrame, globalThis.cancelAnimationFrame], frames = new Map(); let frameId = 0;
+  globalThis.requestAnimationFrame = callback => { frames.set(++frameId, callback); return frameId; };
+  globalThis.cancelAnimationFrame = id => frames.delete(id);
+  t.after(() => {
+    for (const [index, name] of ["requestAnimationFrame", "cancelAnimationFrame"].entries()) {
+      if (originals[index]) globalThis[name] = originals[index]; else delete globalThis[name];
+    }
+  });
+  const drawFrame = () => { const callbacks = [...frames.values()]; frames.clear(); callbacks.forEach(callback => callback()); };
   const state = hooks(), interactions = []; let responder;
   const { StationMap } = compile("../../src/StationMap.tsx", {
     react: state.react, "react/jsx-runtime": jsx, "react-native": { ...native, PanResponder: { create: value => { responder = value; return { panHandlers: {} }; } } },
@@ -151,13 +160,25 @@ test("map gestures pan and pinch without resetting on status refresh, and releas
   let tree = render(); nodes(tree, n => n.type === "View" && n.props.onLayout)[0].props.onLayout({ nativeEvent: { layout: { width: 360 } } }); tree = render();
   const markerLeft = tree => nodes(tree, n => n.type === "Pressable" && n.props.accessibilityLabel?.includes("Central"))[0].props.style.left;
   const before = markerLeft(tree), touches = x => ({ nativeEvent: { touches: [{ pageX: x, pageY: 100 }] } });
-  responder.onPanResponderGrant(touches(100)); responder.onPanResponderMove(touches(130)); tree = render("Occupied");
+  responder.onPanResponderGrant(touches(100)); responder.onPanResponderMove(touches(110)); responder.onPanResponderMove(touches(130));
+  assert.equal(frames.size, 1); drawFrame(); tree = render("Occupied");
   assert.ok(Math.abs(markerLeft(tree) - before - 30) < .001);
   responder.onPanResponderRelease(); assert.deepEqual(interactions, [true, false]);
   const pinch = (a, b) => ({ nativeEvent: { touches: [{ pageX: a, pageY: 100 }, { pageX: b, pageY: 100 }] } });
-  responder.onPanResponderGrant(pinch(100, 200)); responder.onPanResponderMove(pinch(50, 250));
+  assert.equal(responder.onStartShouldSetPanResponder(pinch(100, 200)), true);
+  responder.onPanResponderGrant(pinch(100, 200)); responder.onPanResponderMove(pinch(90, 210)); drawFrame();
+  tree = render();
+  const scaledTile = nodes(tree, n => n.type === "Image")[0];
+  assert.match(scaledTile.props.source.uri, /\/15\//);
+  assert.ok(Math.abs(scaledTile.props.style.width - 256 * 1.2) < .001);
+  responder.onPanResponderMove(pinch(50, 250)); drawFrame();
   tree = render(); assert.match(nodes(tree, n => n.type === "Image")[0].props.source.uri, /\/16\//);
-  responder.onPanResponderTerminate(); assert.equal(interactions.at(-1), false);
+  responder.onPanResponderMove(pinch(70, 230)); responder.onPanResponderTerminate();
+  assert.equal(frames.size, 0); assert.equal(interactions.at(-1), false);
+  tree = render();
+  const releasedTile = nodes(tree, n => n.type === "Image")[0];
+  assert.match(releasedTile.props.source.uri, /\/15\//);
+  assert.ok(Math.abs(releasedTile.props.style.width - 256 * 1.6) < .001);
 });
 
 const notifications = Array.from({ length: 12 }, (_, i) => ({ id: String(i), createdAt: `2026-10-${i < 10 ? "18" : "17"}T${String(i).padStart(2, "0")}:00:00Z`, text: { title: "Charge complete", body: "Completed" } }));

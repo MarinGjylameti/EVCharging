@@ -23,29 +23,47 @@ export function StationMap({ stations, language, stale, selectedId, onSelect, on
   const view = moved?.key === key ? moved.view : initial;
   const current = useRef({ view, key, width }); current.current = { view, key, width };
   const gesture = useRef<Gesture | null>(null);
+  const pending = useRef<{ key: string; view: MapView } | null>(null), frame = useRef<number | null>(null);
+  function flushMove() {
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    frame.current = null;
+    const next = pending.current; pending.current = null;
+    if (next && next.key === current.current.key) setMoved(next);
+  }
+  function queueMove(next: MapView) {
+    pending.current = { key: current.current.key, view: next };
+    if (frame.current === null) frame.current = requestAnimationFrame(flushMove);
+  }
+  const latestView = () => pending.current?.key === current.current.key ? pending.current.view : current.current.view;
   const touchPoints = (event: GestureResponderEvent) => event.nativeEvent.touches.slice(0, 2).map(touch => ({ x: touch.pageX - origin.current.x, y: touch.pageY - origin.current.y }));
   const responder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: event => event.nativeEvent.touches.length > 1,
     onMoveShouldSetPanResponder: (_event, state) => Math.abs(state.dx) + Math.abs(state.dy) > 5 || state.numberActiveTouches > 1,
     onPanResponderGrant: event => { gesture.current = { view: current.current.view, points: touchPoints(event) }; onInteraction(true); },
     onPanResponderMove: event => {
       const touches = touchPoints(event), start = gesture.current;
       if (!touches.length) return;
-      if (!start || touches.length !== start.points.length) { gesture.current = { view: current.current.view, points: touches }; return; }
+      if (!start || touches.length !== start.points.length) { gesture.current = { view: latestView(), points: touches }; return; }
       let next: MapView;
       if (touches.length === 2) {
-        next = pinchMapView(start.view, current.current.width, height, midpoint(start.points), midpoint(touches), distance(touches) / Math.max(1, distance(start.points)));
+        next = pinchMapView(start.view, current.current.width, height, midpoint(start.points), midpoint(touches), distance(touches) / Math.max(1, distance(start.points)), true);
       } else {
         const world = toWorldPixels(start.view.center, start.view.zoom);
         next = { zoom: start.view.zoom, center: fromWorldPixels({ x: world.x - touches[0].x + start.points[0].x, y: world.y - touches[0].y + start.points[0].y }, start.view.zoom) };
       }
-      setMoved({ key: current.current.key, view: next });
+      queueMove(next);
     },
-    onPanResponderRelease: () => { gesture.current = null; onInteraction(false); },
-    onPanResponderTerminate: () => { gesture.current = null; onInteraction(false); },
+    onPanResponderRelease: () => { flushMove(); gesture.current = null; onInteraction(false); },
+    onPanResponderTerminate: () => { flushMove(); gesture.current = null; onInteraction(false); },
     onPanResponderTerminationRequest: () => false,
   }), [onInteraction]);
-  useEffect(() => () => onInteraction(false), [onInteraction]);
+  useEffect(() => () => {
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    frame.current = null; pending.current = null; onInteraction(false);
+  }, [onInteraction]);
   const center = toWorldPixels(view.center, view.zoom);
+  // Tile URLs always use whole zoom levels; scale those cached tiles continuously.
+  const tileZoom = Math.floor(view.zoom), tileScale = 2 ** (view.zoom - tileZoom), tileSize = 256 * tileScale;
   const zoom = (delta: number) => setMoved({ key, view: { ...view, zoom: Math.max(6, Math.min(19, view.zoom + delta)) } });
   return <View style={{ gap: 10 }}>
     <View ref={mapRef} onLayout={event => setWidth(event.nativeEvent.layout.width)}
@@ -53,9 +71,9 @@ export function StationMap({ stations, language, stale, selectedId, onSelect, on
       onTouchEnd={event => { if (!event.nativeEvent.touches.length) onInteraction(false); }} onTouchCancel={() => onInteraction(false)}
       style={{ height, overflow: "hidden", borderRadius: 22, borderWidth: 1, borderColor: colors.border, backgroundColor: "#e5ebdf" }} {...responder.panHandlers}>
       <View pointerEvents="none" style={{ position: "absolute", inset: 0 }}>
-        {visibleTiles(view.center, view.zoom, width, height).map(tile => <Image key={`${attempt}:${view.zoom}:${tile.x}:${tile.y}`} accessible={false}
-          source={{ uri: `https://tile.openstreetmap.org/${view.zoom}/${tile.x}/${tile.y}.png`, headers: tileHeaders, cache: "default" }}
-          style={{ position: "absolute", left: tile.left, top: tile.top, width: 256, height: 256 }} onError={() => setFailed(true)}/>)}
+        {visibleTiles(view.center, tileZoom, width / tileScale, height / tileScale).map(tile => <Image key={`${attempt}:${tileZoom}:${tile.x}:${tile.y}`} accessible={false} fadeDuration={0}
+          source={{ uri: `https://tile.openstreetmap.org/${tileZoom}/${tile.x}/${tile.y}.png`, headers: tileHeaders, cache: "default" }}
+          style={{ position: "absolute", left: tile.left * tileScale, top: tile.top * tileScale, width: tileSize, height: tileSize }} onError={() => setFailed(true)}/>)}
       </View>
       {width > 0 && points.map(station => {
         const point = toWorldPixels(station, view.zoom), left = point.x - center.x + width / 2 - 22, top = point.y - center.y + height / 2 - 22;

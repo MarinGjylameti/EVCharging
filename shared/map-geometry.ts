@@ -56,9 +56,10 @@ export function zoomAroundPixel(center: Coordinates, fromZoom: number, toZoom: n
 }
 
 export function pinchMapView(start: MapView, width: number, height: number,
-  startMidpoint: WorldPoint, midpoint: WorldPoint, scale: number): MapView {
+  startMidpoint: WorldPoint, midpoint: WorldPoint, scale: number, continuous = false): MapView {
+  const zoomDelta = Math.log2(Math.max(0.1, scale));
   const zoom = Math.max(6, Math.min(19,
-    start.zoom + Math.round(Math.log2(Math.max(0.1, scale)))));
+    start.zoom + (continuous ? zoomDelta : Math.round(zoomDelta))));
   const anchor = coordinateAtPixel(start.center, start.zoom, width, height,
     startMidpoint.x, startMidpoint.y);
   const world = toWorldPixels(anchor, zoom);

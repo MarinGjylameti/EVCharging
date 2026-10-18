@@ -52,6 +52,21 @@ test("nearby stations can be ordered by distance from the driver", () => {
   assert.ok(distanceKm(driver,durres)<distanceKm(driver,tirana));
 });
 
+test("continuous pinch follows small scale changes and keeps the moving geographic anchor", () => {
+  const start = { center: { latitude: 41.3275, longitude: 19.8187 }, zoom: 12 };
+  const initial = { x: 130, y: 120 }, moved = { x: 160, y: 150 }, width = 390, height = 360;
+  const anchor = coordinateAtPixel(start.center, start.zoom, width, height, initial.x, initial.y);
+  for (const scale of [.75, .98, 1.02, 1.2, 1.5]) {
+    const result = pinchMapView(start, width, height, initial, moved, scale, true);
+    assert.ok(Math.abs(result.zoom - (12 + Math.log2(scale))) < 1e-9);
+    const after = coordinateAtPixel(result.center, result.zoom, width, height, moved.x, moved.y);
+    assert.ok(Math.abs(after.latitude - anchor.latitude) < 1e-6);
+    assert.ok(Math.abs(after.longitude - anchor.longitude) < 1e-6);
+  }
+  assert.equal(pinchMapView({ ...start, zoom: 19 }, width, height, initial, moved, 2, true).zoom, 19);
+  assert.equal(pinchMapView({ ...start, zoom: 6 }, width, height, initial, moved, .5, true).zoom, 6);
+});
+
 test("tile list contains only tiles intersecting the viewport", () => {
   const center = {latitude:41.3275,longitude:19.8187};
   const tiles = visibleTiles(center,16,700,450);

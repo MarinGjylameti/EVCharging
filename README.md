@@ -85,6 +85,12 @@ with npm/Expo connectivity after the packaging issue above is fixed.
 The mobile Stations screen opens on the embedded map, with a compact Map/List
 switch and a Filters button. City, availability and charger-rating filters start
 collapsed and retain applied choices when hidden. Both views use the same filters.
+In List, all station details remain visible. With multiple results, action buttons
+start hidden; tapping a card reveals only its Open charging / Open in Maps buttons,
+and selecting another card collapses the previous one. Tapping the same card
+collapses it again. With one result (including after filtering), its actions are
+visible immediately. A chevron and expanded accessibility state identify the
+collapsible cards; action buttons remain separate from the card's toggle target.
 Tapping a marker highlights it and reveals its details below the map: status,
 address, connectors, power, tariff, Open charging and Open in Maps. A single
 station shows its details automatically; the user can close the card. Opening
@@ -95,6 +101,15 @@ when tiles fail. Only visible tiles are requested, with an application User-Agen
 and the native image cache; no new package, location permission or map API key is
 required. Map tiles remain an external network dependency; see the
 [OpenStreetMap tile policy](https://operations.osmfoundation.org/policies/tiles/).
+
+Native pinch uses continuous zoom, keeps the geographic point under the fingers,
+and coalesces moves to one render per animation frame. Cached tiles scale between
+whole-number tile levels; fractional values never enter tile URLs. Android tile
+fade-in is disabled to avoid delayed appearance. Releasing or cancelling a gesture
+retains its final position and releases page scrolling. The shared web helper
+retains its existing default zoom behavior. Mobile/web TypeScript, 82 mobile tests,
+8 geometry tests and both Hermes exports passed for this map/list update. These
+checks do not measure on-device frame rate or network tile-loading latency.
 
 Settings now contains Google Maps / Apple Maps preference, saved on this phone
 using the existing storage module; Google Maps matches the web's default. The

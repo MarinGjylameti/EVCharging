@@ -17,6 +17,7 @@ export function StationsScreen({ stations, language, refresh, onSelect, stale = 
   const [mode, setMode] = useState<"map" | "list">("map"), [interacting, setInteracting] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null | undefined>(undefined);
+  const [expandedListId, setExpandedListId] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null), detailY = useRef<number | null>(null), pendingReveal = useRef(false);
   const navigating = useRef(false);
   const cities = useMemo(() => [...new Set(stations.filter(item => !item.isArchived).map(item => item.city))].sort(), [stations]);
@@ -25,7 +26,7 @@ export function StationsScreen({ stations, language, refresh, onSelect, stale = 
   const filterCount = Number(!!city) + Number(availableOnly) + Number(power !== "all");
   const countLabel = sq ? shown.length === 1 ? "1 pikë" : shown.length + " pika" : shown.length === 1 ? "1 station" : shown.length + " stations";
   const summary = [city, power === "ac" ? "≤ 22 kW" : power === "fast" ? "> 22 kW" : "", availableOnly ? t.availableOnly : ""].filter(Boolean).join(" · ");
-  function clearSelection() { setSelectedId(undefined); detailY.current = null; pendingReveal.current = false; }
+  function clearSelection() { setSelectedId(undefined); setExpandedListId(null); detailY.current = null; pendingReveal.current = false; }
   function resetFilters() { setCity(""); setPower("all"); setAvailableOnly(false); clearSelection(); }
   function revealDetails(y: number) { scrollRef.current?.scrollTo({ y: Math.max(0, y - 100), animated: true }); }
   function selectPoint(station: Station) {
@@ -76,7 +77,10 @@ export function StationsScreen({ stations, language, refresh, onSelect, stale = 
         if (pendingReveal.current) { pendingReveal.current = false; revealDetails(detailY.current); }
       }}><StationSummaryCard station={selected} language={language} stale={stale} onOpen={() => onSelect(selected.id)} onNavigate={() => void openMap(selected)} onClose={() => { setSelectedId(null); pendingReveal.current = false; }}/></View>
         : <Text style={layout.mapHint}>{sq ? "Prek një pikë në hartë për detajet dhe karikimin." : "Tap a station on the map for details and charging."}</Text>}
-    </> : shown.map(station => <StationSummaryCard key={station.id} station={station} language={language} stale={stale} onOpen={() => onSelect(station.id)} onNavigate={() => void openMap(station)}/>)
+    </> : shown.map(station => <StationSummaryCard key={station.id} station={station} language={language} stale={stale}
+      actionsVisible={shown.length === 1 || expandedListId === station.id}
+      onToggleActions={shown.length > 1 ? () => setExpandedListId(current => current === station.id ? null : station.id) : undefined}
+      onOpen={() => onSelect(station.id)} onNavigate={() => void openMap(station)}/>)
       : <Card><Text style={styles.body}>{stations.some(item => !item.isArchived) ? t.noStations : (sq ? "Ende nuk ka pika të publikuara. Provo përsëri më vonë." : "No stations have been published yet. Please try again later.")}</Text>{filterCount > 0 && <Button title={sq ? "Pastro filtrat" : "Reset filters"} secondary onPress={resetFilters}/>}</Card>}
   </Screen>;
 }
