@@ -88,7 +88,8 @@ public static class OcppEndpoints
             await context.Response.WriteAsJsonAsync(new { code = "device_connection_denied" });
             return;
         }
-        if (!registry.TryOpen(deviceId.Value))
+        using var registration = registry.TryOpen(deviceId.Value);
+        if (registration is null)
         {
             logger.LogWarning(
                 "OCPP connection {Identity} rejected: HTTP 409, an existing socket is still open.",
@@ -106,6 +107,23 @@ public static class OcppEndpoints
         var closeReason = "connection_ended";
         int? serverCloseCode = null;
         IDisposable? connectionScope = null;
+
+        async Task PersistDisconnectAsync(int? closeCode)
+        {
+            if (connectionId is { } id)
+            {
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                await using var scope = scopes.CreateAsyncScope();
+                await scope
+                    .ServiceProvider.GetRequiredService<IOcppGateway>()
+                    .CloseAsync(deviceId.Value, id, closeCode, timeout.Token, closeReason);
+                connectionId = null;
+            }
+            // Persistence must finish before a new owner can open, and before the peer
+            // sees Close. The outer using also releases ownership if cleanup throws.
+            registration.Dispose();
+        }
+
         try
         {
             connectionId = await gateway.OpenAsync(deviceId.Value, context.RequestAborted);
@@ -142,22 +160,10 @@ public static class OcppEndpoints
                             receivedMessages,
                             sentReplies
                         );
-                        // Commit the disconnect before acknowledging it so a
-                        // subsequent snapshot cannot still show a live device.
+                        await PersistDisconnectAsync((int?)received.CloseStatus);
                         using var closeTimeout = new CancellationTokenSource(
                             TimeSpan.FromSeconds(10)
                         );
-                        await using var closeScope = scopes.CreateAsyncScope();
-                        await closeScope
-                            .ServiceProvider.GetRequiredService<IOcppGateway>()
-                            .CloseAsync(
-                                deviceId.Value,
-                                connectionId.Value,
-                                (int?)received.CloseStatus,
-                                closeTimeout.Token,
-                                closeReason
-                            );
-                        connectionId = null;
                         await socket.CloseOutputAsync(
                             WebSocketCloseStatus.NormalClosure,
                             "Disconnected",
@@ -178,6 +184,7 @@ public static class OcppEndpoints
                             received.MessageType,
                             message.Length + received.Count
                         );
+                        await PersistDisconnectAsync(serverCloseCode);
                         await socket.CloseOutputAsync(
                             WebSocketCloseStatus.MessageTooBig,
                             "Text frames up to 64 KiB are supported.",
@@ -213,6 +220,7 @@ public static class OcppEndpoints
                         "OCPP device {Identity} connection permission was revoked.",
                         identity
                     );
+                    await PersistDisconnectAsync(serverCloseCode);
                     await socket.CloseOutputAsync(
                         WebSocketCloseStatus.PolicyViolation,
                         "Device connection permission revoked.",
@@ -289,6 +297,9 @@ public static class OcppEndpoints
                 (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds,
                 closeReason
             );
+            await PersistDisconnectAsync(
+                socket?.State == WebSocketState.Open ? requestedCloseCode : null
+            );
             if (socket?.State == WebSocketState.Open)
                 serverCloseCode = await TryCloseOutputAsync(
                     socket,
@@ -310,6 +321,11 @@ public static class OcppEndpoints
             // Before HTTP upgrade, preserve the normal API error status (including DB 503).
             if (socket is null)
                 throw;
+            await PersistDisconnectAsync(
+                socket.State == WebSocketState.Open
+                    ? (int)WebSocketCloseStatus.InternalServerError
+                    : null
+            );
             if (socket?.State == WebSocketState.Open)
                 serverCloseCode = await TryCloseOutputAsync(
                     socket,
@@ -332,20 +348,7 @@ public static class OcppEndpoints
             );
             try
             {
-                if (connectionId is { } id)
-                {
-                    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-                    await using var scope = scopes.CreateAsyncScope();
-                    await scope
-                        .ServiceProvider.GetRequiredService<IOcppGateway>()
-                        .CloseAsync(
-                            deviceId.Value,
-                            id,
-                            (int?)socket?.CloseStatus ?? serverCloseCode,
-                            timeout.Token,
-                            closeReason
-                        );
-                }
+                await PersistDisconnectAsync((int?)socket?.CloseStatus ?? serverCloseCode);
             }
             catch (Exception error)
             {
@@ -355,9 +358,14 @@ public static class OcppEndpoints
                     identity
                 );
             }
-            socket?.Dispose();
-            registry.Close(deviceId.Value);
-            connectionScope?.Dispose();
+            try
+            {
+                socket?.Dispose();
+            }
+            finally
+            {
+                connectionScope?.Dispose();
+            }
         }
     }
 

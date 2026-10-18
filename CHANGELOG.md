@@ -7,7 +7,17 @@ Ndryshimet në panele të jashtme nuk regjistrohen si commit-e.
 
 ## Unreleased
 
-### 2026-10-16
+### 2026-10-18
+
+- Korrigjon intervalin e rilidhjes OCPP: përfundon ruajtjen e shkëputjes në DB dhe liron regjistrimin aktiv përpara dërgimit të Close, si për mbylljen nga pajisja ashtu edhe për mbylljet nga serveri.
+- Çdo regjistrim aktiv ka pronarin e vet dhe lirim vetëm një herë; pastrimi i vonuar i lidhjes së vjetër nuk mund të heqë lidhjen e re. Refuzimi HTTP 409 ruhet për një lidhje tjetër aktive dhe pronësia lirohet edhe kur ruajtja, upgrade-i ose pastrimi dështojnë.
+- Shton teste regresioni me sinjale të kontrolluara, timeout dhe cleanup për rendin e ruajtjes/Close/rilidhjes, Heartbeat pas rilidhjes, refuzimin e lidhjes së tretë dhe rrugët me përjashtime. Ruan testin ekzistues të varianteve të URL-së dhe logeve; TestMode, simulatori dhe konfigurimi direct/embedded/external nuk ndryshojnë.
+- Verifikimi: build-i .NET me një worker të MSBuild-it kaloi me 0 gabime/paralajmërime; kaluan 139 raste backend me ekzekutuesin lokal brenda procesit, pa dështime ose anashkalime. Përfshihen të 14 rastet e reja, testi ekzistues i URL-ve/logeve dhe mbulimi për TestMode, simulatorin e diagnostikimin. Kaluan CSharpier dhe `git diff --check`.
+- Kufijtë: VSTest u ndërpre pas 90 sekondash pa u lidhur me testhost-in; rezultatet e mësipërme janë nga ekzekutuesi rezervë i miratuar. Ruajtja/rilidhja u testua me InMemory dhe transport të kontrolluar/TestServer; nuk u ekzekutuan PostgreSQL, E2E ose prova fizike, dhe nuk u nis aplikacion publik, tunel, Docker, migrim apo deploy. Logu CI i dhënë nga përdoruesi konfirmonte 312 teste të kaluara dhe HTTP 409 në testin e varianteve të URL-së në `e6384c6`.
+
+## 2026-10-16
+
+### `e6384c6` — Add 3 versions for testing with actual charger
 
 - Përgatit tri prova OCPP me të njëjtin kod: hyrjen direkte në Render, Quick Tunnel brenda API-së dhe connector-in e jashtëm si alternativë të fundit. `EVCHARGING_Tunnel__Mode=direct|embedded|external` është i pavarur nga TestMode dhe ruan hyrjen direkte e autorizimin fizik në çdo variant.
 - Përfshin binarin cloudflared 2026.9.0 në imazhin e API-së; nis procesin embedded vetëm pasi API-ja ka nisur, përcjell loget/linkun në Render, riprovon dështimet pa ndalur API-në dhe përfundon procesin fëmijë gjatë ndalimit të host-it. Ruan HTTPS, Host/SNI, verifikimin TLS dhe origjinën publike të njëjtë me connector-in e veçantë për krahasim të kontrolluar.
@@ -15,8 +25,6 @@ Ndryshimet në panele të jashtme nuk regjistrohen si commit-e.
 - Verifikimi: build-i .NET kaloi pa gabime/paralajmërime; kaluan 105 raste backend në ekzekutimin fillestar dhe riekzekutimin e 24 rasteve të tunelit me ekzekutuesin lokal brenda procesit. Provat përfshijnë pritjen e nisjes së API-së, riprovimin, pavarësinë nga TestMode, HTTP readiness pas dështimit të connector-it dhe ndalimin/pastrimin real të një procesi lokal fëmijë me përcjelljen e URL-së nga stderr. Kaluan 28 kontrolle PowerShell të planit të rrugëve dhe 5 teste web për konfigurimin/lidhjen e simulatorit; u verifikuan përputhja e komandës/imazhit të connector-it, CSharpier dhe `git diff --check`.
 - Kufijtë: Docker engine nuk ishte i arritshëm nga ambienti lokal, ndaj imazhi me cloudflared nuk u ndërtua/nis këtu. Bash mbetet i bllokuar nga lejet Windows. Nuk u krijua tunel publik ose shërbim me pagesë dhe nuk u krye push, deploy apo provë e re me karikuesin fizik.
 - Pajton commit-in `b1063ca` me historikun më poshtë.
-
-## 2026-10-16
 
 ### `b1063ca` — Add tunel on render
 

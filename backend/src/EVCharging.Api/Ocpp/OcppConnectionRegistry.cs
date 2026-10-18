@@ -5,9 +5,28 @@ namespace EVCharging.Api.Ocpp;
 // The demo runs in one API instance. PostgreSQL serializes durable updates per device.
 public sealed class OcppConnectionRegistry
 {
-    private readonly ConcurrentDictionary<Guid, byte> connections = new();
+    private readonly ConcurrentDictionary<Guid, Registration> connections = new();
 
-    public bool TryOpen(Guid deviceId) => connections.TryAdd(deviceId, 0);
+    public IDisposable? TryOpen(Guid deviceId)
+    {
+        var registration = new Registration(connections, deviceId);
+        return connections.TryAdd(deviceId, registration) ? registration : null;
+    }
 
-    public void Close(Guid deviceId) => connections.TryRemove(deviceId, out _);
+    private sealed class Registration(
+        ConcurrentDictionary<Guid, Registration> connections,
+        Guid deviceId
+    ) : IDisposable
+    {
+        private int released;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref released, 1) == 0)
+                // Remove only this owner, even if cleanup is repeated after a reconnect.
+                ((ICollection<KeyValuePair<Guid, Registration>>)connections).Remove(
+                    new(deviceId, this)
+                );
+        }
+    }
 }
