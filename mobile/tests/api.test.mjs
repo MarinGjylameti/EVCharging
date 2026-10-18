@@ -77,7 +77,7 @@ test("foreground cancellation propagates AbortError", async t => {
 });
 test("driver refresh coalesces simultaneous requests and discards a previous login", async () => {
   const resolvers = [], calls = [], delivered = [];
-  const client = { request(path, token) { calls.push([path, token]); if (path === "/me") return new Promise(resolve => resolvers.push(resolve)); return Promise.resolve([]); } };
+  const client = { request(path, token) { calls.push([path, token]); if (path === "/me") return new Promise(resolve => resolvers.push(resolve)); return Promise.resolve(path === "/driver/charging-sessions" ? { sessions: [{ id: "owned-session", connectorId: 2 }] } : []); } };
   const { createDriverLoader } = compile("../../src/driver-data.ts", { "./api": client });
   const loader = createDriverLoader(value => delivered.push(value)); loader.setSession("old");
   const old = loader.refresh(); assert.equal(loader.refresh(), old); assert.equal(calls.length, 1);
@@ -85,12 +85,45 @@ test("driver refresh coalesces simultaneous requests and discards a previous log
   resolvers[0]({ id: "old", role: "DRIVER" }); await old; assert.equal(delivered.length, 0);
   resolvers[1]({ id: "new", role: "DRIVER" }); await current;
   assert.equal(delivered.length, 1); assert.equal(delivered[0].user.id, "new"); assert.equal(calls.filter(item => item[1] === "old").length, 1);
+  assert.deepEqual(delivered[0].sessions, [{ id: "owned-session", connectorId: 2 }]);
+  assert.ok(calls.some(([path, token]) => path === "/driver/charging-sessions" && token === "new"));
+});
+
+test("a late charging-session response from a previous account cannot replace the current shortcut data", async () => {
+  let finishOld; const delivered = [];
+  const { createDriverLoader } = compile("../../src/driver-data.ts", { "./api": { request: async (path, token) => {
+    if (path === "/me") return { id: token, role: "DRIVER" };
+    if (path === "/driver/charging-sessions") return token === "old" ? new Promise(resolve => { finishOld = resolve; }) : { sessions: [] };
+    return [];
+  } } });
+  const loader = createDriverLoader(value => delivered.push(value));
+  loader.setSession("old"); const old = loader.refresh(); await Promise.resolve();
+  assert.equal(typeof finishOld, "function");
+  loader.setSession("new"); await loader.refresh();
+  finishOld({ sessions: [{ id: "private-old-session" }] }); await old;
+  assert.equal(delivered.length, 1);
+  assert.equal(delivered[0].user.id, "new");
+  assert.deepEqual(delivered[0].sessions, []);
 });
 test("administrative accounts never load private driver data", async () => {
   const calls = [];
   const { createDriverLoader } = compile("../../src/driver-data.ts", { "./api": { request: async path => { calls.push(path); return { role: "SUPERADMIN" }; } } });
   const loader = createDriverLoader(() => assert.fail("Must not deliver admin data")); loader.setSession(token);
   await assert.rejects(loader.refresh(), /administratorAccount/); assert.deepEqual(calls, ["/me"]);
+});
+
+test("a slower list response cannot restore a shortcut after the charging screen confirms completion", async () => {
+  let finish; const delivered = [];
+  const { createDriverLoader } = compile("../../src/driver-data.ts", { "./api": { request: async path => {
+    if (path === "/me") return { role: "DRIVER" };
+    if (path === "/driver/charging-sessions") return new Promise(resolve => { finish = resolve; });
+    return [];
+  } } });
+  const loader = createDriverLoader(value => delivered.push(value)); loader.setSession("account");
+  const pending = loader.refresh(); await Promise.resolve();
+  loader.confirmSessionEnded("completed");
+  finish({ sessions: [{ id: "completed", stoppedAt: null }, { id: "other-open", stoppedAt: null }] }); await pending;
+  assert.deepEqual(delivered[0].sessions.map(s => s.id), ["other-open"]);
 });
 test("cold-start health probes require ready JSON and retry only GET", async () => {
   const { waitForMobileApi } = compile("../../src/wait-for-api.ts", { "./config": config });

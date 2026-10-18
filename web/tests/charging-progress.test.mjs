@@ -64,7 +64,7 @@ test("charging time advances in minutes while the start date and time stay fixed
     const html = render({}, { language });
     assert.match(html, /<time dateTime="2026-10-01T13:00:00Z">01\/10\/2026 · 15:00<\/time>/);
     assert.match(html, /01\/10\/2026/);
-    assert.match(html, language === "sq" ? /KOHA E KARIKIMIT/ : /CHARGING TIME/);
+    assert.match(html, language === "sq" ? /KOHA E SEANCËS/ : /SESSION TIME/);
     assert.match(html, /<strong>2 min 00 s<\/strong>/);
     assert.match(render({}, { language, now: Date.parse("2026-10-01T13:02:01Z") }), /<strong>2 min 01 s<\/strong>/);
     const later = render({}, { language, now: Date.parse("2026-10-03T13:02:00Z") });
@@ -79,12 +79,30 @@ test("charging time advances in minutes while the start date and time stay fixed
 });
 
 test("reported state of charge drives the accessible progress bar", () => {
-  const html = render({ stateOfCharge: 45, powerKW: 22 });
+  const html = render({ stateOfCharge: 45, powerKW: 22, stateOfChargeValidUntil: "2026-10-01T13:07:00Z" });
   assert.match(html, /aria-valuenow="45"/);
   assert.match(html, /width:45%/);
   assert.match(html, /Battery level reported by the charger/);
   assert.match(html, /22/);
   assert.doesNotMatch(render({ stateOfCharge: 101 }), /aria-valuenow/);
+});
+
+test("disconnected or expired battery readings stay visible as historical data without a live estimate", () => {
+  for (const language of ["sq", "en"]) {
+    const html = render({ status: "ConnectionLost", stateOfCharge: 43, powerKW: 22, batteryCapacityKWh: 77,
+      stateOfChargeValidUntil: "2026-10-01T13:07:00Z", powerValidUntil: "2026-10-01T13:04:00Z", powerScope: "Total" }, { language });
+    assert.match(html, /aria-valuenow="43"/);
+    assert.match(html, /background:#96a79d/);
+    assert.match(html, language === "sq" ? /Përqindja e fundit · në pritje të përditësimit/ : /Last battery level · awaiting an update/);
+    assert.match(html, language === "sq" ? /Koha e seancës përfshin edhe këtë pritje/ : /Session time includes this wait/);
+    assert.match(html, /15:01:00/);
+    assert.doesNotMatch(html, /≈ |AM|PM|p\.d\.|m\.d\./);
+  }
+  const expired = render({ stateOfCharge: 43, stateOfChargeValidUntil: "2026-10-01T13:01:00Z" });
+  assert.match(expired, /Last battery level · awaiting an update/);
+  const ended = render({ stateOfCharge: 43, stoppedAt: "2026-10-01T13:02:00Z" });
+  assert.match(ended, /aria-valuenow="43"/);
+  assert.doesNotMatch(ended, /awaiting an update/);
 });
 
 test("pause preserves energy and cost and hides stale power and remaining time", () => {

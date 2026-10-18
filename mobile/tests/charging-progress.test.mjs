@@ -48,7 +48,7 @@ test("missing capacity offers the profile action and uses updated session capaci
   assert.match(visibleText(render({ batteryCapacityKWh: 80 })), /≈ 2 h/);
 });
 
-test("unknown, invalid and expired battery values never appear as 0% or as numeric progress", () => {
+test("unknown and invalid battery values never appear as 0% or as numeric progress", () => {
   const render = card();
   for (const stateOfCharge of [null, NaN, -1, 101, Infinity]) {
     const tree = render({ stateOfCharge });
@@ -57,10 +57,29 @@ test("unknown, invalid and expired battery values never appear as 0% or as numer
     assert.equal(progress(tree).props.children.props.style.at(-1).width, "0%");
   }
   assert.equal(progress(render({ stateOfCharge: 0 })).props.accessibilityValue.now, 0);
-  const expired = render({}, { now: now + 300_000 });
-  assert.equal(progress(expired).props.accessibilityValue.now, undefined);
-  assert.match(visibleText(expired), /fresh battery percentage/);
 });
+
+for (const platform of ["ios", "android"]) {
+  test(`${platform}: expired and disconnected readings remain explicitly historical until fresh data arrives`, () => {
+    const render = card(platform);
+    const expired = render({}, { now: now + 300_000 });
+    assert.equal(progress(expired).props.accessibilityValue.now, 45);
+    assert.match(progress(expired).props.accessibilityValue.text, /Last battery level · awaiting an update/);
+    assert.match(visibleText(expired), /fresh battery percentage/);
+    const disconnected = render({ status: "ConnectionLost", stateOfCharge: 43, lastMeasurementReceivedAt: "2026-10-18T09:23:53Z" }, { language: "sq" });
+    assert.equal(progress(disconnected).props.accessibilityValue.now, 43);
+    assert.equal(progress(disconnected).props.children.props.style.at(-1).backgroundColor, "#a8bcb1");
+    assert.match(visibleText(disconnected), /Karikuesi është shkëputur/);
+    assert.match(visibleText(disconnected), /11:23:53/);
+    assert.match(visibleText(disconnected), /Koha e seancës përfshin edhe këtë pritje/);
+    assert.doesNotMatch(visibleText(disconnected), /≈ |AM|PM|p\.d\.|m\.d\./);
+    assert.match(progress(render({}, { stale: true })).props.accessibilityValue.text, /awaiting an update/);
+    const reconnected = render({ stateOfCharge: 46 });
+    assert.equal(progress(reconnected).props.accessibilityValue.text, "46%");
+    assert.match(visibleText(reconnected), /≈ 1 h 29 min/);
+    assert.doesNotMatch(visibleText(render({ lastMeasurementReceivedAt: "invalid" })), /Last session reading|Invalid Date/);
+  });
+}
 
 test("paused, stale, partial-power and expired-power states explain the missing estimate", () => {
   const render = card();

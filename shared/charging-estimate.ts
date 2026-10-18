@@ -18,6 +18,17 @@ function fresh(until: string | null | undefined, now: number) {
   return Number.isFinite(now) && Number.isFinite(deadline) && now < deadline;
 }
 
+// Keep a last reported percentage visible without presenting it as a live reading.
+export function chargingBatteryReading(session: DriverChargingSession, now: number, stale: boolean) {
+  const value = session.stateOfCharge != null && Number.isFinite(session.stateOfCharge) && session.stateOfCharge >= 0 && session.stateOfCharge <= 100 ? session.stateOfCharge : null;
+  return { value, stale: value !== null && !session.stoppedAt && (stale || session.status === "ConnectionLost" || !fresh(session.stateOfChargeValidUntil, now)) };
+}
+
+export const chargingConnectionLostNote = [
+  "Karikuesi është shkëputur. Presim matje të reja pas rilidhjes. Koha e seancës përfshin edhe këtë pritje.",
+  "The charger is disconnected. Waiting for new readings after reconnection. Session time includes this wait.",
+] as const;
+
 export function chargingEstimate(session: DriverChargingSession, now: number, stale: boolean): ChargingEstimate {
   if (session.stoppedAt || session.status !== "Charging" || session.faultCode && session.faultCode !== "NoError")
     return { minutes: null, reason: "notCharging" };

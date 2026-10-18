@@ -9,14 +9,25 @@ Ndryshimet në panele të jashtme nuk regjistrohen si commit-e.
 
 ### 2026-10-18
 
+- Riorganizon ekranin Pikat në iOS/Android: titull kompakt, kalim Harta/Lista, kontrolle mbi hartë dhe karta të përbashkëta me statusin, adresën, fuqinë, lidhësit e tarifën. Qyteti, fuqia dhe Vetëm të lira janë të fshehura fillimisht te Filtrat; zgjedhjet ruhen kur paneli mbyllet dhe mund të pastrohen.
+- Prekja e një pike zgjedh/shënon pikën dhe zbulon detajet poshtë hartës. Navigimi i jashtëm bëhet vetëm me Hap në hartë, sipas preferencës së ruajtur. Hap karikimin çon te rrjedha ekzistuese e lidhjes/seancës. Kur ka vetëm një pikë, detajet hapen fillimisht; karta mund të mbyllet. Rifreskimi i statusit nuk detyron zhvendosje të faqes.
+- Shton Shko te karikimi sipër navigimit mobile, vetëm për seancat e përdoruesit që raportohen Në karikim. Hap pikën dhe lidhësin e saktë; fshihet kur përdoruesi ndodhet aty, gjatë pauzës/shkëputjes/defektit, kur të dhënat nuk rifreskohen dhe pas përfundimit. Rikthehet me konfirmimin e rifillimit. Konfirmimi i ndalimit në ekranin e karikimit e heq menjëherë; një përgjigje më e vjetër e listës nuk e rikthen. Dalja/ndërrimi i llogarisë pastron seancat dhe refuzon përgjigjet e vjetra.
+- Qartëson shkëputjen e karikuesit në web/mobile: ruan përqindjen e fundit të vlefshme, e shënon si të vjetruar me shirit gri dhe shfaq orën 24-orëshe të matjes së fundit të seancës në Tiranë. Fuqia aktuale dhe vlerësimi deri në mbushje presin matje të reja. Koha e seancës përfshin pritjen/pauzat dhe nuk provon transferim energjie. Nuk ndryshon protokollin OCPP apo mbyll seanca pa konfirmim nga pajisja.
+- Zëvendëson butonin e gjerë Kthehu te pikat me shigjetë/tekst kompakt Pikat, duke ruajtur zonën minimale të prekjes 44 pikë në iOS/Android.
+- Dokumenton kërkesën për Dynamic Island/Live Activity si të papërfunduar: Expo Go nuk e mbështet; nevojiten build iOS i nënshkruar dhe cikli i përditësimeve ActivityKit/APNs në sfond. Llogaria Apple Developer ende mungon. Nuk shton implementim native ose pretendon verifikim të kësaj veçorie.
+- Verifikimi: kaluan TypeScript-i mobile/web, 82 teste mobile, 32 teste të fokusuara web dhe eksportet Hermes iOS/Android. Testet mbulojnë filtrat e fshehur, zgjedhjen e pikës pa navigim të menjëhershëm, lidhësin e saktë, statuset e shënimit, mbylljen/rikthimin e seancës, përgjigjet e vonuara të llogarive dhe përqindjen e vjetruar. Modulet native janë të simuluara në teste; prova fizike Android mbetet e pakryer. Nuk u nis APK, nuk u instalua varësi dhe nuk u bë deploy, migrim, commit ose push.
+- Pajton commit-in `380153d` me historikun më poshtë.
+
+## 2026-10-18
+
+### `380153d` — Refactor for apple and android versions 3
+
 - Plotëson ekranin e karikimit mobile për iOS dhe Android me të njëjtin komponent: banner i gjelbër, përqindje e madhe e baterisë, shirit progresi i lexueshëm nga teknologjitë ndihmëse dhe katër matje të organizuara për energjinë, fuqinë, koston dhe kohëzgjatjen. Përmbajtja përshtatet me ekranin/tekstin; karikimi shfaqet përpara specifikimeve të pikës.
 - Shton kohën e vlerësuar deri në 100%, duke përbashkuar llogaritjen dhe arsyet e mungesës me web-in. Përdor kapacitetin e profilit dhe matjet e freskëta të baterisë/fuqisë totale nga API-ja ekzistuese. Mungesa e kapacitetit hap profilin me një veprim; pauza, defekti, humbja e lidhjes, matjet e vjetruara dhe fuqia e pjesshme nuk prodhojnë kohë të sajuar.
 - Përqindja e panjohur shfaqet pa vlerë numerike. Seanca e përfunduar ruan përqindjen e fundit të raportuar, pa e detyruar në 100%, dhe heq kohën e mbetur. Matja finale në verifikim nuk paraqet kosto të konfirmuar. Tekstet dhe sjellja janë të njëjta në të dyja platformat.
 - Verifikimi: kaluan TypeScript-i mobile/web, 70 teste mobile, 31 teste të fokusuara të karikimit web dhe eksportet Hermes iOS/Android. Mbulimi përfshin ndryshimet e matjeve, veprimin e profilit, skadimin e matjeve me kalimin e kohës, gabimin/rikthimin e polling-ut, privatësinë e seancës, përfundimin dhe progresin e aksesueshëm. Kaloi edhe kontrolli i diff-it. Modulet native në teste janë të simuluara; eksportet nuk zëvendësojnë provën fizike Android.
 - Dokumenton shtyrjen e APK-së dhe vazhdimin e provave në iPhone me Expo Go, duke ruajtur mbulimin e Android-it. Prova EAS kishte krijuar projektin/keystore-in, por paketimi dështoi me EINVAL sepse dosja e përkohshme ishte brenda burimit; nuk u krijua APK dhe nuk u rinis build-i. Nuk u shtua varësi, migrim, deploy, commit ose push.
-- Pajton commit-in `32f7a1c` me historikun më poshtë; dokumentacioni dhe ndryshimet e reja mbeten në Unreleased.
-
-## 2026-10-18
+- Ruan lidhjen publike të projektit EAS në konfigurimin mobile dhe pajton commit-in `32f7a1c` me historikun.
 
 ### `32f7a1c` — Refactor for apple and android versions
 

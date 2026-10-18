@@ -3,16 +3,16 @@ import { Image, Linking, PanResponder, Pressable, Text, View, type GestureRespon
 import type { Language, Station } from "../../contracts/account";
 import { fitMapView, fromWorldPixels, pinchMapView, toWorldPixels, validCoordinates, visibleTiles, type MapView, type WorldPoint } from "../../shared/map-geometry";
 import { stationState } from "./station-data";
-import { Button, Notice, styles, colors } from "./ui";
+import { Button, Notice, colors } from "./ui";
 
-const height = 320;
+const height = 360;
 const tileHeaders = { "User-Agent": "EVCharging/0.1.0 (al.evcharging.mobile)" };
 type Gesture = { view: MapView; points: WorldPoint[] };
 const midpoint = (points: WorldPoint[]) => ({ x: (points[0].x + points[1].x) / 2, y: (points[0].y + points[1].y) / 2 });
 const distance = (points: WorldPoint[]) => Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
 
-export function StationMap({ stations, language, stale, onNavigate, onInteraction }: {
-  stations: Station[]; language: Language; stale: boolean; onNavigate: (station: Station) => void; onInteraction: (active: boolean) => void;
+export function StationMap({ stations, language, stale, selectedId, onSelect, onInteraction }: {
+  stations: Station[]; language: Language; stale: boolean; selectedId?: string; onSelect: (station: Station) => void; onInteraction: (active: boolean) => void;
 }) {
   const sq = language === "sq", mapRef = useRef<View>(null), origin = useRef({ x: 0, y: 0 });
   const [width, setWidth] = useState(0), [failed, setFailed] = useState(false), [attempt, setAttempt] = useState(0);
@@ -48,11 +48,10 @@ export function StationMap({ stations, language, stale, onNavigate, onInteractio
   const center = toWorldPixels(view.center, view.zoom);
   const zoom = (delta: number) => setMoved({ key, view: { ...view, zoom: Math.max(6, Math.min(19, view.zoom + delta)) } });
   return <View style={{ gap: 10 }}>
-    <Text style={styles.body}>{sq ? "Prek një pikë për të hapur navigimin. Lëvize hartën ose afroje me dy gishta." : "Tap a station to open directions. Drag the map or pinch to zoom."}</Text>
     <View ref={mapRef} onLayout={event => setWidth(event.nativeEvent.layout.width)}
       onTouchStart={() => { mapRef.current?.measureInWindow((x, y) => { origin.current = { x, y }; }); onInteraction(true); }}
       onTouchEnd={event => { if (!event.nativeEvent.touches.length) onInteraction(false); }} onTouchCancel={() => onInteraction(false)}
-      style={{ height, overflow: "hidden", borderRadius: 18, borderWidth: 1, borderColor: colors.border, backgroundColor: "#e5ebdf" }} {...responder.panHandlers}>
+      style={{ height, overflow: "hidden", borderRadius: 22, borderWidth: 1, borderColor: colors.border, backgroundColor: "#e5ebdf" }} {...responder.panHandlers}>
       <View pointerEvents="none" style={{ position: "absolute", inset: 0 }}>
         {visibleTiles(view.center, view.zoom, width, height).map(tile => <Image key={`${attempt}:${view.zoom}:${tile.x}:${tile.y}`} accessible={false}
           source={{ uri: `https://tile.openstreetmap.org/${view.zoom}/${tile.x}/${tile.y}.png`, headers: tileHeaders, cache: "default" }}
@@ -62,15 +61,16 @@ export function StationMap({ stations, language, stale, onNavigate, onInteractio
         const point = toWorldPixels(station, view.zoom), left = point.x - center.x + width / 2 - 22, top = point.y - center.y + height / 2 - 22;
         if (left < -44 || left > width || top < -44 || top > height) return null;
         const status = stationState(station.status, language);
-        return <Pressable key={station.id} accessibilityRole="button" accessibilityLabel={`${station.name}, ${stale ? (sq ? "gjendja e fundit: " : "last status: ") : ""}${status.text}. ${sq ? "Hap navigimin" : "Open directions"}`} onPress={() => onNavigate(station)}
-          style={{ position: "absolute", left, top, width: 44, height: 44, alignItems: "center", justifyContent: "center" }}>
-          <View style={{ width: 32, height: 32, borderRadius: 16, borderWidth: 3, borderColor: "white", backgroundColor: stale ? colors.muted : status.color, alignItems: "center", justifyContent: "center" }}><Text style={{ color: "white", fontSize: 19, fontWeight: "800" }}>ϟ</Text></View>
+        const selected = selectedId === station.id;
+        return <Pressable key={station.id} accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={`${station.name}, ${stale ? (sq ? "gjendja e fundit: " : "last status: ") : ""}${status.text}. ${sq ? "Shiko detajet" : "View details"}`} onPress={() => onSelect(station)}
+          style={{ position: "absolute", left, top, width: 44, height: 44, zIndex: selected ? 2 : 1, alignItems: "center", justifyContent: "center" }}>
+          <View style={{ width: selected ? 42 : 34, height: selected ? 42 : 34, borderRadius: 22, borderWidth: selected ? 4 : 3, borderColor: selected ? colors.lime : "white", backgroundColor: stale ? colors.muted : status.color, alignItems: "center", justifyContent: "center", elevation: 3, shadowColor: "#153b2d", shadowOpacity: .22, shadowRadius: 3, shadowOffset: { width: 0, height: 2 } }}><Text style={{ color: "white", fontSize: 21, fontWeight: "800" }}>ϟ</Text></View>
         </Pressable>;
       })}
-      <View style={{ position: "absolute", right: 8, top: 8, gap: 6 }}>{([1, -1] as const).map(delta => <Pressable key={delta} accessibilityRole="button" accessibilityLabel={delta > 0 ? (sq ? "Afro hartën" : "Zoom in") : (sq ? "Largo hartën" : "Zoom out")} onPress={() => zoom(delta)} style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: colors.white, alignItems: "center", justifyContent: "center" }}><Text style={{ color: colors.ink, fontSize: 24 }}>{delta > 0 ? "+" : "−"}</Text></Pressable>)}</View>
-      <Pressable accessibilityRole="link" onPress={() => void Linking.openURL("https://www.openstreetmap.org/copyright").catch(() => setFailed(true))} style={{ position: "absolute", right: 0, bottom: 0, minHeight: 44, paddingHorizontal: 8, justifyContent: "center", backgroundColor: "#fffffff2" }}><Text style={{ color: colors.ink, fontSize: 11 }}>© OpenStreetMap contributors</Text></Pressable>
+      <View style={{ position: "absolute", zIndex: 3, right: 10, top: 10, borderRadius: 14, overflow: "hidden", backgroundColor: colors.white, borderWidth: 1, borderColor: colors.border }}>{([1, -1] as const).map(delta => <Pressable key={delta} accessibilityRole="button" accessibilityLabel={delta > 0 ? (sq ? "Afro hartën" : "Zoom in") : (sq ? "Largo hartën" : "Zoom out")} onPress={() => zoom(delta)} style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center", borderTopWidth: delta < 0 ? 1 : 0, borderTopColor: colors.border }}><Text style={{ color: colors.ink, fontSize: 24 }}>{delta > 0 ? "+" : "−"}</Text></Pressable>)}</View>
+      <Pressable accessibilityRole="button" accessibilityLabel={sq ? "Shfaq të gjitha pikat në hartë" : "Fit stations on map"} onPress={() => setMoved(null)} style={{ position: "absolute", zIndex: 3, left: 10, bottom: 10, width: 44, height: 44, borderRadius: 14, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" }}><Text style={{ fontSize: 27, color: colors.ink }}>⤢</Text></Pressable>
+      <Pressable accessibilityRole="link" onPress={() => void Linking.openURL("https://www.openstreetmap.org/copyright").catch(() => setFailed(true))} style={{ position: "absolute", zIndex: 3, right: 0, bottom: 0, minHeight: 44, maxWidth: "76%", paddingHorizontal: 8, justifyContent: "center", backgroundColor: "#fffffff2" }}><Text style={{ color: colors.ink, fontSize: 10 }}>© OpenStreetMap contributors</Text></Pressable>
     </View>
-    <Button secondary title={sq ? "Shfaq të gjitha pikat në hartë" : "Fit stations on map"} onPress={() => setMoved(null)}/>
     {failed && <><Notice text={sq ? "Harta nuk u ngarkua plotësisht. Mund të përdorësh edhe listën e pikave." : "The map did not load completely. You can still use the station list."}/><Button secondary title={sq ? "Riprovo hartën" : "Retry map"} onPress={() => { setFailed(false); setAttempt(value => value + 1); }}/></>}
     {points.length !== stations.length && <Notice text={sq ? "Disa pika nuk kanë koordinata të vlefshme. Shikoji te Lista." : "Some stations have no valid coordinates. Find them in List."}/>}
   </View>;

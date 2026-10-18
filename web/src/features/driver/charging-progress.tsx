@@ -2,7 +2,7 @@
 
 import type { DriverChargingSession, Language } from "../../../../contracts/account";
 import { ChargingFault } from "./charging-fault";
-import { chargingEstimate, formatChargingEstimate, chargingEstimateNotes as estimateNotes } from "./charging-estimate";
+import { chargingEstimate, formatChargingEstimate, chargingEstimateNotes as estimateNotes, chargingBatteryReading, chargingConnectionLostNote } from "./charging-estimate";
 
 export const chargingLabels: Record<string, [string, string]> = {
   Charging: ["Në karikim", "Charging"], Connecting: ["Makina po lidhet", "Connecting vehicle"],
@@ -24,8 +24,7 @@ export function ChargingProgress({ session, language, now, stale }: {
   const ended = session.stoppedAt !== null;
   const paused = !ended && (session.status === "PausedByVehicle" || session.status === "PausedByCharger");
   const charging = !ended && session.status === "Charging" && !stale;
-  const soc = session.stateOfCharge !== null && session.stateOfCharge >= 0 && session.stateOfCharge <= 100
-    ? session.stateOfCharge : null;
+  const batteryReading = chargingBatteryReading(session, now, stale), soc = batteryReading.value;
   const simulatedClock = session.isDemo;
   const startTimestamp = simulatedClock ? session.startReceivedAt ?? session.startedAt : session.startedAt;
   const start = Date.parse(startTimestamp);
@@ -64,6 +63,7 @@ export function ChargingProgress({ session, language, now, stale }: {
         : (sq ? "Pajisja konfirmoi ndalimin. Përmbledhja financiare pret verifikimin e matjes finale." : "The charger confirmed the stop. The financial summary awaits verification of the final reading.")}</span>
     </div>}
     {!ended && <p className="charge-session-start">{sq ? "Sesioni mbetet i hapur deri në konfirmimin e ndalimit nga pajisja." : "The session remains open until the charger confirms its stop."}</p>}
+    {!ended && session.status === "ConnectionLost" && <p className="charge-point-notice" role="status">{chargingConnectionLostNote[sq ? 0 : 1]}</p>}
     {ended && session.stopReason === "EVDisconnected" && <p className="charge-point-notice" role="status">{sq ? "Kablloja u hoq nga makina. Karikuesi konfirmoi ndalimin; sesioni u mbyll dhe lidhja e llogarisë me pikën u lirua." : "The vehicle was unplugged. The charger confirmed the stop; the session closed and the account association was released."}</p>}
     <div className="charge-energy-display">
       <div className="charge-bolt" aria-hidden="true">ϟ</div>
@@ -75,21 +75,21 @@ export function ChargingProgress({ session, language, now, stale }: {
     {(soc !== null || !ended) && <div className="charge-progress-track" role="progressbar"
       aria-label={soc !== null ? (sq ? "Niveli i baterisë" : "Battery level") : (sq ? "Procesi i karikimit" : "Charging activity")}
       aria-valuemin={0} aria-valuemax={100} aria-valuenow={soc ?? undefined}
-      aria-valuetext={soc !== null ? `${number(soc, 1)}%` : state}>
+      aria-valuetext={soc !== null ? `${number(soc, 1)}%${batteryReading.stale ? (sq ? " · përqindja e fundit, në pritje të përditësimit" : " · last battery level, awaiting an update") : ""}` : state}>
       <span className={soc === null ? "charge-progress-indeterminate" : "charge-progress-fill"}
-        style={soc !== null ? { width: `${soc}%` } : undefined} />
+        style={soc !== null ? { width: `${soc}%`, ...(batteryReading.stale ? { background: "#96a79d" } : {}) } : undefined} />
     </div>}
     <div className="charge-progress-caption">
-      <span>{soc !== null ? (sq ? "Niveli i raportuar nga pajisja" : "Battery level reported by the charger")
+      <span>{batteryReading.stale ? (sq ? "Përqindja e fundit · në pritje të përditësimit" : "Last battery level · awaiting an update") : soc !== null ? (sq ? "Niveli i raportuar nga pajisja" : "Battery level reported by the charger")
         : ended ? (sq ? "Sesioni u mbyll" : "Session closed")
         : paused ? (sq ? "Energjia ruhet; sesioni ende nuk është mbyllur" : "Energy is retained; the session is still open")
         : (sq ? "Ende nuk kemi matje të përqindjes së baterisë" : "No battery percentage reading received yet")}</span>
-      {session.lastMeasurementReceivedAt && <span>{sq ? "Matja e fundit" : "Last reading"}: {new Date(session.lastMeasurementReceivedAt).toLocaleTimeString(sq ? "sq-AL" : "en-GB", { timeZone: "Europe/Tirane", hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>}
+      {session.lastMeasurementReceivedAt && <span>{sq ? "Matja e fundit e seancës" : "Last session reading"}: {new Date(session.lastMeasurementReceivedAt).toLocaleTimeString(sq ? "sq-AL" : "en-GB", { timeZone: "Europe/Tirane", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" })}</span>}
     </div>
     <div className="charge-process-metrics">
       <div><span>{sq ? "KOSTO E LLOGARITUR" : "CALCULATED COST"}</span><strong>{session.cost === null || session.completionWarning ? "—" : number(session.cost, 2)} <small>{session.currency}</small></strong><small>{saved ? (sq ? "U ruajt në historik" : "Saved in history") : session.completionWarning ? (sq ? "Në pritje të verifikimit" : "Awaiting verification") : ended ? (sq ? "Mungon matja finale ose tarifa" : "Final reading or tariff missing") : (sq ? "Deri tani" : "So far")}</small></div>
       <div><span>{sq ? "FUQIA AKTUALE" : "CURRENT POWER"}</span><strong>{actualPower === null || stale && !ended ? "—" : number(actualPower)} <small>kW</small></strong><small>{powerNote}{actualPower !== null && !ended && !stale && session.powerScope && session.powerScope !== "Total" ? ` · ${session.powerScope}` : ""}</small></div>
-      <div><span>{sq ? "KOHA E KARIKIMIT" : "CHARGING TIME"}</span>
+      <div><span>{sq ? "KOHA E SEANCËS" : "SESSION TIME"}</span>
         <strong>{duration}</strong>
         <small>{sq ? "Nga nisja · përfshin pauzat" : "Since start · includes pauses"}</small>
         <small>{startDate ? <>{sq ? "Nisur" : "Started"}: <time dateTime={startTimestamp}>{startDate.toLocaleDateString("en-GB", { timeZone: "Europe/Tirane", day: "2-digit", month: "2-digit", year: "numeric" })} · {startDate.toLocaleTimeString(sq ? "sq-AL" : "en-GB", { timeZone: "Europe/Tirane", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}</time> · {sq ? "Tiranë" : "Tirana"}</> : (sq ? "Koha e nisjes nuk është e disponueshme" : "Start time is unavailable")}</small>

@@ -10,9 +10,9 @@ const stationsData = compile("../../src/station-data.ts", { "../../shared/map-di
 const notificationsData = compile("../../src/notification-data.ts", { "../../shared/history": history });
 const ui = Object.fromEntries(["Button", "Card", "ChoiceField", "Chip", "Notice", "Screen"].map(name => [name, name]));
 ui.styles = {}; ui.colors = { ink: "green", muted: "gray", border: "gray", white: "white" };
-const native = { Text: "Text", View: "View", Pressable: "Pressable", Image: "Image", Platform: { OS: "ios" } };
+const native = { Text: "Text", View: "View", Pressable: "Pressable", Image: "Image", Platform: { OS: "ios" }, StyleSheet: { create: styles => styles } };
 const i18n = compile("../../src/i18n.ts");
-const station = { id: "station", name: "Central", latitude: 41.3275, longitude: 19.8187, status: "Available", city: "Tirana", powerKW: 22, pricePerKWh: .35, currency: "EUR" };
+const station = { id: "station", name: "Central", address: "Central road", connectorType: "Type 2", connectorCount: 2, latitude: 41.3275, longitude: 19.8187, status: "Available", city: "Tirana", powerKW: 22, pricePerKWh: .35, currency: "EUR" };
 
 test("map preference survives a new read and invalid values default to Google", async () => {
   let stored = "invalid";
@@ -38,17 +38,20 @@ test("settings load the saved provider, save changes, and retain it when saving 
   assert.match(JSON.stringify(tree), /Could not save/); cleanup();
 });
 
-test("map station taps use the saved navigation app, fall back to its website and coalesce taps", async () => {
+test("map taps show details first; explicit navigation uses the saved app, falls back and coalesces taps", async () => {
   const state = hooks(), opened = [];
   const { StationsScreen } = compile("../../src/StationsScreen.tsx", {
     react: state.react, "react/jsx-runtime": jsx, "react-native": { ...native, Linking: { openURL: async url => { opened.push(url); if (url.startsWith("comgooglemaps:")) throw Error("Not installed"); } } },
-    "./ui": ui, "./i18n": i18n, "./station-data": stationsData, "./StationMap": { StationMap: "StationMap" }, "./map-preference": { readMapProvider: async () => "google" },
+    "./ui": ui, "./i18n": i18n, "./station-data": stationsData, "./StationMap": { StationMap: "StationMap" }, "./StationSummaryCard": { StationSummaryCard: "StationSummaryCard" }, "./map-preference": { readMapProvider: async () => "google" },
   });
   const render = () => { state.reset(); return StationsScreen({ stations: [station], language: "en", refresh() {}, onSelect() {} }); };
-  const tree = render(), map = nodes(tree, n => n.type === "StationMap")[0];
-  map.props.onNavigate(station); map.props.onNavigate(station); await tick();
+  let tree = render(); const map = nodes(tree, n => n.type === "StationMap")[0];
+  map.props.onSelect(station); await tick(); assert.equal(opened.length, 0);
+  tree = render();
+  const details = nodes(tree, n => n.type === "StationSummaryCard")[0];
+  details.props.onNavigate(); details.props.onNavigate(); await tick();
   assert.equal(opened.length, 2); assert.match(opened[0], /^comgooglemaps:/); assert.match(opened[1], /^https:\/\/www.google.com/);
-  nodes(tree, n => n.type === "Chip" && n.props.title === "List")[0].props.onPress();
+  nodes(tree, n => n.props.accessibilityRole === "tab" && n.props.accessibilityLabel === "List")[0].props.onPress();
   assert.equal(nodes(render(), n => n.type === "StationMap").length, 0);
 });
 
@@ -59,14 +62,73 @@ test("native map renders only valid stations, fits their coordinates and exposes
     "../../shared/map-geometry": geometry, "./station-data": stationsData, "./ui": ui,
   });
   const all = [station, { ...station, id: "invalid", latitude: NaN }];
-  const render = () => { state.reset(); return StationMap({ stations: all, language: "en", stale: false, onNavigate: value => selected.push(value.id), onInteraction() {} }); };
+  const render = () => { state.reset(); return StationMap({ stations: all, language: "en", stale: false, selectedId: station.id, onSelect: value => selected.push(value.id), onInteraction() {} }); };
   let tree = render(); nodes(tree, n => n.type === "View" && n.props.onLayout)[0].props.onLayout({ nativeEvent: { layout: { width: 360 } } }); tree = render();
   const markers = nodes(tree, n => n.type === "Pressable" && n.props.accessibilityLabel?.includes("Central"));
   assert.equal(markers.length, 1); markers[0].props.onPress(); assert.deepEqual(selected, ["station"]);
+  assert.equal(markers[0].props.accessibilityState.selected, true);
   const tiles = nodes(tree, n => n.type === "Image"); assert.ok(tiles.length > 0 && tiles.length < 16);
   assert.match(tiles[0].props.source.headers["User-Agent"], /EVCharging/);
   assert.match(JSON.stringify(tree), /OpenStreetMap contributors/);
   assert.match(JSON.stringify(tree), /no valid coordinates/);
+});
+
+function stationsScreen() {
+  const state = hooks(), opened = [];
+  const { StationsScreen } = compile("../../src/StationsScreen.tsx", {
+    react: state.react, "react/jsx-runtime": jsx, "react-native": { ...native, Linking: { openURL: () => assert.fail("Map selection must not navigate") } },
+    "./ui": ui, "./i18n": i18n, "./station-data": stationsData, "./StationMap": { StationMap: "StationMap" },
+    "./StationSummaryCard": { StationSummaryCard: "StationSummaryCard" }, "./map-preference": { readMapProvider: async () => "google" },
+  });
+  return { opened, render: stations => { state.reset(); return StationsScreen({ stations, language: "en", refresh() {}, onSelect: id => opened.push(id) }); } };
+}
+
+test("all station filters start hidden, preserve applied choices when collapsed, and can be reset", () => {
+  const { render } = stationsScreen();
+  const stations = [station, { ...station, id: "second", city: "Durres", powerKW: 50 }];
+  let tree = render(stations);
+  const filterButton = tree => nodes(tree, n => n.props.accessibilityLabel === "Filters")[0];
+  assert.equal(filterButton(tree).props.accessibilityState.expanded, false);
+  assert.equal(nodes(tree, n => n.type === "ChoiceField" || n.type === "Chip").length, 0);
+  filterButton(tree).props.onPress(); tree = render(stations);
+  assert.equal(nodes(tree, n => n.type === "ChoiceField").length, 2);
+  nodes(tree, n => n.type === "ChoiceField" && n.props.label === "City")[0].props.onChange("Durres");
+  tree = render(stations);
+  nodes(tree, n => n.type === "Button" && n.props.title === "Show 1 station")[0].props.onPress();
+  tree = render(stations);
+  assert.equal(nodes(tree, n => n.type === "ChoiceField" || n.type === "Chip").length, 0);
+  assert.deepEqual(nodes(tree, n => n.type === "StationMap")[0].props.stations.map(s => s.id), ["second"]);
+  filterButton(tree).props.onPress(); tree = render(stations);
+  assert.equal(nodes(tree, n => n.type === "ChoiceField" && n.props.label === "City")[0].props.value, "Durres");
+  nodes(tree, n => n.type === "Button" && n.props.title === "Reset filters")[0].props.onPress();
+  assert.equal(nodes(render(stations), n => n.type === "StationMap")[0].props.stations.length, 2);
+});
+
+test("station selection reveals current details and only the explicit charging action opens the station", () => {
+  const { render, opened } = stationsScreen(), scrolls = [];
+  const stations = [station, { ...station, id: "second", name: "Second" }];
+  let tree = render(stations);
+  tree.props.scrollRef.current = { scrollTo: value => scrolls.push(value) };
+  assert.equal(nodes(tree, n => n.type === "StationSummaryCard").length, 0);
+  nodes(tree, n => n.type === "StationMap")[0].props.onSelect(stations[1]);
+  tree = render(stations);
+  const detail = nodes(tree, n => n.type === "StationSummaryCard")[0];
+  assert.equal(detail.props.station.id, "second"); assert.deepEqual(opened, []);
+  nodes(tree, n => n.type === "View" && n.props.onLayout)[0].props.onLayout({ nativeEvent: { layout: { y: 500 } } });
+  assert.equal(scrolls.length, 1); assert.ok(scrolls[0].y < 500);
+  tree = render([station, { ...stations[1], status: "Occupied" }]);
+  assert.equal(nodes(tree, n => n.type === "StationSummaryCard")[0].props.station.status, "Occupied");
+  assert.equal(scrolls.length, 1);
+  detail.props.onOpen(); assert.deepEqual(opened, ["second"]);
+  detail.props.onClose(); assert.equal(nodes(render(stations), n => n.type === "StationSummaryCard").length, 0);
+});
+
+test("a single station shows its details by default and respects closing the card", () => {
+  const { render } = stationsScreen();
+  const tree = render([station]);
+  const detail = nodes(tree, n => n.type === "StationSummaryCard")[0];
+  assert.equal(detail.props.station.id, station.id);
+  detail.props.onClose(); assert.equal(nodes(render([station]), n => n.type === "StationSummaryCard").length, 0);
 });
 
 test("Albania notification dates and 24-hour times handle midnight and daylight saving", () => {
@@ -85,7 +147,7 @@ test("map gestures pan and pinch without resetting on status refresh, and releas
     react: state.react, "react/jsx-runtime": jsx, "react-native": { ...native, PanResponder: { create: value => { responder = value; return { panHandlers: {} }; } } },
     "../../shared/map-geometry": geometry, "./station-data": stationsData, "./ui": ui,
   });
-  const render = (status = "Available") => { state.reset(); return StationMap({ stations: [{ ...station, status }], language: "en", stale: false, onNavigate() {}, onInteraction: value => interactions.push(value) }); };
+  const render = (status = "Available") => { state.reset(); return StationMap({ stations: [{ ...station, status }], language: "en", stale: false, onSelect() {}, onInteraction: value => interactions.push(value) }); };
   let tree = render(); nodes(tree, n => n.type === "View" && n.props.onLayout)[0].props.onLayout({ nativeEvent: { layout: { width: 360 } } }); tree = render();
   const markerLeft = tree => nodes(tree, n => n.type === "Pressable" && n.props.accessibilityLabel?.includes("Central"))[0].props.style.left;
   const before = markerLeft(tree), touches = x => ({ nativeEvent: { touches: [{ pageX: x, pageY: 100 }] } });

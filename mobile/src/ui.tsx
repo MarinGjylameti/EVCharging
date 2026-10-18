@@ -1,4 +1,4 @@
-import { useRef, useState, type PropsWithChildren } from "react";
+import { useRef, useState, type PropsWithChildren, type Ref } from "react";
 import { Image, KeyboardAvoidingView, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, Pressable, View, type TextInputProps } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Language } from "../../contracts/account";
@@ -18,7 +18,7 @@ export function Card({ children }: PropsWithChildren) { return <View style={styl
 export function Notice({ text, success = false }: { text: string; success?: boolean }) {
   return text ? <Text accessibilityRole="alert" style={[styles.notice, success && { color: colors.green, backgroundColor: "#e9f3e0" }]}>{text}</Text> : null;
 }
-export function Screen({ children, language = "sq", refresh, scrollEnabled = true }: PropsWithChildren<{ language?: Language; refresh?: () => Promise<void>; scrollEnabled?: boolean }>) {
+export function Screen({ children, language = "sq", refresh, scrollEnabled = true, scrollRef }: PropsWithChildren<{ language?: Language; refresh?: () => Promise<void>; scrollEnabled?: boolean; scrollRef?: Ref<ScrollView> }>) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const pending = useRef(false);
@@ -29,7 +29,7 @@ export function Screen({ children, language = "sq", refresh, scrollEnabled = tru
     finally { pending.current = false; setBusy(false); }
   }
   return <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-    <ScrollView scrollEnabled={scrollEnabled} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={styles.content}
+    <ScrollView ref={scrollRef} scrollEnabled={scrollEnabled} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={styles.content}
       refreshControl={refresh ? <RefreshControl refreshing={busy} onRefresh={() => void reload()} tintColor={colors.green} /> : undefined}>
       <Notice text={error}/>{children}
     </ScrollView>

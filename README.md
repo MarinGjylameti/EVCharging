@@ -9,7 +9,7 @@ An electric vehicle charging platform with a web application, backend API, and m
 ### Preview on a physical phone
 
 The project now uses Expo SDK 57, matching the reported iPhone's Expo Go version.
-The user confirmed that it opens on that iPhone. Full TypeScript, 70 local tests
+The user confirmed that it opens on that iPhone. Full TypeScript, 82 local tests
 and Hermes exports for iOS/Android pass on SDK 57. Exports are JavaScript/native
 bytecode bundles, not signed APK/IPA files or complete physical-device tests.
 
@@ -82,9 +82,14 @@ with npm/Expo connectivity after the packaging issue above is fixed.
 
 ### Station map, navigation and notification dates
 
-The mobile Stations screen opens on the embedded map and offers a List tab for
-station details/charging. Both views use the same city, availability and charger
-rating filters. The map reuses the web's OpenStreetMap tiles and shared projection
+The mobile Stations screen opens on the embedded map, with a compact Map/List
+switch and a Filters button. City, availability and charger-rating filters start
+collapsed and retain applied choices when hidden. Both views use the same filters.
+Tapping a marker highlights it and reveals its details below the map: status,
+address, connectors, power, tariff, Open charging and Open in Maps. A single
+station shows its details automatically; the user can close the card. Opening
+charging enters the existing connection/session screen; it does not start energy
+transfer. The map reuses the web's OpenStreetMap tiles and shared projection
 math, with dragging, pinch/zoom controls, visible attribution and a list fallback
 when tiles fail. Only visible tiles are requested, with an application User-Agent
 and the native image cache; no new package, location permission or map API key is
@@ -92,9 +97,9 @@ required. Map tiles remain an external network dependency; see the
 [OpenStreetMap tile policy](https://operations.osmfoundation.org/policies/tiles/).
 
 Settings now contains Google Maps / Apple Maps preference, saved on this phone
-using the existing storage module; Google Maps matches the web's default. A map
-marker or a list navigation button uses the saved choice and the exact station
-coordinates. Google Maps falls back to its website if its app is unavailable.
+using the existing storage module; Google Maps matches the web's default. The
+explicit Open in Maps action uses the saved choice and exact station coordinates.
+Google Maps falls back to its website if its app is unavailable.
 The map and preference must still be exercised on both physical platforms.
 
 Notifications are newest first, grouped and filterable by the Albanian calendar
@@ -106,7 +111,8 @@ including daylight-saving changes. Charging start timestamps also use 24 hours.
 iOS and Android share the charging card: a green battery banner, large reported
 percentage, accessible progress bar, estimated time to full, and energy/power/
 cost/duration metrics. The layout wraps on narrow screens and larger text. The
-current charge appears before the station specifications. The visual hierarchy
+current charge appears before the station specifications. Back navigation uses
+a compact arrow/text control with a 44-point minimum touch height. The visual hierarchy
 draws on the existing web screen and [ChargePoint's app examples](https://www.chargepoint.com/drivers/mobile).
 
 The remaining-time calculation and explanations are shared with web. The API
@@ -118,10 +124,46 @@ alone does not invent battery progress. A completed charge keeps its last report
 percentage, without forcing 100%, and no longer shows an ETA. A disputed final
 meter reading does not show a confirmed final cost.
 
-Validation: mobile/web TypeScript, 70 mobile tests, 31 focused web charging tests,
+Web and mobile keep the last valid battery percentage visible when it expires or
+the charger disconnects, with a gray progress bar and an awaiting-update label.
+The last session reading uses Albania's 24-hour clock; it is not presented as the
+timestamp of the battery sample specifically. Current power and ETA remain
+unavailable while disconnected. Session time includes pauses and disconnected
+waiting until the device confirms the stop; a ticking duration does not imply
+that energy is still transferring.
+
+Return to charging appears above the mobile tabs only for the signed-in driver's
+open sessions currently reported as Charging, and opens their exact connector.
+It is hidden on that connector's detail screen, during pauses, disconnections,
+faults or failed refreshes, and after completion. It reappears when fresh data
+confirms charging again. The authenticated session list refreshes every 15 seconds
+in the foreground and immediately on foreground return. When the charging screen
+confirms completion on its own poll, it removes the shortcut immediately; a slower
+list response cannot restore it. Account changes clear all session data.
+
+Validation: mobile/web TypeScript, 82 mobile tests, 32 focused web charging tests,
 and both Hermes exports passed. Native UI tests use simulated platform modules;
 Android physical-device testing is still outstanding. No APK build, store upload,
 backend migration or new package is part of this update.
+
+### Requested iOS Live Activity (not implemented)
+
+The requested Dynamic Island display would show an approximate remaining time
+from the same validated charging estimate, with battery level in the expanded
+presentation and a tap opening the correct charging connector. Unknown or stale
+measurements must not produce an invented countdown. Completion must end the
+activity; pauses/disconnections must remove the active charging presentation.
+
+[Expo SDK 57 Widgets](https://docs.expo.dev/versions/v57.0.0/sdk/widgets/) supports
+Live Activities, but not inside Expo Go. Testing on the iPhone through the current
+EAS workflow requires a signed development build and an Apple Developer account,
+which is not yet available. Reliable updates and ending while the app is in the
+background also require an authenticated, per-session ActivityKit token lifecycle
+and [server updates through APNs](https://developer.apple.com/documentation/ActivityKit/starting-and-updating-live-activities-with-activitykit-push-notifications).
+The current foreground polling and ordinary Expo notifications do not implement
+that lifecycle. No widget dependency, native extension, APNs endpoint or background
+Live Activity support has been added or validated in this change. This feature
+remains pending; the current iOS/Android in-app experience stays testable in Expo Go.
 
 The project is under active development.
 

@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from "react-native";
 import type { DriverChargingSession, Language } from "../../contracts/account";
-import { chargingEstimate, formatChargingEstimate, chargingEstimateNotes } from "../../shared/charging-estimate";
+import { chargingEstimate, formatChargingEstimate, chargingEstimateNotes, chargingBatteryReading, chargingConnectionLostNote } from "../../shared/charging-estimate";
 import { chargingDuration, chargingValues } from "./station-data";
 import { messages } from "./i18n";
 import { Button, Notice, colors, styles } from "./ui";
@@ -9,7 +9,7 @@ const sessionLabels: Record<string, [string, string]> = {
   Charging: ["Në karikim", "Charging"], Connecting: ["Makina po lidhet", "Connecting vehicle"],
   PausedByVehicle: ["Në pauzë nga makina", "Paused by vehicle"], PausedByCharger: ["Në pauzë nga pika", "Paused by charger"],
   Finishing: ["Duke përfunduar", "Finishing"], Completed: ["Karikimi përfundoi", "Charge completed"],
-  ConnectionLost: ["Lidhja u ndërpre", "Connection lost"], Faulted: ["Pika raportoi defekt", "Charger reported a fault"],
+  ConnectionLost: ["Karikuesi është shkëputur", "Charger disconnected"], Faulted: ["Pika raportoi defekt", "Charger reported a fault"],
   Unavailable: ["Pika është jashtë shërbimit", "Charger unavailable"],
 };
 
@@ -19,7 +19,7 @@ export function ChargingProgressCard({ session, language, now, stale, onOpenProf
   const sq = language === "sq", t = messages[language];
   const ended = session.stoppedAt !== null;
   const values = chargingValues(session, now, stale);
-  const battery = ended && session.stateOfCharge !== null && Number.isFinite(session.stateOfCharge) && session.stateOfCharge >= 0 && session.stateOfCharge <= 100 ? session.stateOfCharge : values.battery;
+  const batteryReading = chargingBatteryReading(session, now, stale), battery = batteryReading.value;
   const estimate = chargingEstimate(session, now, stale);
   const faulted = !ended && (session.status === "Faulted" || session.status === "Unavailable" || !!session.faultCode && session.faultCode !== "NoError");
   const paused = !ended && (session.status === "PausedByVehicle" || session.status === "PausedByCharger");
@@ -28,18 +28,19 @@ export function ChargingProgressCard({ session, language, now, stale, onOpenProf
     : faulted ? sessionLabels.Faulted[sq ? 0 : 1] : sessionLabels[session.status]?.[sq ? 0 : 1] ?? (sq ? "Në pritje të statusit" : "Awaiting status");
   const number = (value: number | null, digits = 2) => value === null || !Number.isFinite(value) ? "—"
     : new Intl.NumberFormat(sq ? "sq-AL" : "en-GB", { maximumFractionDigits: digits }).format(value);
-  const batteryNote = ended ? (battery === null ? (sq ? "Pajisja nuk raportoi nivelin e baterisë" : "No battery level was reported") : (sq ? "Matja e fundit e baterisë" : "Last reported battery level")) : battery !== null ? (sq ? "Niveli i raportuar nga pajisja" : "Battery level reported by the charger")
+  const batteryNote = ended ? (battery === null ? (sq ? "Pajisja nuk raportoi nivelin e baterisë" : "No battery level was reported") : (sq ? "Matja e fundit e baterisë" : "Last reported battery level")) : batteryReading.stale ? (sq ? "Përqindja e fundit · në pritje të përditësimit" : "Last battery level · awaiting an update") : battery !== null ? (sq ? "Niveli i raportuar nga pajisja" : "Battery level reported by the charger")
     : stale ? chargingEstimateNotes.stale[sq ? 0 : 1] : session.stateOfCharge == null ? chargingEstimateNotes.missingBattery[sq ? 0 : 1]
     : chargingEstimateNotes.staleBattery[sq ? 0 : 1];
   const start = new Date(session.isDemo ? session.startReceivedAt ?? session.startedAt : session.startedAt);
   const started = Number.isFinite(start.getTime()) ? start.toLocaleString(sq ? "sq-AL" : "en-GB", {
     timeZone: "Europe/Tirane", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
   }) : "—";
+  const lastReading = session.lastMeasurementReceivedAt && Number.isFinite(Date.parse(session.lastMeasurementReceivedAt)) ? new Date(session.lastMeasurementReceivedAt).toLocaleTimeString(sq ? "sq-AL" : "en-GB", { timeZone: "Europe/Tirane", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }) : null;
   const metrics = [
     { label: t.energy, value: number(values.energy, 3), unit: "kWh" },
     { label: sq ? "Fuqia aktuale" : "Current power", value: number(values.power, 3), unit: "kW" },
     { label: t.calculatedCost, value: number(session.completionWarning ? null : values.cost), unit: session.currency },
-    { label: sq ? "Kohëzgjatja" : "Duration", value: chargingDuration(session, now), unit: "" },
+    { label: sq ? "Koha e seancës" : "Session time", value: chargingDuration(session, now), unit: "" },
   ];
 
   return <View style={layout.card}>
@@ -54,17 +55,19 @@ export function ChargingProgressCard({ session, language, now, stale, onOpenProf
           <Text style={layout.percentage}>{number(battery, 1)}<Text style={layout.percentUnit}>{battery !== null ? " %" : ""}</Text></Text>
         </View>
         <View accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={layout.batteryIcon}>
-          <View style={layout.batteryOutline}><View style={[layout.batteryFill, { width: `${battery ?? 0}%`, backgroundColor: charging ? colors.lime : "#a8bcb1" }]}/></View>
+          <View style={layout.batteryOutline}><View style={[layout.batteryFill, { width: `${battery ?? 0}%`, backgroundColor: charging && !batteryReading.stale ? colors.lime : "#a8bcb1" }]}/></View>
           <View style={layout.batteryTip}/>
         </View>
       </View>
       <View accessible accessibilityRole="progressbar" accessibilityLabel={sq ? "Niveli i baterisë" : "Battery level"}
-        accessibilityValue={battery === null ? { text: batteryNote } : { min: 0, max: 100, now: battery, text: `${number(battery, 1)}%` }} style={layout.track}>
-        <View style={[layout.fill, { width: `${battery ?? 0}%`, backgroundColor: charging ? colors.lime : "#a8bcb1" }]}/>
+        accessibilityValue={battery === null ? { text: batteryNote } : { min: 0, max: 100, now: battery, text: `${number(battery, 1)}%${batteryReading.stale ? ` · ${batteryNote}` : ""}` }} style={layout.track}>
+        <View style={[layout.fill, { width: `${battery ?? 0}%`, backgroundColor: charging && !batteryReading.stale ? colors.lime : "#a8bcb1" }]}/>
       </View>
       <Text style={layout.bannerNote}>{batteryNote}</Text>
+      {lastReading && <Text style={layout.bannerNote}>{sq ? "Matja e fundit e seancës" : "Last session reading"}: {lastReading}</Text>}
     </View>
     <View style={layout.details}>
+      {!ended && session.status === "ConnectionLost" && <Text style={styles.body}>{chargingConnectionLostNote[sq ? 0 : 1]}</Text>}
       {!ended && <View style={layout.estimate}>
         <Text style={layout.label}>{sq ? "Koha deri në bateri të plotë" : "Time until battery is full"}</Text>
         <Text style={layout.estimateValue}>{estimate.minutes === null ? "—" : `≈ ${formatChargingEstimate(estimate.minutes)}`}</Text>
