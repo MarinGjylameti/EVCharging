@@ -5,7 +5,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 function compile(path, dependencies = {}) {
-  return loadTypescript(new URL(path, import.meta.url), { "../../components/runtime-features": { useTestMode: () => true }, ...dependencies });
+  return loadTypescript(new URL(path, import.meta.url), { "../../components/runtime-features": { useTestMode: () => true }, "../../../../shared/charging-guidance": loadTypescript(new URL("../../shared/charging-guidance.ts", import.meta.url)), ...dependencies });
 }
 
 const fault = compile("../src/features/driver/charging-fault.tsx");
@@ -42,7 +42,7 @@ test("production station view hides test actions and diagnostics even in a stale
     "./live-update-policy": compile("../src/features/driver/live-update-policy.ts"),
   });
   const html = renderToStaticMarkup(createElement(StationChargingView, { initial: live, language: "en" }));
-  assert.match(html, /Use the card linked to your account/);
+  assert.match(html, /Identify yourself with your linked card/);
   assert.doesNotMatch(html, /Heartbeat|Download diagnostics|Connect to charger|simulator|QR is bypassed/);
 });
 

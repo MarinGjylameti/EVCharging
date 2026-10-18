@@ -10,6 +10,107 @@ The project is under active development.
 
 See [CHANGELOG.md](CHANGELOG.md) for the change history.
 
+## Mobile scope and store readiness — 18 October 2026
+
+Phase 1 remains monitoring, station administration, personal history, profile and
+notifications. The Driver uses the Expo app or Driver web portal; Admin and
+Superadmin use the responsive web workspace. Electronic payments, wallet,
+subscriptions and remote start/stop are not added by this mobile refinement.
+
+The phone station editor now opens separately from the station list, with a back
+action and a warning before discarding edits. Session rows become labelled cards
+on phones; filters are expandable. Web and native Driver views share guidance for
+offline, unavailable, occupied and card-linked chargers. A station view does not
+claim a charging session. The native charge uses its saved session tariff, and
+declining push permission does not interrupt normal monitoring.
+
+**Store submission is not ready yet.** Configure the client's actual pages in the
+mobile build environment:
+
+```text
+EXPO_PUBLIC_PRIVACY_URL=
+EXPO_PUBLIC_ACCOUNT_DELETION_URL=
+```
+
+Use public HTTPS pages without user identifiers, tokens or credentials. Privacy
+is accessible before login and in Settings; the account-deletion entry appears in
+Settings. The latter must open the actual deletion request/completion flow,
+including identity verification and confirmation. A homepage, email-only support
+link, or merely disabling an account is insufficient. No deletion service or
+client retention policy is implemented by configuring these links. The client
+must supply the pages, approved retention rules and an operational deletion
+process. Production configuration rejects missing/invalid pages; internal preview
+builds remain available for hardware testing. These checks validate configuration,
+not the live page or the outcome of store review.
+
+From `mobile`, run `npm run check:store:ios` and
+`npm run check:store:android` before submission. Existing API HTTPS, Expo project
+and Android Firebase checks also apply. The normal `check:ios` / `check:android`
+commands continue to support internal preview.
+
+Before submission, the release owner must complete:
+
+- Client-approved privacy page and actual account/data deletion workflow, reachable
+  both from the app and the Google Play listing. Declare retained data and timing.
+  See [Apple account deletion](https://developer.apple.com/help/app-review/guideline-reference/5-1-1-account-deletion)
+  and [Google Play account deletion](https://support.google.com/googleplay/android-developer/answer/13327111?hl=en).
+- App Store App Privacy / Google Play Data safety disclosures matching the actual
+  build, backend and SDKs: account/contact/vehicle information, charging history,
+  push tokens and diagnostics as applicable. Verify the final native permissions
+  and SDK privacy manifests; configuration source alone does not prove the binary.
+- A working reviewer Driver account, reachable backend and clear instructions for
+  the card/charger flow. For hardware-dependent review prepare a video showing
+  the app on a physical device interacting with the charger; do not silently turn
+  on global production TestMode to imitate real charging. See
+  [Apple review information](https://developer.apple.com/help/app-review/before-submitting-for-review/complete-review).
+- Signed iOS/Android builds, store identifiers and credentials, current platform
+  submission requirements, and real-device tests: registration/login/logout,
+  large text/VoiceOver/TalkBack, keyboard and Back, connection loss/recovery,
+  notifications allowed/declined, own-versus-other-user data, and charging history.
+  Test iPad too while `supportsTablet` remains enabled.
+- Resolve the existing native-map acceptance gap: the Expo screen currently lists
+  stations and opens the phone's map; it does not contain the embedded station map
+  described in the client's specification. Do not advertise embedded maps, QR
+  scanning, payments or remote start as completed native features.
+
+## QR, card and ownership boundary
+
+The implemented physical flow is:
+
+```text
+Registered card -> charger sends idTag -> backend matches assigned Driver
+               -> StartTransaction creates the owned session
+               -> MeterValues/StopTransaction update that session and its history
+Signed-in Driver -> authenticated API/live updates -> own session only
+```
+
+The current station configuration supports **one assigned Driver/card per physical
+charger**, plus an allowed-card list whose charges have no personal Driver owner.
+It is not a general multi-customer RFID registry. Do not change assignments during
+a charge; past history retains its original owner. Confirm this operational model
+with the client before treating it as a shared public charging network.
+
+A QR printed on a charger should identify only the station and connector. The
+authenticated app already identifies the person; scanning a public label must not
+grant ownership of an existing or subsequent charge. QR resolution/scanning and
+QR-initiated charging are not implemented in this refinement. If later required,
+their server-verified authorization must be designed from the actual charger
+capabilities, without accepting an arbitrary user ID from a QR or HTTP body.
+
+In OCPP 1.6, card authorization and transaction identity are separate from a
+vendor's prepaid balance or payment system. An `idTag` alone does not establish a
+balance or prove a payment. Verify the actual device/card provider instead of
+assuming money is stored on the card. The OCA's
+[OCPP 1.6 test cases](https://openchargealliance.org/wp-content/uploads/2025/09/CompliancyTestTool-TestCaseDocument.pdf)
+cover authorization and transaction behavior; the implementation here calculates
+cost but does not collect payment.
+
+During the physical trial record the exact card `idTag`, station identity and
+connector number. Check Authorize, StartTransaction, meter values and stop; verify
+that a second Driver sees none of the first Driver's readings. Also check an
+unassigned/unknown card, two connectors, reconnection and app background/foreground.
+Use internal preview while these observations and store prerequisites are pending.
+
 ## Production presentation and test mode
 
 Set **one backend environment variable**, then restart the API:

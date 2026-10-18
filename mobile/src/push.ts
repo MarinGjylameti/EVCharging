@@ -10,14 +10,20 @@ Notifications.setNotificationHandler({
 
 export async function registerPush(token: string, askPermission: boolean) {
   const projectId = Constants.easConfig?.projectId ?? Constants.expoConfig?.extra?.eas?.projectId;
-  if (!Device.isDevice || typeof projectId !== "string" || !/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(projectId) || Constants.appOwnership === "expo") throw new Error("pushSetup");
+  if (!Device.isDevice || typeof projectId !== "string" || !/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(projectId) || Constants.appOwnership === "expo") {
+    if (askPermission) throw new Error("pushSetup");
+    return;
+  }
   if (Platform.OS === "android") await Notifications.setNotificationChannelAsync("charging", {
     name: "Charging / Karikimi", importance: Notifications.AndroidImportance.DEFAULT
   });
   let permission = await Notifications.getPermissionsAsync();
   const allowed = () => permission.granted || permission.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
   if (!allowed() && askPermission && permission.canAskAgain) permission = await Notifications.requestPermissionsAsync();
-  if (!allowed()) throw new Error("pushDenied");
+  if (!allowed()) {
+    if (askPermission) throw new Error("pushDenied");
+    return;
+  }
   const expoToken = await Notifications.getExpoPushTokenAsync({ projectId });
   await request("/me/devices", token, "POST", { token: expoToken.data, platform: Platform.OS });
 }

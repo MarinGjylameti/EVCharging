@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Language, Station } from "../../../../contracts/account";
 import { StationMapPicker } from "./station-map-picker";
 import type { Location } from "../../../../contracts/operations";
@@ -35,14 +35,31 @@ export function StationManager({initial, language, canEdit, locations:initialLoc
   const [filter,setFilter] = useState("");
   const [mapOpen,setMapOpen] = useState(false);
   const [locationChosen,setLocationChosen] = useState(Boolean(initial[0]));
+  const [editorOpen,setEditorOpen] = useState(false);
+  const baseline = useRef(JSON.stringify(initial[0] ? formOf(initial[0]) : blank));
+  const editorRef = useRef<HTMLElement>(null);
+  const listRef = useRef<HTMLElement>(null);
+  const dirty = JSON.stringify(draft) !== baseline.current;
   const mapButtonRef = useRef<HTMLButtonElement>(null);
   const selected = stations.find(x=>x.id===selectedId);
   const shown = stations.filter(x=>(x.name+" "+x.code+" "+x.city).toLocaleLowerCase().includes(filter.toLocaleLowerCase()));
   const active = stations.filter(x=>!x.isArchived).length;
   const available = stations.filter(x=>!x.isArchived&&x.status==="Available").length;
   const setField = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft(previous=>({...previous,[key]:value}));
-  function select(station: Station) { setSelectedId(station.id); setDraft(formOf(station)); setLocationChosen(true); setMapOpen(false); setError(""); setMessage(""); }
-  function create() { setSelectedId(null); setDraft({...blank,locationId:locations.find(x=>!x.isArchived)?.id??null}); setLocationChosen(false); setMapOpen(false); setError(""); setMessage(""); }
+  useEffect(() => {
+    if (!selected || dirty || selected.version === draft.version) return;
+    const next = formOf(selected); baseline.current = JSON.stringify(next); setDraft(next);
+  }, [selected, dirty, draft.version]);
+  function mayLeave() { return !busy && (!dirty || window.confirm(sq ? "Ke ndryshime të paruajtura. T'i lëmë pa ruajtur?" : "You have unsaved changes. Discard them?")); }
+  function focusPanel(ref: React.RefObject<HTMLElement | null>) {
+    requestAnimationFrame(() => {
+      if (!window.matchMedia("(max-width: 700px)").matches) return;
+      ref.current?.focus({ preventScroll: true }); ref.current?.scrollIntoView({ block: "start" });
+    });
+  }
+  function select(station: Station) { if (!mayLeave()) return; const next = formOf(station); baseline.current = JSON.stringify(next); setSelectedId(station.id); setDraft(next); setLocationChosen(true); setMapOpen(false); setError(""); setMessage(""); setEditorOpen(true); focusPanel(editorRef); }
+  function create() { if (!mayLeave()) return; const next = {...blank,locationId:locations.find(x=>!x.isArchived)?.id??null}; baseline.current = JSON.stringify(next); setSelectedId(null); setDraft(next); setLocationChosen(false); setMapOpen(false); setError(""); setMessage(""); setEditorOpen(true); focusPanel(editorRef); }
+  function backToList() { if (!mayLeave()) return; const next = selected ? formOf(selected) : blank; baseline.current = JSON.stringify(next); setDraft(next); setEditorOpen(false); focusPanel(listRef); }
   function closeMap() { setMapOpen(false); requestAnimationFrame(()=>mapButtonRef.current?.focus()); }
   async function send(operation:"create"|"update"|"archive") {
     if (busy || !canEdit) return;
@@ -65,7 +82,7 @@ export function StationManager({initial, language, canEdit, locations:initialLoc
       }
       const station = data as Station;
       setStations(previous=>previous.some(x=>x.id===station.id) ? previous.map(x=>x.id===station.id?station:x) : [...previous,station]);
-      setSelectedId(station.id); setDraft(formOf(station)); setLocationChosen(true);
+      baseline.current = JSON.stringify(formOf(station)); setSelectedId(station.id); setDraft(formOf(station)); setLocationChosen(true);
       setMessage(operation==="archive" ? (sq?"Pika u arkivua.":"Station archived.") :
         (sq?"Pika u ruajt.":"Station saved."));
     } catch { setError(sq?"Lidhja dështoi. Provo përsëri.":"Connection failed. Please retry."); }
@@ -80,16 +97,17 @@ export function StationManager({initial, language, canEdit, locations:initialLoc
       <article><span>{sq?"TË LIRA":"AVAILABLE"}</span><strong>{available}</strong></article>
       <article><span>{sq?"QYTETE":"CITIES"}</span><strong>{new Set(stations.filter(x=>!x.isArchived).map(x=>x.city)).size}</strong></article></div>
     <p className="station-disclaimer" role="status">{live?(sq?"Përditësime aktive nga karikuesit.":"Live charger updates."):(sq?"Duke lidhur përditësimet…":"Connecting live updates…")}</p>
-    <div className="station-admin-grid"><section className="station-table-card">
+    <div className="station-admin-grid" data-editor-open={editorOpen}><section className="station-table-card" ref={listRef} tabIndex={-1} aria-label={sq ? "Lista e pikave" : "Station list"}>
       <div className="station-table-top"><h2>{sq?"Lista e pikave":"Station list"}</h2><input aria-label={sq?"Kërko pikë":"Search stations"}
         placeholder={sq?"Kërko sipas emrit, kodit, qytetit":"Search name, code or city"} value={filter} onChange={e=>setFilter(e.target.value)}/></div>
       {shown.length ? shown.map(station=><button type="button" key={station.id} className="station-admin-row"
-        aria-pressed={station.id===selectedId} onClick={()=>select(station)}>
+        aria-pressed={station.id===selectedId} disabled={busy} onClick={()=>select(station)}>
         <span className={`station-dot status-${station.status.toLowerCase()}`}/>
         <span className="station-admin-name"><strong>{station.name}</strong><small>{station.city} · {station.code}{station.isDemo?" · Demo":""}</small></span>
         <span className="station-admin-meta">{station.powerKW} kW<small>{station.isArchived?(sq?"Arkivuar":"Archived"):labels[station.status][language]}</small></span>
       </button>) : <p className="station-empty">{sq?"Nuk u gjet asnjë pikë.":"No stations found."}</p>}
-    </section><section className="station-edit-card">
+    </section><section className="station-edit-card" ref={editorRef} tabIndex={-1} aria-label={sq ? "Detajet e pikës" : "Station details"}>
+      <button type="button" className="button-outline station-mobile-back" disabled={busy} onClick={backToList}>← {sq ? "Lista e pikave" : "Station list"}</button>
       <div className="station-form-head"><span className="eyebrow">{selectedId?(sq?"DETAJET E PIKËS":"STATION DETAILS"):(sq?"PIKË E RE":"NEW STATION")}</span>
         <h2>{selected?.name ?? (sq?"Shto pikë karikimi":"Add charging station")}</h2></div>
       {error&&<p role="alert" className="form-error">{error}</p>}{message&&<p role="status" className="form-success">{message}</p>}
@@ -112,8 +130,8 @@ export function StationManager({initial, language, canEdit, locations:initialLoc
             <label>{sq?"Gjendja":"Status"}<select value={draft.status} onChange={e=>setField("status",e.target.value as Station["status"])}>
               {statuses.map(status=><option value={status} key={status}>{labels[status][language]}</option>)}</select></label></div>
           <label>{sq?"Arsyeja e ndryshimit të gjendjes/çmimit":"Reason for status/price change"}<textarea required={!!selected&&(draft.status!==selected.status||draft.pricePerKWh!==selected.pricePerKWh)} minLength={3} maxLength={500} value={draft.reason} onChange={e=>setField("reason",e.target.value)}/></label>
-          {selected&&selected.version!==draft.version&&<p className="form-error">{sq?"Pika ka ndryshuar. Klikoje sërish në listë për të marrë versionin e ri para ruajtjes.":"The station changed. Select it again in the list before saving."}</p>}
-          {canEdit&&!selected?.isArchived&&<button className="button-primary" type="submit" disabled={!selectedId&&!locationChosen}>{busy?(sq?"Duke ruajtur…":"Saving…"):(sq?"Ruaj pikën":"Save station")}</button>}
+          {selected&&selected.version!==draft.version&&<div className="form-error" role="status"><p>{sq?"Pika ka ndryshuar. Ngarko versionin e ri përpara ruajtjes.":"The station changed. Load its current version before saving."}</p><button type="button" className="button-outline" onClick={()=>select(selected)}>{sq?"Ngarko versionin e ri":"Load current version"}</button></div>}
+          {canEdit&&!selected?.isArchived&&<button className="button-primary" type="submit" disabled={!selectedId&&!locationChosen || !!selected && selected.version!==draft.version}>{busy?(sq?"Duke ruajtur…":"Saving…"):(sq?"Ruaj pikën":"Save station")}</button>}
         </fieldset>
       </form> : <p className="lead">{sq?"Zgjidh një pikë nga lista.":"Choose a station from the list."}</p>}
       {canEdit&&selected&&!selected.isArchived&&<button type="button" className="station-archive" disabled={busy||["Charging","Occupied"].includes(selected.status)} onClick={()=>void send("archive")}>

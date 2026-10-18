@@ -38,6 +38,6 @@ export function StationsScreen({ stations, language, refresh, onSelect, stale = 
         <Button title={sq ? "Shiko pikën dhe karikimin" : "View station and charging"} onPress={() => onSelect(station.id)}/>
         <Button title={t.openInMaps} secondary onPress={() => void openMap(station)}/>
       </Card>;
-    }) : <Card><Text style={styles.body}>{t.noStations}</Text></Card>}
+    }) : <Card><Text style={styles.body}>{stations.length ? t.noStations : (sq ? "Ende nuk ka pika të publikuara. Provo përsëri më vonë." : "No stations have been published yet. Please try again later.")}</Text>{(city || availableOnly || power !== "all") && <Button title={sq ? "Pastro filtrat" : "Reset filters"} secondary onPress={() => { setCity(""); setPower("all"); setAvailableOnly(false); }}/>}</Card>}
   </Screen>;
 }

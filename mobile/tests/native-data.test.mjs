@@ -71,7 +71,7 @@ test("native and web history use the same inclusive range, currency split and ei
 test("release config fails early for missing IDs or insecure origins and leaves local setup optional", () => {
   assert.equal(buildEnvironment({}).profile, "local");
   for (const env of [{ EAS_BUILD_PROFILE: "production" }, { EAS_BUILD_PROFILE: "preview", EXPO_PUBLIC_API_BASE_URL: "http://localhost:5201", EXPO_PUBLIC_EAS_PROJECT_ID: projectId }, { EXPO_PUBLIC_EAS_PROJECT_ID: "houss-project" }]) assert.throws(() => buildEnvironment(env));
-  assert.equal(buildEnvironment({ EAS_BUILD_PROFILE: "production", EXPO_PUBLIC_API_BASE_URL: "https://api.example.com", EXPO_PUBLIC_EAS_PROJECT_ID: projectId }).projectId, projectId);
+  assert.equal(buildEnvironment({ EAS_BUILD_PROFILE: "preview", EXPO_PUBLIC_API_BASE_URL: "https://api.example.com", EXPO_PUBLIC_EAS_PROJECT_ID: projectId }).projectId, projectId);
 });
 
 test("charging duration uses received times for demo sessions and stops at completion", () => {

@@ -5,6 +5,7 @@ import { request } from "./api";
 import { registerPush } from "./push";
 import { messages, errorText } from "./i18n";
 import { Field, Button, Notice, Card, Chip, Screen, styles, colors } from "./ui";
+import { PrivacyLinks } from "./PrivacyLinks";
 
 export function SettingsScreen({ user, token, onUpdate, onLogout, onExpired, refresh, onBack }: { user: User; token: string; onUpdate: (value: User) => void; onLogout: () => Promise<void>; onExpired: () => Promise<void>; refresh: () => Promise<void>; onBack: () => void }) {
   const busyRef = useRef(false);
@@ -45,6 +46,7 @@ export function SettingsScreen({ user, token, onUpdate, onLogout, onExpired, ref
       })}/>
     </Card>
     <Button title={t.refresh} secondary disabled={busy} onPress={() => void perform(refresh)}/>
+    <PrivacyLinks language={user.language} account/>
     <Button title={t.logout} secondary disabled={busy} onPress={() => void perform(onLogout)}/>
   </Screen>;
 }

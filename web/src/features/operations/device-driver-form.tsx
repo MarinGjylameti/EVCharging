@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTestMode } from "../../components/runtime-features";
 import type { Device, Driver } from "../../../../contracts/operations";
 import { failure, mutate, operations } from "./api";
@@ -15,19 +15,23 @@ export function DeviceDriverForm({ device, stationId, sq, disabled, onSaved }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const saving = useRef(false);
   useEffect(() => {
     setDriverId(device.assignedDriverId ?? "");
     setCardInput(device.cardIdTag ?? "");
   }, [device.assignedDriverId, device.cardIdTag]);
   useEffect(() => {
     const controller = new AbortController();
+    setError("");
     void operations<Driver[]>("drivers", controller.signal).then(rows => {
       if (!controller.signal.aborted) { setDrivers(rows.filter(x => x.isActive)); setLoaded(true); }
     }).catch(e => { if (!controller.signal.aborted) setError(failure(e, sq)); });
     return () => controller.abort();
-  }, [sq]);
+  }, [sq, attempt]);
   async function save() {
-    if (busy || disabled || !loaded) return;
+    if (saving.current || busy || disabled || !loaded) return;
+    saving.current = true;
     setBusy(true); setError(""); setSaved(false);
     try {
       const result = await mutate<Device>("device", "assignDriver", {
@@ -35,11 +39,12 @@ export function DeviceDriverForm({ device, stationId, sq, disabled, onSaved }: {
       }, stationId);
       onSaved(result); setCardInput(result.cardIdTag ?? ""); setSaved(true);
     } catch (e) { setError(failure(e, sq)); }
-    finally { setBusy(false); }
+    finally { saving.current = false; setBusy(false); }
   }
   return <form onSubmit={e => { e.preventDefault(); void save(); }}>
     <h4>{sq ? "Kush i sheh të dhënat e karikuesit?" : "Who sees the charger data?"}</h4>
     {error && <p className="form-error" role="alert">{error}</p>}
+    {error && !loaded && <button type="button" className="button-outline" onClick={() => setAttempt(value => value + 1)}>{sq ? "Provo ngarkimin përsëri" : "Retry loading accounts"}</button>}
     {saved && <p role="status">{sq ? "Caktimi u ruajt." : "Assignment saved."}</p>}
     <fieldset className="station-form-fields" disabled={disabled || busy || !loaded}>
       <label>{sq ? "Përdoruesi Driver" : "Driver account"}<select value={driverId} onChange={e => { setDriverId(e.target.value); setSaved(false); }}>

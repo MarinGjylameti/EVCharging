@@ -5,6 +5,7 @@ import { request } from "./api";
 import { waitForMobileApi } from "./wait-for-api";
 import { messages, errorText } from "./i18n";
 import { Brand, Field, Button, Chip, Notice, Screen, styles } from "./ui";
+import { PrivacyLinks } from "./PrivacyLinks";
 
 export function AuthScreen({ language, setLanguage, onAuthenticated }: { language: Language; setLanguage: (value: Language) => void; onAuthenticated: (result: AuthResult) => Promise<void> }) {
   const [register, setRegister] = useState(false);
@@ -43,5 +44,6 @@ export function AuthScreen({ language, setLanguage, onAuthenticated }: { languag
     {register && <><Field label={t.confirmPassword} value={confirmation} onChangeText={setConfirmation} secureTextEntry autoComplete="new-password" maxLength={128} editable={!busy}/><Text style={styles.body}>{t.passwordHint}</Text></>}
     <Notice text={error}/>{warming && <Text accessibilityLiveRegion="polite" style={styles.body}>{t.warming}</Text>}
     <Button title={busy ? t.loading : register ? t.create : t.signIn} disabled={busy} onPress={() => void submit()}/>
+    <PrivacyLinks language={language}/>
   </Screen>;
 }

@@ -12,7 +12,7 @@ export function Field({ label, ...props }: TextInputProps & { label: string }) {
   return <View style={styles.field}><Text style={styles.label}>{label}</Text><TextInput accessibilityLabel={label} placeholderTextColor="#9ca898" style={styles.input} {...props}/></View>;
 }
 export function Button({ title, onPress, disabled, secondary }: { title: string; onPress: () => void; disabled?: boolean; secondary?: boolean }) {
-  return <Pressable accessibilityRole="button" accessibilityState={{ disabled: !!disabled }} disabled={disabled} onPress={onPress} style={[styles.button, secondary && styles.secondary, disabled && { opacity: .6 }]}><Text style={[styles.buttonText, secondary && { color: colors.ink }]}>{title}</Text></Pressable>;
+  return <Pressable accessibilityRole="button" accessibilityState={{ disabled: !!disabled }} disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.button, secondary && styles.secondary, (disabled || pressed) && { opacity: .6 }]}><Text style={[styles.buttonText, secondary && { color: colors.ink }]}>{title}</Text></Pressable>;
 }
 export function Card({ children }: PropsWithChildren) { return <View style={styles.card}>{children}</View>; }
 export function Notice({ text, success = false }: { text: string; success?: boolean }) {
@@ -68,7 +68,7 @@ export const styles = StyleSheet.create({
   label: { fontSize: 12, fontWeight: "600", color: colors.ink },
   input: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.white, minHeight: 48, padding: 14, borderRadius: 10, color: colors.ink, fontSize: 16 },
   button: { backgroundColor: colors.green, borderRadius: 10, minHeight: 50, justifyContent: "center", alignItems: "center", padding: 13, marginVertical: 5 },
-  buttonText: { color: colors.white, fontWeight: "700", fontSize: 14 },
+  buttonText: { color: colors.white, fontWeight: "700", fontSize: 14, textAlign: "center", flexShrink: 1 },
   secondary: { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.border },
   card: { padding: 20, borderWidth: 1, borderColor: colors.border, borderRadius: 16, backgroundColor: colors.white, gap: 12 },
   row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 15 },

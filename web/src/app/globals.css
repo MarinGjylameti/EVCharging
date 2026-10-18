@@ -295,4 +295,41 @@
 @media(max-width:600px){.operations-filters{padding:20px}.operations-filter-grid{grid-template-columns:1fr;gap:16px}.operations-filter-actions .button-primary,.operations-filter-actions .button-outline{flex:1}.operations-log-toolbar{align-items:flex-start;flex-direction:column}.operations-log-actions{width:100%}.operations-log-actions>.button-outline{width:100%}.operations-page-buttons{width:100%}.operations-page-buttons .button-outline{flex:1}.operations-pagination{padding:12px;gap:8px}.operations-pagination .button-outline{padding:10px 12px}.operations-pagination>span{font-size:11px}}
 @media(max-width:480px){.operations-card,.operations-device{padding:18px}.operations-stats strong{font-size:22px}}
 
+/* The same existing journeys, with one focused task per phone screen. */
+.station-mobile-back { display: none; }
+.station-edit-card, .station-table-card { scroll-margin-top: 84px; min-width: 0; }
+.session-filter-panel { margin: 16px 0 20px; border: 1px solid #dce7d8; border-radius: 12px; background: #fff; }
+.session-filter-panel > summary { cursor: pointer; padding: 16px 20px; min-height: 48px; color: #365f49; font-size: 14px; font-weight: 600; }
+.session-filter-panel .operations-filters { margin: 0; border: 0; border-top: 1px solid #dce7d8; border-radius: 0 0 12px 12px; }
+.session-status { display: inline-block; padding: 4px 9px; border-radius: 6px; background: #edf3e8; color: #365f49; }
+.session-status[data-status=Faulted], .session-status[data-status=ConnectionLost] { background: #fff0ed; color: #973a2e; }
+.charge-driver-steps { text-align: left; }
+.charge-driver-steps li { flex: 1; max-width: 190px; color: #365f49; line-height: 1.7; }
+.charge-driver-steps i { color: #226947; }
+@media(max-width:700px) {
+  .station-admin-grid[data-editor-open=false] > .station-edit-card,
+  .station-admin-grid[data-editor-open=true] > .station-table-card { display: none; }
+  .station-mobile-back { display: inline-flex; align-items: center; margin-bottom: 20px; min-height: 44px; }
+  .station-admin-row { min-height: 76px; }
+  .station-form-fields input, .station-form-fields select, .station-form-fields textarea,
+  .operations-filter-grid input, .operations-filter-grid select { font-size: 16px; min-height: 48px; }
+  .operations-device code, .operations-details dd { overflow-wrap: anywhere; min-width: 0; }
+  .charge-page-navigation a { min-height: 44px; display: inline-flex; align-items: center; }
+  .charge-driver-steps { flex-direction: column; gap: 16px; }
+  .charge-driver-steps li { display: flex; align-items: flex-start; justify-items: start; max-width: none; font-size: 14px; gap: 12px; }
+  .charge-driver-steps i { flex: 0 0 30px; }
+  .operations-view .sessions-responsive { border: 0; background: transparent; overflow: visible; }
+  .sessions-responsive .operations-sessions-table { display: block; min-width: 0; width: 100%; }
+  .sessions-responsive thead { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .sessions-responsive tbody { display: grid; gap: 16px; }
+  .sessions-responsive tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid #dce7d8; border-radius: 14px; background: #fff; padding: 8px; }
+  .operations-view .sessions-responsive td { display: block; min-width: 0; padding: 12px; overflow-wrap: anywhere; white-space: normal; border: 0; font-size: 14px; }
+  .sessions-responsive td::before { content: attr(data-label); display: block; font-size: 11px; color: #536b5e; margin-bottom: 6px; }
+  .sessions-responsive td:first-child, .sessions-responsive td:nth-child(2), .sessions-responsive td:nth-child(4) { grid-column: 1 / -1; }
+  .sessions-responsive td:first-child { border-bottom: 1px solid #e5ecdf; }
+  .sessions-responsive td:first-child strong { font-size: 18px; }
+  .operations-view .sessions-responsive summary { min-height: 44px; display: flex; align-items: center; margin-bottom: 0; }
+  .sessions-responsive small { display: block; }
+}
+
 .analytics-calendar-grid .range-edge:hover{background:var(--green);color:#fff}

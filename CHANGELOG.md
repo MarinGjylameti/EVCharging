@@ -9,6 +9,20 @@ Ndryshimet në panele të jashtme nuk regjistrohen si commit-e.
 
 ### 2026-10-18
 
+- Përmirëson përdorimin mobile të funksioneve ekzistuese: admini hap detajet e pikës veçmas nga lista, kthehet me një veprim dhe konfirmon braktisjen e ndryshimeve të paruajtura. Rifreskimet e serverit përditësojnë formularin e paprekur; konfliktet ofrojnë ngarkimin e versionit aktual.
+- Karikimet e adminit paraqiten si karta me etiketa në telefon; filtrat hapen sipas nevojës. Refuzon intervalet e pavlefshme dhe nuk lejon përgjigjet e vjetra të zëvendësojnë rezultatet e filtrit të ri. Formulari i kartës mund të riprovojë ngarkimin dhe bllokon dërgimet e dyfishta.
+- Përbashkon udhëzimin Driver në web/native për pikë offline, gjendje të vjetruar, mirëmbajtje, lidhës të zënë/rezervuar dhe kartë të lidhur. Nuk krijon pronësi nga hapja e pikës. Ruhet shfaqja e defekteve të pajisjes; udhëzimet teknike kufizohen në testim.
+- Mobile shfaq gabimin dhe riprovimin pas dështimit të ngarkimit, lejon pastrimin e filtrave bosh, përdor tarifën historike të seancës dhe nuk e ndërpret monitorimin me gabim lejeje kur përdoruesi ka refuzuar push. Përmirëson reagimin dhe tekstin e butonave.
+- Përgatit URL-të publike të privatësisë dhe kërkesës së fshirjes: privatësia para hyrjes dhe në cilësime; fshirja në cilësime. Konfigurimi production dhe komandat e reja të kontrollit për dyqanet refuzojnë URL të munguara/të pavlefshme. Faqet e klientit, rregullat e ruajtjes dhe procesi real i fshirjes mbeten kërkesa të paplotësuara; preview i brendshëm nuk bllokohet nga mungesa e tyre.
+- Dokumenton kufijtë e QR/kartës, caktimin aktual një Driver/kartë për karikues, provat fizike dhe kushtet e shqyrtimit Apple/Google. Nuk shton pagesa, portofol, nisje/ndalim nga larg ose regjistër të ri kartash. Shënon edhe mungesën ekzistuese të hartës së integruar native.
+- Pajton commit-in `e206009` me historikun më poshtë.
+- Verifikimi: kaluan 183 teste web, 45 teste mobile me module native të simuluara, TypeScript web dhe `git diff --check`. Përfshihen udhëzimet e karikimit, formulari mobile i adminit, përgjigjet e vonuara, gabimet e ngarkimit, tarifa e seancës, push i refuzuar dhe kontrollet/veprimet e privatësisë. Kontrolli store iOS refuzoi konfigurimin lokal të paplotësuar, siç pritet.
+- Kufijtë: Next.js nuk u nis për shkak të gabimit Windows `Access is denied` gjatë zgjidhjes së rrugës së projektit. Kontrolli vizual në browser nuk u krye për shkak të refuzimit të aksesit localhost. Varësitë Expo nuk janë të instaluara; typecheck i plotë mobile, export Metro, build native, prova me pajisje/karikues dhe dorëzimi në dyqane nuk janë kryer. Backend-i dhe skema nuk ndryshojnë; nuk u krye migrim, commit, push ose deploy.
+
+## 2026-10-18
+
+### `e206009` — Add 3 versions for testing with actual charger 2
+
 - Korrigjon intervalin e rilidhjes OCPP: përfundon ruajtjen e shkëputjes në DB dhe liron regjistrimin aktiv përpara dërgimit të Close, si për mbylljen nga pajisja ashtu edhe për mbylljet nga serveri.
 - Çdo regjistrim aktiv ka pronarin e vet dhe lirim vetëm një herë; pastrimi i vonuar i lidhjes së vjetër nuk mund të heqë lidhjen e re. Refuzimi HTTP 409 ruhet për një lidhje tjetër aktive dhe pronësia lirohet edhe kur ruajtja, upgrade-i ose pastrimi dështojnë.
 - Shton teste regresioni me sinjale të kontrolluara, timeout dhe cleanup për rendin e ruajtjes/Close/rilidhjes, Heartbeat pas rilidhjes, refuzimin e lidhjes së tretë dhe rrugët me përjashtime. Ruan testin ekzistues të varianteve të URL-së dhe logeve; TestMode, simulatori dhe konfigurimi direct/embedded/external nuk ndryshojnë.

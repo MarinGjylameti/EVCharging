@@ -48,6 +48,15 @@ test("provisional iOS notification permissions work without prompting again", as
   const client = pushClient({ ios: true, permission: { granted: false, ios: { status: 3 } } }); await client.registerPush("driver-token", false);
   assert.deepEqual(client.events.slice(0, 2), ["permission", "expo-token"]);
 });
+
+test("background push registration respects declined permission without interrupting charging", async () => {
+  const client = pushClient({ permission: { granted: false, canAskAgain: false } });
+  await client.registerPush("driver-token", false);
+  assert.deepEqual(client.events, ["channel", "permission"]);
+  const preview = pushClient({ ownership: "expo" });
+  await preview.registerPush("driver-token", false);
+  assert.deepEqual(preview.events, []);
+});
 test("push rejects Expo Go and missing project IDs; denied permissions never register a token", async () => {
   for (const settings of [{ ownership: "expo" }, { projectId: "" }]) { const client = pushClient(settings); await assert.rejects(client.registerPush("driver-token", true), /pushSetup/); assert.equal(client.events.length, 0); }
   const client = pushClient({ permission: { granted: false, canAskAgain: false } }); await assert.rejects(client.registerPush("driver-token", true), /pushDenied/);
@@ -107,7 +116,7 @@ test("two profile saves use successive server versions and retain the battery ca
 });
 test("registration checks confirmation before health/API and coalesces repeated submit taps", async () => {
   const state = hooks(), requests = [], authenticated = []; let health = 0;
-  const { AuthScreen } = compile("../../src/AuthScreen.tsx", { react: state.react, "react/jsx-runtime": jsx, "react-native": native, "./i18n": i18n, "./ui": { ...ui, Brand: "Brand" }, "./wait-for-api": { waitForMobileApi: async () => { health++; return true; } }, "./api": { request: async (...args) => { requests.push(args); return { accessToken: "driver-token" }; } } });
+  const { AuthScreen } = compile("../../src/AuthScreen.tsx", { react: state.react, "react/jsx-runtime": jsx, "react-native": native, "./PrivacyLinks": { PrivacyLinks: "PrivacyLinks" }, "./i18n": i18n, "./ui": { ...ui, Brand: "Brand" }, "./wait-for-api": { waitForMobileApi: async () => { health++; return true; } }, "./api": { request: async (...args) => { requests.push(args); return { accessToken: "driver-token" }; } } });
   const render = () => { state.reset(); return AuthScreen({ language: "en", setLanguage() {}, onAuthenticated: async result => authenticated.push(result) }); };
   let tree = render(); nodes(tree, item => item.type === "Chip" && item.props.title === "Register")[0].props.onPress(); tree = render();
   for (const [label, value] of [["First name", "Arta"], ["Last name", "Deda"], ["Email", " arta@example.com "], ["Phone", "+355691234567"], ["Password", "my-long-password"], ["Confirm password", "different"]]) nodes(tree, item => item.type === "Field" && item.props.label === label)[0].props.onChangeText(value);

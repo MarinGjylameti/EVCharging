@@ -4,7 +4,8 @@ const { resolve } = require("node:path");
 try {
   const envFile = resolve(__dirname, "..", ".env");
   if (existsSync(envFile)) process.loadEnvFile(envFile);
-  buildEnvironment({ ...process.env, EAS_BUILD_PROFILE: process.env.EAS_BUILD_PROFILE || "preview" });
+  const store = process.argv.includes("--store");
+  buildEnvironment({ ...process.env, EAS_BUILD_PROFILE: store ? "production" : process.env.EAS_BUILD_PROFILE || "preview" });
   const platform = process.argv[2];
   if (!["ios", "android"].includes(platform)) throw new Error("Specify ios or android.");
   if (platform === "android") {
@@ -14,4 +15,5 @@ try {
     if (!settings.client?.some(client => client.client_info?.android_client_info?.package_name === "al.evcharging.mobile")) throw new Error("Firebase configuration must belong to al.evcharging.mobile.");
   }
   console.log(`${platform}: environment checks passed. Signing credentials and push delivery still require a device build.`);
+  if (store) console.log("Store links are configured, not verified live. Confirm the pages, deletion workflow, privacy declarations, reviewer access and physical-device tests before submission.");
 } catch (error) { console.error(error.message); process.exitCode = 1; }

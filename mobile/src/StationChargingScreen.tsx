@@ -7,6 +7,7 @@ import { messages, errorText } from "./i18n";
 import { chargingDuration, chargingValues, ownChargingSession, stationState } from "./station-data";
 import { useForegroundPoll } from "./use-foreground-poll";
 import { Button, Card, Chip, Notice, Screen, colors, styles } from "./ui";
+import { chargingGuidance } from "../../shared/charging-guidance";
 
 const sessionLabels: Record<string, [string, string]> = {
   Charging: ["Në karikim", "Charging"], Connecting: ["Makina po lidhet", "Connecting vehicle"],
@@ -55,16 +56,15 @@ export function StationChargingScreen({ stationId, token, language, onBack }: { 
   const values = session ? chargingValues(session, now, stale) : null;
   const waiting = snapshot?.connectionRequest;
   const waitingExpired = waiting && now >= Date.parse(waiting.expiresAt);
+  const guidance = snapshot ? chargingGuidance(snapshot, language, stale) : null;
   return <Screen language={language} refresh={() => refresh()}>
     <Button title={sq ? "← Kthehu te pikat" : "← Back to stations"} secondary onPress={onBack}/>
     <Notice text={error ? errorText(new Error(error), language) : ""}/>
-    {!snapshot ? <Card><ActivityIndicator color={colors.green}/><Text style={styles.body}>{t.loading}</Text><Button title={t.retry} secondary onPress={() => void refresh().catch(() => {})}/></Card> : <>
+    {!snapshot ? <Card>{!error && <ActivityIndicator color={colors.green}/>}<Text style={styles.body}>{error ? (sq ? "Pika nuk u ngarkua. Provo përsëri ose kthehu te lista." : "The station could not be loaded. Try again or return to the list.") : t.loading}</Text><Button title={t.retry} secondary onPress={() => void refresh().catch(() => {})}/></Card> : <>
       <Text style={styles.title}>{snapshot.station.name}</Text><Text style={styles.body}>{snapshot.station.address} · {snapshot.station.city}</Text>
       <Text style={styles.tag}>{stale ? (sq ? "Në pritje të përditësimit" : "Waiting for an update") : (sq ? "Përditësohet çdo 5 sekonda" : "Updates every 5 seconds")}</Text>
-      <Card><Text style={styles.label}>{stationState(snapshot.station.status, language).text}</Text><Text style={styles.body}>{snapshot.station.connectorType} · {snapshot.station.powerKW} kW</Text><Text style={styles.body}>{snapshot.station.pricePerKWh} {snapshot.station.currency} / kWh</Text>{snapshot.station.isDemo && <Text style={styles.tag}>{t.demoHistory}</Text>}</Card>
+      <Card><Text style={styles.label}>{stationState(snapshot.station.status, language).text}</Text><Text style={styles.body}>{snapshot.station.connectorType} · {snapshot.station.powerKW} kW</Text><Text style={styles.body}>{session?.unitPricePerKWh ?? snapshot.station.pricePerKWh} {session?.currency ?? snapshot.station.currency} / kWh</Text>{snapshot.station.isDemo && <Text style={styles.tag}>{t.demoHistory}</Text>}</Card>
       {snapshot.station.connectorCount > 1 && <View style={styles.wrap}>{Array.from({ length: snapshot.station.connectorCount }, (_, index) => index + 1).map(value => <Chip key={value} disabled={busy} title={`${sq ? "Lidhësi" : "Connector"} ${value}`} selected={connector === value} onPress={() => { mutation.current++; setConnector(value); setSnapshot(null); setStale(true); }}/>)}</View>}
-      {snapshot.driverAccessMode && <Card><Text style={styles.body}>{snapshot.driverAccessMode === "Demo" ? (sq ? "Karikimet e kësaj pajisjeje demo të caktohen automatikisht." : "Charges from this demo device are assigned to you automatically.") : (sq ? "Përdor kartën e lidhur me llogarinë tënde te karikuesi. Seanca do të shfaqet këtu." : "Use the card linked to your account at the charger. Your session will appear here.")}</Text></Card>}
-      {snapshot.inUse && <Card><Text style={styles.body}>{sq ? "Pika përdoret nga një drejtues tjetër. Seanca e tij është private." : "Another driver is using this charger. Their session is private."}</Text></Card>}
       {session && values ? <Card>
         <Text style={styles.eyebrow}>{sq ? "KARIKIMI YT" : "YOUR CHARGE"}</Text>
         <Text style={[styles.label, { fontSize: 19 }]}>{session.stoppedAt ? (sq ? "Karikimi përfundoi" : "Charge completed") : stale ? (sq ? "Në pritje të përditësimit" : "Waiting for an update") : sessionLabels[session.status]?.[sq ? 0 : 1] ?? (sq ? "Në pritje të statusit" : "Awaiting status")}</Text>
@@ -77,7 +77,7 @@ export function StationChargingScreen({ stationId, token, language, onBack }: { 
         {session.completionWarning && <Notice text={sq ? "Matja përfundimtare kërkon verifikim. Kostoja finale nuk është konfirmuar." : "The final reading needs verification. Final cost has not been confirmed."}/>}
         {session.faultCode && <Notice text={`${sq ? "Pika raportoi defekt" : "Charger reported a fault"}: ${session.faultCode}`}/>}
         <Text style={styles.body}>{t.noPayment}</Text>
-      </Card> : !snapshot.inUse && <Card><Text style={[styles.label, { fontSize: 17 }]}>{waitingExpired ? (sq ? "Koha e pritjes përfundoi" : "Waiting time expired") : waiting ? (sq ? "Në pritje të nisjes nga karikuesi" : "Waiting for the charger to start") : (sq ? "Në pritje të një seance" : "Waiting for a session")}</Text><Text style={styles.body}>{sq ? "Matjet shfaqen kur pajisja konfirmon nisjen. Fuqia e pikës nuk është matje e seancës." : "Readings appear once the charger confirms the start. Charger rating is separate from measured session power."}</Text></Card>}
+      </Card> : guidance && <Card><Text accessibilityRole="header" style={[styles.label, { fontSize: 18 }]}>{snapshot.canConnect && waiting ? (waitingExpired ? (sq ? "Koha e pritjes përfundoi" : "Waiting time expired") : (sq ? "Në pritje të nisjes nga karikuesi" : "Waiting for the charger to start")) : guidance.title}</Text><Text style={styles.body}>{snapshot.canConnect ? (sq ? "Seanca shfaqet kur pajisja konfirmon nisjen e karikimit." : "Your session appears when the charger confirms the start.") : guidance.body}</Text>{!snapshot.canConnect && guidance.steps.map((step, index) => <View key={step} style={[styles.row, { justifyContent: "flex-start", alignItems: "flex-start" }]}><Text style={styles.tag}>{index + 1}</Text><Text style={[styles.body, { flex: 1 }]}>{step}</Text></View>)}</Card>}
       {snapshot.canConnect && connector === 1 && !snapshot.inUse && (!session || session.stoppedAt) && <Button title={busy ? t.working : waiting && !waitingExpired ? (sq ? "Anulo pritjen" : "Cancel waiting") : (sq ? "Përgatit lidhjen me pikën" : "Prepare charger connection")} disabled={busy || stale} onPress={() => void connect(!!waiting && !waitingExpired)}/>}
     </>}
   </Screen>;

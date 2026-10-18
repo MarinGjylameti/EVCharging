@@ -12,7 +12,9 @@
     "test": "node --test tests/*.test.mjs",
     "export": "expo export --platform all",
     "check:ios": "node scripts/check-release.cjs ios",
-    "check:android": "node scripts/check-release.cjs android"
+    "check:android": "node scripts/check-release.cjs android",
+    "check:store:ios": "node scripts/check-release.cjs ios --store",
+    "check:store:android": "node scripts/check-release.cjs android --store"
   },
   "dependencies": {
     "expo": "~54.0.36",
