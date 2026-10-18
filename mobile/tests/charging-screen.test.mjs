@@ -3,15 +3,16 @@ import assert from "node:assert/strict";
 import { compile, hooks, jsx, nodes } from "./helpers/compile.mjs";
 const station = { id: "14eedf70-4774-4b4d-808e-8f91dbbc13ce", name: "Station", address: "Address", city: "Tirana", status: "Available", connectorType: "CCS2", connectorCount: 1, powerKW: 50, pricePerKWh: .75, currency: "EUR" };
 function screen(read) {
-  const state = hooks(); let refresh;
+  const state = hooks(); let refresh, clock;
   const { StationChargingScreen } = compile("../../src/StationChargingScreen.tsx", {
     react: state.react, "react/jsx-runtime": jsx, "react-native": { ActivityIndicator: "ActivityIndicator", Text: "Text", View: "View" },
     "./api": { request: read }, "./config": compile("../../src/config.ts"), "./i18n": compile("../../src/i18n.ts"),
     "./station-data": compile("../../src/station-data.ts", { "../../shared/map-directions": compile("../../../shared/map-directions.ts") }), "../../shared/charging-guidance": compile("../../../shared/charging-guidance.ts"),
-    "./use-foreground-poll": { useForegroundPoll: (run, interval) => { if (interval === 5000) refresh = run; } },
+    "./ChargingProgressCard": { ChargingProgressCard: "ChargingProgressCard" },
+    "./use-foreground-poll": { useForegroundPoll: (run, interval, enabled) => { if (interval === 5000) refresh = run; else clock = enabled ? run : undefined; } },
     "./ui": { Button: "Button", Card: "Card", Chip: "Chip", Notice: "Notice", Screen: "Screen", colors: {}, styles: {} },
   });
-  return { render: () => { state.reset(); return StationChargingScreen({ stationId: station.id, token: "test", language: "en", onBack() {} }); }, refresh: () => refresh() };
+  return { render: () => { state.reset(); return StationChargingScreen({ stationId: station.id, token: "test", language: "en", onBack() {}, onOpenProfile() {} }); }, refresh: () => refresh(), tick: () => clock?.() };
 }
 
 test("a failed initial station read stops the loading spinner and offers recovery", async () => {
@@ -30,4 +31,23 @@ test("a personal session displays its tariff snapshot instead of a later station
   app.render(); await app.refresh();
   const values = nodes(app.render(), n => n.type === "Text").map(n => [n.props.children].flat().join(""));
   assert.ok(values.includes("0.35 EUR / kWh")); assert.ok(!values.includes("0.75 EUR / kWh"));
+});
+
+test("charging card receives fresh time, polling failures and recovery; another driver's session is hidden", async t => {
+  const time = Date.parse("2026-10-18T10:00:00Z");
+  t.mock.timers.enable({ apis: ["Date"], now: time });
+  let failure = false;
+  const snapshot = { station, canConnect: false, inUse: false, session: { id: "session", stoppedAt: null, status: "Charging" } };
+  const app = screen(async () => { if (failure) throw new Error("service_unavailable"); return snapshot; });
+  const card = () => nodes(app.render(), n => n.type === "ChargingProgressCard")[0];
+  app.render(); await app.refresh();
+  assert.equal(card().props.stale, false);
+  t.mock.timers.tick(120_000); await app.tick();
+  assert.equal(card().props.now, time + 120_000);
+  failure = true; await assert.rejects(app.refresh());
+  assert.equal(card().props.stale, true);
+  failure = false; await app.refresh();
+  assert.equal(card().props.stale, false);
+  snapshot.inUse = true; await app.refresh();
+  assert.equal(card(), undefined);
 });

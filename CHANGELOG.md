@@ -9,6 +9,17 @@ Ndryshimet në panele të jashtme nuk regjistrohen si commit-e.
 
 ### 2026-10-18
 
+- Plotëson ekranin e karikimit mobile për iOS dhe Android me të njëjtin komponent: banner i gjelbër, përqindje e madhe e baterisë, shirit progresi i lexueshëm nga teknologjitë ndihmëse dhe katër matje të organizuara për energjinë, fuqinë, koston dhe kohëzgjatjen. Përmbajtja përshtatet me ekranin/tekstin; karikimi shfaqet përpara specifikimeve të pikës.
+- Shton kohën e vlerësuar deri në 100%, duke përbashkuar llogaritjen dhe arsyet e mungesës me web-in. Përdor kapacitetin e profilit dhe matjet e freskëta të baterisë/fuqisë totale nga API-ja ekzistuese. Mungesa e kapacitetit hap profilin me një veprim; pauza, defekti, humbja e lidhjes, matjet e vjetruara dhe fuqia e pjesshme nuk prodhojnë kohë të sajuar.
+- Përqindja e panjohur shfaqet pa vlerë numerike. Seanca e përfunduar ruan përqindjen e fundit të raportuar, pa e detyruar në 100%, dhe heq kohën e mbetur. Matja finale në verifikim nuk paraqet kosto të konfirmuar. Tekstet dhe sjellja janë të njëjta në të dyja platformat.
+- Verifikimi: kaluan TypeScript-i mobile/web, 70 teste mobile, 31 teste të fokusuara të karikimit web dhe eksportet Hermes iOS/Android. Mbulimi përfshin ndryshimet e matjeve, veprimin e profilit, skadimin e matjeve me kalimin e kohës, gabimin/rikthimin e polling-ut, privatësinë e seancës, përfundimin dhe progresin e aksesueshëm. Kaloi edhe kontrolli i diff-it. Modulet native në teste janë të simuluara; eksportet nuk zëvendësojnë provën fizike Android.
+- Dokumenton shtyrjen e APK-së dhe vazhdimin e provave në iPhone me Expo Go, duke ruajtur mbulimin e Android-it. Prova EAS kishte krijuar projektin/keystore-in, por paketimi dështoi me EINVAL sepse dosja e përkohshme ishte brenda burimit; nuk u krijua APK dhe nuk u rinis build-i. Nuk u shtua varësi, migrim, deploy, commit ose push.
+- Pajton commit-in `32f7a1c` me historikun më poshtë; dokumentacioni dhe ndryshimet e reja mbeten në Unreleased.
+
+## 2026-10-18
+
+### `32f7a1c` — Refactor for apple and android versions
+
 - Përditëson aplikacionin nga Expo SDK 54 në SDK 57 për përputhje me Expo Go në iPhone. Komanda `upgrade:expo-go` kalon gradualisht në 55/56/57, ruan kopje të manifestit/lockfile-it, kontrollon varësitë, TypeScript-in dhe testet pas çdo hapi, eksporton të dyja platformat dhe ndalon në dështimin e parë.
 - Shton `start:tunnel` që zgjedh shprehimisht Expo Go dhe pastron cache-in, ngrok si varësi lokale zhvillimi dhe lockfile-in mobile. Dokumenton dallimin mes QR-së së preview-t, API-së së arritshme dhe APK-së së nënshkruar.
 - Korrigjon ndalimin pas instalimit të SDK 55: regjistron shprehimisht plugin-in e kalendarit në konfigurimin dinamik. Rifillimi përfundon varësitë dhe kontrollon SDK-në aktuale përpara kalimit më tej. Opsioni `--start` hap tunelin vetëm pas suksesit të të gjithë hapave, duke shmangur nisjen aksidentale nga komandat e ngjitura veçmas në PowerShell.
@@ -22,8 +33,6 @@ Ndryshimet në panele të jashtme nuk regjistrohen si commit-e.
 - Verifikimi: kaluan TypeScript-i mobile/web, 63 teste mobile në SDK 57, 183 teste web, konfigurimi prebuild dhe eksportet Hermes iOS/Android. Kaluan edhe 15 kontrolle të fokusuara pas plotësimit të logut të lidhjes. Testet mbulojnë hartën/preferencën, navigimin, prekjet/zmadhimin, ditën/orën shqiptare me DST, filtrimin/faqëzimin dhe rrugën direkte të simulatorit me WebSocket të simuluar. Përfshihen migrimi, rrjedha APK me EAS të simuluar, kontrollet e paketimit, sintaksa, manifest/lockfile dhe `git diff --check`. Kontrolli offline i varësive raportoi përputhje me kufizimin e vet të besueshmërisë.
 - Kufijtë: ambienti i agentit nuk arrin npm/Expo (`ENOTFOUND`); instalimet u kryen nga terminali i përdoruesit. Krijimi real i projektit EAS dhe build-i i nënshkruar APK mbeten për ekzekutim nga terminali me rrjet. Përdoruesi konfirmoi hapjen e SDK 57 në iPhone përpara shtimit të hartës/njoftimeve; këto ndryshime mbeten për provë në pajisje. Eksportet/testet e simuluara nuk janë APK/IPA, push delivery, lidhje live e simulatorit ose testim fizik. Nuk u krye deploy, commit ose push.
 - Pajton commit-in `b1d1a66` me historikun më poshtë.
-
-## 2026-10-18
 
 ### `b1d1a66` — Refactor for apple and android versions
 

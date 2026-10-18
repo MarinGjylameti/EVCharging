@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { loadTypescript } from "./helpers/load-typescript.mjs";
 
-const exports = loadTypescript(new URL("../src/features/driver/charging-estimate.ts", import.meta.url));
+const exports = loadTypescript(new URL("../../shared/charging-estimate.ts", import.meta.url));
 const { chargingEstimate, formatChargingEstimate } = exports;
 const now = Date.parse("2026-10-03T14:00:00Z");
 const session = { status: "Charging", stoppedAt: null, batteryCapacityKWh: 60, stateOfCharge: 45,

@@ -135,7 +135,7 @@ function AppContent() {
     </View>
     {error ? <View style={{ paddingHorizontal: 20 }}><Notice text={errorText(new Error(error), language)}/></View> : null}
     {!dataReady && tab !== "profile" && tab !== "settings" ? <Screen language={language}><ActivityIndicator color={colors.green}/><Text style={styles.body}>{t.loading}</Text><Button title={t.retry} secondary onPress={() => void refresh().catch(failure => setError(failure instanceof Error ? failure.message : "genericError"))}/></Screen> :
-      stationId ? <StationChargingScreen key={`${token}:${stationId}`} stationId={stationId} token={token} language={language} onBack={() => setStationId(null)}/> :
+      stationId ? <StationChargingScreen key={`${token}:${stationId}`} stationId={stationId} token={token} language={language} onBack={() => setStationId(null)} onOpenProfile={() => { setStationId(null); setTab("profile"); }}/> :
       tab === "stations" ? <StationsScreen stations={data.stations} stale={networkStale} language={language} refresh={refresh} onSelect={setStationId}/> :
       tab === "history" ? <HistoryScreen history={data.history} language={language} refresh={refresh}/> :
       tab === "profile" ? <Screen language={language}><View style={styles.row}><Text style={styles.title}>{t.overview}</Text><Button title={t.settings} secondary onPress={() => setTab("settings")}/></View><ProfileScreen key={user.id} user={user} token={token} onUpdate={updateUser} language={language}/></Screen> :

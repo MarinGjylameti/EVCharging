@@ -2,17 +2,7 @@
 
 import type { DriverChargingSession, Language } from "../../../../contracts/account";
 import { ChargingFault } from "./charging-fault";
-import { chargingEstimate, formatChargingEstimate, type ChargingEstimateReason } from "./charging-estimate";
-
-const estimateNotes: Record<ChargingEstimateReason, [string, string]> = {
-  notCharging: ["Vlerësimi rifillon kur makina karikon", "Estimate resumes when charging starts"],
-  stale: ["Në pritje të përditësimeve të reja", "Waiting for fresh updates"],
-  missingCapacity: ["Shto kapacitetin e baterisë në profil", "Add battery capacity in your profile"],
-  missingBattery: ["Në pritje të përqindjes nga makina", "Waiting for battery percentage from the vehicle"],
-  staleBattery: ["Në pritje të një përqindjeje të re nga makina", "Waiting for a fresh battery percentage"],
-  missingPower: ["Në pritje të një matjeje të re fuqie", "Waiting for a fresh power reading"],
-  partialPower: ["Duhet matja e fuqisë totale të karikimit", "A total charging power reading is needed"],
-};
+import { chargingEstimate, formatChargingEstimate, chargingEstimateNotes as estimateNotes } from "./charging-estimate";
 
 export const chargingLabels: Record<string, [string, string]> = {
   Charging: ["Në karikim", "Charging"], Connecting: ["Makina po lidhet", "Connecting vehicle"],

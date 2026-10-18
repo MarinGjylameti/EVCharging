@@ -9,7 +9,7 @@ An electric vehicle charging platform with a web application, backend API, and m
 ### Preview on a physical phone
 
 The project now uses Expo SDK 57, matching the reported iPhone's Expo Go version.
-The user confirmed that it opens on that iPhone. Full TypeScript, 63 local tests
+The user confirmed that it opens on that iPhone. Full TypeScript, 70 local tests
 and Hermes exports for iOS/Android pass on SDK 57. Exports are JavaScript/native
 bytecode bundles, not signed APK/IPA files or complete physical-device tests.
 
@@ -37,7 +37,14 @@ preview, not verification of push delivery or a signed app build.
 
 ### Android APK for a colleague
 
-In a network-connected terminal, from `mobile/`, run:
+APK delivery is deferred while physical testing continues through Expo Go on iOS.
+All mobile changes still apply to both iOS and Android and are checked with both
+platform exports. The last EAS attempt created the project and Android keystore,
+but uploading stopped because the archive staging directory was inside the source
+repository (`EINVAL`). The packaging directory needs correcting before another
+APK attempt; no signed APK has been produced.
+
+The existing workflow, retained for later use, is run from `mobile/`:
 
 ```powershell
 npm.cmd run build:apk
@@ -70,9 +77,8 @@ the API, but no Expo Go, Metro tunnel or running laptop. See the
 [official APK installation guide](https://docs.expo.dev/build-reference/apk/).
 
 `npm.cmd run build:apk -- --plan` prints the workflow without changes. No store
-submission, commit or push is performed. The EAS project and signed APK have not
-yet been created: this agent environment cannot resolve npm/Expo hosts, so the
-cloud steps must run from the network-connected terminal.
+submission, commit or push is performed. Future cloud steps require a terminal
+with npm/Expo connectivity after the packaging issue above is fixed.
 
 ### Station map, navigation and notification dates
 
@@ -94,6 +100,28 @@ The map and preference must still be exercised on both physical platforms.
 Notifications are newest first, grouped and filterable by the Albanian calendar
 day, with eight cards per page. Times use `Europe/Tirane` and the 24-hour clock,
 including daylight-saving changes. Charging start timestamps also use 24 hours.
+
+### Mobile charging progress
+
+iOS and Android share the charging card: a green battery banner, large reported
+percentage, accessible progress bar, estimated time to full, and energy/power/
+cost/duration metrics. The layout wraps on narrow screens and larger text. The
+current charge appears before the station specifications. The visual hierarchy
+draws on the existing web screen and [ChargePoint's app examples](https://www.chargepoint.com/drivers/mobile).
+
+The remaining-time calculation and explanations are shared with web. The API
+already supplies profile capacity, reported battery percentage, total power and
+their freshness deadlines. Missing profile capacity offers an action to open the
+profile. Pauses, faults, stale data, missing readings and partial phase power do
+not produce a numeric estimate. New readings update the estimate; elapsed time
+alone does not invent battery progress. A completed charge keeps its last reported
+percentage, without forcing 100%, and no longer shows an ETA. A disputed final
+meter reading does not show a confirmed final cost.
+
+Validation: mobile/web TypeScript, 70 mobile tests, 31 focused web charging tests,
+and both Hermes exports passed. Native UI tests use simulated platform modules;
+Android physical-device testing is still outstanding. No APK build, store upload,
+backend migration or new package is part of this update.
 
 The project is under active development.
 

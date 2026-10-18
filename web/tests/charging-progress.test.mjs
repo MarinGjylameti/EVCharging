@@ -14,7 +14,7 @@ const report = compile("../src/features/driver/charging-test-report.ts");
 const availability = compile("../src/features/driver/station-availability.tsx", {
   "@/lib/availability": compile("../src/lib/availability.ts"),
 });
-const estimate = compile("../src/features/driver/charging-estimate.ts");
+const estimate = compile("../../shared/charging-estimate.ts");
 const progress = compile("../src/features/driver/charging-progress.tsx", { "./charging-fault": fault, "./charging-estimate": estimate });
 const { ChargingProgress, formatChargingDuration } = progress;
 const session = {
