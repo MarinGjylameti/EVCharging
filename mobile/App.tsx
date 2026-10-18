@@ -13,6 +13,8 @@ import { SettingsScreen } from "./src/SettingsScreen";
 import { StationsScreen } from "./src/StationsScreen";
 import { StationChargingScreen } from "./src/StationChargingScreen";
 import { ActiveChargingShortcut } from "./src/ActiveChargingShortcut";
+import { BottomNavigation } from "./src/BottomNavigation";
+import type { MapSession } from "./src/map-camera";
 import { HistoryScreen } from "./src/HistoryScreen";
 import { NotificationsScreen } from "./src/NotificationsScreen";
 import { registerPush, pushAvailable } from "./src/push";
@@ -29,6 +31,7 @@ function AppContent() {
   const [expiresAt, setExpiresAt] = useState("");
   const [tab, setTab] = useState<Tab>("stations");
   const [stationId, setStationId] = useState<string | null>(null);
+  const mapSession = useRef<MapSession>({});
   const [chargingConnector, setChargingConnector] = useState(1);
   const [loading, setLoading] = useState(true);
   const [warming, setWarming] = useState(false);
@@ -50,6 +53,7 @@ function AppContent() {
     setData(current => current.sessions.some(session => session.id === id) ? { ...current, sessions: current.sessions.filter(session => session.id !== id) } : current);
   }, []);
   const expire = useCallback(async (reason = "") => {
+    mapSession.current = {};
     tokenRef.current = null; userRef.current = null; loaderRef.current!.setSession(null);
     setToken(null); setUser(null); setExpiresAt(""); setData({ notifications: [], stations: [], history: [], sessions: [] });
     setTab("stations"); setStationId(null); setError(reason);
@@ -141,18 +145,16 @@ function AppContent() {
     </View>
     {error ? <View style={{ paddingHorizontal: 20 }}><Notice text={errorText(new Error(error), language)}/></View> : null}
     {!dataReady && tab !== "profile" && tab !== "settings" ? <Screen language={language}><ActivityIndicator color={colors.green}/><Text style={styles.body}>{t.loading}</Text><Button title={t.retry} secondary onPress={() => void refresh().catch(failure => setError(failure instanceof Error ? failure.message : "genericError"))}/></Screen> :
-      stationId ? <StationChargingScreen key={`${token}:${stationId}:${chargingConnector}`} stationId={stationId} token={token} language={language} initialConnector={chargingConnector} onConnectorChange={setChargingConnector} onSessionEnded={sessionEnded} onBack={() => setStationId(null)} onOpenProfile={() => { setStationId(null); setTab("profile"); }}/> :
-      tab === "stations" ? <StationsScreen stations={data.stations} stale={networkStale} language={language} refresh={refresh} onSelect={id => { setChargingConnector(1); setStationId(id); }}/> :
+      stationId ? <StationChargingScreen key={`${token}:${stationId}:${chargingConnector}`} stationId={stationId} token={token} language={language} initialConnector={chargingConnector} onConnectorChange={setChargingConnector} onSessionEnded={sessionEnded} onOpenConnection={(id, connector) => { setChargingConnector(connector); setStationId(id); }} onBack={() => setStationId(null)} onOpenProfile={() => { setStationId(null); setTab("profile"); }}/> :
+      tab === "stations" ? <StationsScreen stations={data.stations} stale={networkStale} language={language} refresh={refresh} mapSession={mapSession.current} onSelect={id => { setChargingConnector(1); setStationId(id); }}/> :
       tab === "history" ? <HistoryScreen history={data.history} language={language} refresh={refresh}/> :
       tab === "profile" ? <Screen language={language}><View style={styles.row}><Text style={styles.title}>{t.overview}</Text><Button title={t.settings} secondary onPress={() => setTab("settings")}/></View><ProfileScreen key={user.id} user={user} token={token} onUpdate={updateUser} language={language}/></Screen> :
       tab === "settings" ? <SettingsScreen user={user} token={token} onUpdate={updateUser} onExpired={() => expire("passwordChanged")} onBack={() => setTab("profile")} refresh={refresh} onLogout={async () => { try { await request("/auth/logout", token, "POST"); } finally { await expire(); } }}/> :
       <NotificationsScreen notifications={data.notifications} language={language} refresh={refresh}/>}
     <ActiveChargingShortcut sessions={data.sessions} language={language} currentStationId={stationId} currentConnector={chargingConnector} stale={networkStale}
       onOpen={session => { setChargingConnector(session.connectorId); setStationId(session.stationId); setTab("stations"); }}/>
-    <View style={styles.tabs}>{(["stations", "history", "profile"] as const).map((value, index) => <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === value || (value === "profile" && (tab === "settings" || tab === "notifications")) }} key={value} onPress={() => { setStationId(null); setTab(value); }} style={styles.tab}>
-      <Text style={[styles.tabText, { fontSize: 22 }, (tab === value || (value === "profile" && (tab === "settings" || tab === "notifications"))) && styles.activeTab]}>{["⌖", "◷", "○"][index]}</Text>
-      <Text style={[styles.tabText, (tab === value || (value === "profile" && (tab === "settings" || tab === "notifications"))) && styles.activeTab]}>{value === "profile" ? t.overview : t[value]}</Text>
-    </Pressable>)}</View>
+    <BottomNavigation active={tab === "settings" || tab === "notifications" ? "profile" : tab} language={language}
+      onSelect={value => { setStationId(null); setTab(value); }}/>
   </View>;
 }
 export default function App() { return <SafeAreaProvider><SafeAreaView style={styles.screen}><StatusBar barStyle="dark-content"/><AppContent/></SafeAreaView></SafeAreaProvider>; }

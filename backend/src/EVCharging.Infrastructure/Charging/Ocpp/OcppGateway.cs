@@ -170,7 +170,15 @@ public sealed class OcppGateway(
                         && x.CallId == callId
                         && x.PayloadHash == hash
                         && x.Action == action
-                        && x.ReceivedAt >= clock.GetUtcNow().AddDays(-1)
+                        && (
+                            x.ReceivedAt >= clock.GetUtcNow().AddDays(-1)
+                            // A committed start can outlive an offline device's retry window.
+                            // Its transaction link proves success; old rejected calls must
+                            // remain eligible for a fresh attempt after conditions change.
+                            || action == "StartTransaction"
+                                && x.ProcessingState == "Processed"
+                                && db.OcppChargingTransactions.Any(t => t.StartMessageId == x.Id)
+                        )
                     )
                     .OrderByDescending(x => x.ReceivedAt)
                     .FirstOrDefaultAsync(ct);

@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useDriverLiveData } from "./use-driver-live-data";
 import { chargingFaultLabel, StationWarning } from "./charging-fault";
@@ -230,14 +230,12 @@ export function DriverMap({stations: initialStations, history: initialHistory, l
           {shown.map(station=>{
             const at=position(station);
             const selected=active?.id===station.id;
-            const remaining=nowMs===null||unavailable||!connected?null:remainingChargingMinutes(station.availabilityForecast,nowMs);
+            const remaining=station.status!=="Charging"||nowMs===null||unavailable||!connected?null:remainingChargingMinutes(station.availabilityForecast,nowMs);
             const warning = station.warningCode && station.warningCode !== "NoError";
-            return <Fragment key={station.id}><button type="button" className={`map-pin status-${station.status.toLowerCase()}${selected?" selected":""}${warning?" has-warning":""}`}
+            return <button key={station.id} type="button" className={`map-pin status-${station.status.toLowerCase()}${selected?" selected":""}${warning?" has-warning":""}`}
               style={{left:at.left,top:at.top}} onClick={()=>setSelectedId(station.id)}
               aria-label={`${station.name}, ${(sq?statusSq:statusEn)[station.status]}${warning?`, ${sq?"paralajmërim":"warning"}: ${chargingFaultLabel(station.warningCode!, language)}`:""}${remaining!==null?`, ${remaining} ${sq?"min të mbetura":"min remaining"}`:""}`}
-              aria-pressed={selected} title={station.name}><span aria-hidden="true">ϟ</span></button>
-              {station.status==="Charging"&&remaining!==null&&<span className="map-eta-badge" aria-hidden="true"
-                style={{left:at.left+17,top:at.top-51}}>~{remaining} min</span>}</Fragment>;
+              aria-pressed={selected} title={station.name}><span aria-hidden="true">ϟ</span></button>;
           })}
           {driverLocation&&<div className="map-user-pin" role="img" aria-label={sq?"Vendndodhja ime":"My location"}
             style={position(driverLocation)}>●</div>}

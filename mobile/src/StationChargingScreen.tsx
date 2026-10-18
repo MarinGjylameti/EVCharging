@@ -8,9 +8,9 @@ import { ownChargingSession, stationState } from "./station-data";
 import { useForegroundPoll } from "./use-foreground-poll";
 import { Button, Card, Chip, Notice, Screen, colors, styles } from "./ui";
 import { ChargingProgressCard } from "./ChargingProgressCard";
-import { chargingGuidance } from "../../shared/charging-guidance";
+import { blockingConnection, blockingConnectionGuidance, chargingGuidance } from "../../shared/charging-guidance";
 
-export function StationChargingScreen({ stationId, token, language, onBack, onOpenProfile, initialConnector = 1, onConnectorChange, onSessionEnded }: { stationId: string; token: string; language: Language; onBack: () => void; onOpenProfile: () => void; initialConnector?: number; onConnectorChange?: (connector: number) => void; onSessionEnded?: (id: string) => void }) {
+export function StationChargingScreen({ stationId, token, language, onBack, onOpenProfile, initialConnector = 1, onConnectorChange, onSessionEnded, onOpenConnection }: { stationId: string; token: string; language: Language; onBack: () => void; onOpenProfile: () => void; initialConnector?: number; onConnectorChange?: (connector: number) => void; onSessionEnded?: (id: string) => void; onOpenConnection?: (stationId: string, connector: number) => void }) {
   const sq = language === "sq", t = messages[language];
   const [snapshot, setSnapshot] = useState<StationCharging | null>(null);
   const [connector, setConnector] = useState(() => Number.isInteger(initialConnector) && initialConnector > 0 ? initialConnector : 1);
@@ -20,7 +20,7 @@ export function StationChargingScreen({ stationId, token, language, onBack, onOp
   const [now, setNow] = useState(Date.now());
   const mounted = useRef(true), mutation = useRef(0), readRevision = useRef(0), busyRef = useRef(false);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  useForegroundPoll(async () => { setNow(Date.now()); }, 1000, !!snapshot?.connectionRequest || !!snapshot?.session && !snapshot.session.stoppedAt, `${stationId}:${connector}`);
+  useForegroundPoll(async () => { setNow(Date.now()); }, 1000, !!snapshot?.connectionRequest || !!snapshot?.blockingConnection || !!snapshot?.session && !snapshot.session.stoppedAt, `${stationId}:${connector}`);
   async function refresh(signal?: AbortSignal) {
     if (!isStationId(stationId)) { setError("configuration"); return; }
     const epoch = mutation.current;
@@ -39,7 +39,7 @@ export function StationChargingScreen({ stationId, token, language, onBack, onOp
   }
   useForegroundPoll(refresh, 5000, true, `${stationId}:${connector}`);
   async function connect(cancel: boolean) {
-    if (busyRef.current || !snapshot?.canConnect || connector !== 1) return;
+    if (busyRef.current || !snapshot?.canConnect || connector !== 1 || !cancel && blockingConnection(snapshot, Date.now())) return;
     busyRef.current = true; mutation.current++; setBusy(true); setError("");
     try {
       const value = await request<StationCharging>(`/driver/stations/${stationId}/${cancel ? "cancel" : "connect"}`, token, "POST");
@@ -47,13 +47,19 @@ export function StationChargingScreen({ stationId, token, language, onBack, onOp
       if (mounted.current) { setSnapshot(value); setStale(false); }
     } catch (failure) {
       mutation.current++;
+      if (failure instanceof Error && failure.message === "driver_already_connected") {
+        // A request made on another device may have appeared since our last poll.
+        await refresh().catch(() => {});
+      }
       if (mounted.current) setError(failure instanceof Error ? failure.message : "genericError");
     } finally { busyRef.current = false; if (mounted.current) setBusy(false); }
   }
   const session = snapshot ? ownChargingSession(snapshot) : null;
   const waiting = snapshot?.connectionRequest;
   const waitingExpired = waiting && now >= Date.parse(waiting.expiresAt);
-  const guidance = snapshot ? chargingGuidance(snapshot, language, stale) : null;
+  const blocker = snapshot ? blockingConnection(snapshot, now) : null;
+  const blockerGuidance = blocker ? blockingConnectionGuidance(blocker.state, language) : null;
+  const guidance = snapshot && !blocker ? chargingGuidance(snapshot, language, stale) : null;
   return <Screen language={language} refresh={() => refresh()}>
     <Pressable accessibilityRole="button" accessibilityLabel={sq ? "Kthehu te pikat" : "Back to stations"} onPress={onBack}
       style={({ pressed }) => ({ alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 8, minHeight: 44, paddingVertical: 8, paddingRight: 14, opacity: pressed ? .6 : 1 })}>
@@ -64,10 +70,16 @@ export function StationChargingScreen({ stationId, token, language, onBack, onOp
     {!snapshot ? <Card>{!error && <ActivityIndicator color={colors.green}/>}<Text style={styles.body}>{error ? (sq ? "Pika nuk u ngarkua. Provo përsëri ose kthehu te lista." : "The station could not be loaded. Try again or return to the list.") : t.loading}</Text><Button title={t.retry} secondary onPress={() => void refresh().catch(() => {})}/></Card> : <>
       <Text style={styles.title}>{snapshot.station.name}</Text><Text style={styles.body}>{snapshot.station.address} · {snapshot.station.city}</Text>
       <Text style={styles.tag}>{stale ? (sq ? "Në pritje të përditësimit" : "Waiting for an update") : (sq ? "Përditësohet çdo 5 sekonda" : "Updates every 5 seconds")}</Text>
+      {blocker && blockerGuidance && <Card>
+        <Text accessibilityRole="header" style={[styles.label, { fontSize: 18 }]}>{blockerGuidance.title}</Text>
+        <Text style={styles.label}>{blocker.stationName} · {sq ? "Lidhësi" : "Connector"} {blocker.connectorId}</Text>
+        <Text style={styles.body}>{blockerGuidance.body}</Text>
+        {onOpenConnection && <Button title={blockerGuidance.action} onPress={() => onOpenConnection(blocker.stationId, blocker.connectorId)}/>}
+      </Card>}
       {snapshot.station.connectorCount > 1 && <View style={styles.wrap}>{Array.from({ length: snapshot.station.connectorCount }, (_, index) => index + 1).map(value => <Chip key={value} disabled={busy} title={`${sq ? "Lidhësi" : "Connector"} ${value}`} selected={connector === value} onPress={() => { mutation.current++; setConnector(value); setSnapshot(null); setStale(true); onConnectorChange?.(value); }}/>)}</View>}
       {session ? <ChargingProgressCard session={session} language={language} now={now} stale={stale} onOpenProfile={onOpenProfile}/> : guidance && <Card><Text accessibilityRole="header" style={[styles.label, { fontSize: 18 }]}>{snapshot.canConnect && waiting ? (waitingExpired ? (sq ? "Koha e pritjes përfundoi" : "Waiting time expired") : (sq ? "Në pritje të nisjes nga karikuesi" : "Waiting for the charger to start")) : guidance.title}</Text><Text style={styles.body}>{snapshot.canConnect ? (sq ? "Seanca shfaqet kur pajisja konfirmon nisjen e karikimit." : "Your session appears when the charger confirms the start.") : guidance.body}</Text>{!snapshot.canConnect && guidance.steps.map((step, index) => <View key={step} style={[styles.row, { justifyContent: "flex-start", alignItems: "flex-start" }]}><Text style={styles.tag}>{index + 1}</Text><Text style={[styles.body, { flex: 1 }]}>{step}</Text></View>)}</Card>}
       <Card><Text style={styles.label}>{stationState(snapshot.station.status, language).text}</Text><Text style={styles.body}>{snapshot.station.connectorType} · {snapshot.station.powerKW} kW</Text><Text style={styles.body}>{session?.unitPricePerKWh ?? snapshot.station.pricePerKWh} {session?.currency ?? snapshot.station.currency} / kWh</Text>{snapshot.station.isDemo && <Text style={styles.tag}>{t.demoHistory}</Text>}</Card>
-      {snapshot.canConnect && connector === 1 && !snapshot.inUse && (!session || session.stoppedAt) && <Button title={busy ? t.working : waiting && !waitingExpired ? (sq ? "Anulo pritjen" : "Cancel waiting") : (sq ? "Përgatit lidhjen me pikën" : "Prepare charger connection")} disabled={busy || stale} onPress={() => void connect(!!waiting && !waitingExpired)}/>}
+      {snapshot.canConnect && !blocker && connector === 1 && !snapshot.inUse && (!session || session.stoppedAt) && <Button title={busy ? t.working : waiting && !waitingExpired ? (sq ? "Anulo pritjen" : "Cancel waiting") : (sq ? "Përgatit lidhjen me pikën" : "Prepare charger connection")} disabled={busy || stale} onPress={() => void connect(!!waiting && !waitingExpired)}/>}
     </>}
   </Screen>;
 }

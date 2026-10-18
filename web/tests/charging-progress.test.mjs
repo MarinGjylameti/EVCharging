@@ -12,7 +12,7 @@ const fault = compile("../src/features/driver/charging-fault.tsx");
 const diagnostics = compile("../src/features/driver/simulator-diagnostics.tsx");
 const report = compile("../src/features/driver/charging-test-report.ts");
 const availability = compile("../src/features/driver/station-availability.tsx", {
-  "@/lib/availability": compile("../src/lib/availability.ts"),
+  "@/lib/availability": compile("../../shared/availability.ts"),
 });
 const estimate = compile("../../shared/charging-estimate.ts");
 const progress = compile("../src/features/driver/charging-progress.tsx", { "./charging-fault": fault, "./charging-estimate": estimate });
@@ -28,6 +28,29 @@ const render = (changes = {}, props = {}) => renderToStaticMarkup(createElement(
   session: { ...session, ...changes }, language: "en", now: Date.parse("2026-10-01T13:02:00Z"),
   stale: false, ...props,
 }));
+
+test("owned waiting and linked conflicts link to the exact charger; production does not expose demo recovery", () => {
+  for (const state of ["Waiting", "Linked"]) for (const testMode of [true, false]) {
+    const live = { station: { id: "station-1", code: "SIM-001", name: "Station One", address: "Address", city: "Tirana", connectorType: "CCS2", isDemo: testMode, powerKW: 22, pricePerKWh: .35, currency: "EUR" },
+      canConnect: true, inUse: false, deviceConnected: true, connectionRequest: null, session: null,
+      blockingConnection: { stationId: "station-2", stationName: "Previous charger", connectorId: 1, state, expiresAt: "2099-01-01T00:00:00Z" } };
+    const { StationChargingView } = compile("../src/features/driver/station-charging-view.tsx", {
+      "../../components/runtime-features": { useTestMode: () => testMode },
+      "next/link": { default: ({ href, children }) => createElement("a", { href }, children) },
+      "./use-live-snapshot": { useLiveSnapshot: () => ({ snapshot: live, setSnapshot() {}, connected: true, unavailable: false }) },
+      "./charging-progress": progress, "./charging-fault": fault, "./simulator-diagnostics": diagnostics,
+      "./charging-test-report": report, "./station-availability": availability,
+      "./live-update-policy": compile("../src/features/driver/live-update-policy.ts"),
+    });
+    const html = renderToStaticMarkup(createElement(StationChargingView, { initial: live, language: "en" }));
+    if (testMode) {
+      assert.match(html, /Previous charger/);
+      assert.match(html, /href="\/driver\/stations\/station-2\?connector=1"/);
+      assert.match(html, state === "Waiting" ? /Open waiting request/ : /Open existing session/);
+      assert.doesNotMatch(html, />Connect to charger<|Prepare a new charge|QR is bypassed/);
+    } else assert.doesNotMatch(html, /Previous charger|Open waiting request|Open existing session/);
+  }
+});
 
 test("production station view hides test actions and diagnostics even in a stale test snapshot", () => {
   const live = { station: { id: "station-1", code: "CP-001", name: "Station One", address: "Address", city: "Tirana", connectorType: "CCS2", isDemo: false, powerKW: 22, pricePerKWh: .35, currency: "EUR" },

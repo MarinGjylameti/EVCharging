@@ -98,18 +98,55 @@ charging enters the existing connection/session screen; it does not start energy
 transfer. The map reuses the web's OpenStreetMap tiles and shared projection
 math, with dragging, pinch/zoom controls, visible attribution and a list fallback
 when tiles fail. Only visible tiles are requested, with an application User-Agent
-and the native image cache; no new package, location permission or map API key is
-required. Map tiles remain an external network dependency; see the
+and the native image cache; no map API key is required.
+Map tiles remain an external network dependency; see the
 [OpenStreetMap tile policy](https://operations.osmfoundation.org/policies/tiles/).
 
-Native pinch uses continuous zoom, keeps the geographic point under the fingers,
-and coalesces moves to one render per animation frame. Cached tiles scale between
-whole-number tile levels; fractional values never enter tile URLs. Android tile
-fade-in is disabled to avoid delayed appearance. Releasing or cancelling a gesture
-retains its final position and releases page scrolling. The shared web helper
-retains its existing default zoom behavior. Mobile/web TypeScript, 82 mobile tests,
-8 geometry tests and both Hermes exports passed for this map/list update. These
-checks do not measure on-device frame rate or network tile-loading latency.
+On first opening the map, `expo-location` requests foreground location permission
+and takes one balanced-accuracy fix. This module is also used in published native
+builds. The camera starts around the driver when the nearest charger fits; otherwise
+it includes both the driver and that charger, even when the driver is abroad.
+The blue dot marks the location read at opening. Permission denial, disabled location
+services, errors or a 12-second fix timeout leave the station map usable.
+No background location permission, continuous tracking or coordinate storage/API
+upload is added. External tile requests still reveal the viewed map area to the tile
+provider. The client's publication privacy disclosures must describe this behavior.
+The iOS usage text and Android foreground permissions are configured explicitly;
+background location/service permissions remain disabled.
+
+Automatic focus happens once per signed-in app session. A delayed location fix
+cannot move the camera after any map interaction. Returning from charging, switching
+Map/List, station refreshes and filter changes preserve the chosen camera. The fit
+button explicitly frames all visible stations and the opening location again.
+Restarting the app or signing out clears this in-memory state.
+
+Native panning translates a shared tile/marker layer through Animated; small moves
+within the loaded tile grid do not rebuild the React tree. New visible tiles are
+prepared at most once per animation frame. Page-coordinate deltas avoid a jump when
+map measurement arrives late, and switching between one and two fingers rebases
+from the latest camera. Pinch remains continuous and anchored under the fingers.
+Cached tiles scale between integer URL levels; Android tile fade-in is disabled.
+Release/cancel retains the final view and restores page scrolling. Web retains its
+existing default zoom limits. These changes do not establish a measured device FPS.
+
+Mobile markers use stronger green/blue/orange/red/purple status colors, a separate
+gray unknown status, and a compact legend. Stale status remains visibly historical.
+Both web and mobile keep remaining-time labels off the map to avoid overlapping
+pins. Selecting a charging station shows its public remaining-time estimate in the
+details card; expanded mobile list cards show it too. Web/native share forecast
+expiry rules. Stale, missing or expired estimates show a waiting message, never an
+invented countdown or another driver's private charging data. The connector number
+and estimate source are shown; completing a charge does not guarantee a free connector.
+
+The bottom navigation retains the same three destinations with drawn icons, a rounded
+white bar and a dark green selected tab. It stays inside the safe area and the normal
+layout, including when the active-charging shortcut is visible.
+
+Validation: mobile/web TypeScript, 97 mobile tests, 37 focused web tests, native
+permission introspection and Hermes exports for both platforms passed. Native APIs
+are mocked in automated tests; physical Android gestures and the final location
+permission flow still need device testing. iPhone screenshots were supplied during
+iteration; the final visual changes still need confirmation on the phone.
 
 Settings now contains Google Maps / Apple Maps preference, saved on this phone
 using the existing storage module; Google Maps matches the web's default. The
@@ -284,6 +321,114 @@ connector number. Check Authorize, StartTransaction, meter values and stop; veri
 that a second Driver sees none of the first Driver's readings. Also check an
 unassigned/unknown card, two connectors, reconnection and app background/foreground.
 Use internal preview while these observations and store prerequisites are pending.
+
+## Open-session recovery and architecture review — 18 October 2026
+
+The app's `driver_already_connected` response means a **manual demo association**
+is still Waiting or Linked at another connector. Opening a station is read-only;
+the demo Connect action creates the waiting request. Waiting requests expire after
+30 minutes and can be cancelled. Once linked to a started session, that timeout
+no longer closes the session. A phone going into the background, a closed browser
+simulator, a charger disconnect or a pause is not evidence of a confirmed stop.
+
+The station response now includes an optional, owner-only `blockingConnection`.
+Web, iOS and Android name its station/connector and offer **Open waiting request**
+or **Open existing session**, instead of inviting another blocked connection.
+The former leads to the existing Cancel waiting action. The latter opens the
+session without stopping it or changing its owner. A conflict discovered between
+polls triggers a fresh read. Ownership changes and completion at the previous
+station refresh the currently viewed station without merging the other station's
+session into it. Expired waiting requests and confirmed completed
+sessions no longer block the action. The API field is additive; deploy the backend
+with the web changes to make this recovery available to a running phone preview.
+
+### Structure and authoritative state
+
+| Area | Responsibility |
+| --- | --- |
+| `backend/src/EVCharging.Api` | Authenticated HTTP/live endpoints and WebSocket admission. |
+| `backend/src/EVCharging.Infrastructure/Charging/Ocpp` | OCPP parsing, durable message inbox, replay, device transactions and protocol adapter. |
+| `backend/src/EVCharging.Application` and `Domain` | Protocol-independent contracts and business entities; no EF, PostgreSQL or WebSocket dependency. |
+| `backend/src/EVCharging.Infrastructure/Charging` | Normalized sessions, ownership, tariffs, history, projections and notifications; participates in the adapter's transaction. |
+| `contracts`, `shared`, `web`, `mobile` | Shared payloads/guidance, authenticated views and status presentation; the shared native screen serves both iOS and Android. |
+
+```mermaid
+flowchart LR
+  Charger[Charger and card] -->|OCPP| Gateway[Gateway and durable inbox]
+  Gateway --> Adapter[Transaction adapter]
+  Adapter --> Receiver[Normalized charger events]
+  Receiver --> Database[(Sessions, ownership, history, outbox)]
+  Database --> API[Authenticated API and live updates]
+  API --> Web[Driver and admin web]
+  API --> Mobile[iOS and Android]
+```
+
+PostgreSQL locks serialize device/account mutations and unique indexes protect
+active connectors and manual claims. Successful OCPP handling commits before
+replying. A session snapshots its tariff at the start; invalid final meter
+regressions leave the final amount unconfirmed. Transport online/offline state,
+connector status, transaction lifecycle and account association are separate.
+The map or a hidden mobile shortcut never closes the underlying transaction.
+
+| Evidence | Session/claim outcome |
+| --- | --- |
+| Demo connection requested, no start received | Waiting; cancellable, expires after 30 minutes. |
+| Accepted StartTransaction | Linked to the confirmed session; cannot be cancelled as a waiting request. |
+| Pause, disconnect, stale readings, or Available status alone | Session remains open; power/ETA must not imply fresh charging. |
+| Confirmed StopTransaction | Session and claim complete; another manual connection is permitted. |
+| Retried confirmed message | Recover the original result; no duplicate session/history. |
+
+### Corrections and remaining recovery limits
+
+- A successful retained StartTransaction now replays its original response after
+  a reconnect even beyond 24 hours, provided its message ID, payload and device
+  match and its transaction references the inbox entry. Previously the one-day
+  replay cutoff could strand a charger after a lost acknowledgement. Rejected
+  attempts do not gain permanent replay and changed payloads do not inherit success.
+- The browser simulator freezes its StopTransaction ID, final register, timestamp
+  and reason before sending final telemetry. Rejected or unanswered final
+  MeterValues/estimate/Finishing reports no longer prevent attempting the stop.
+  Reconnect and retry use the original stop frame; an unresolved stop prevents
+  resume or another start. This also applies to the existing demo recovery action.
+- Simulator state and its pending stop remain in memory. Refreshing/closing the
+  page loses that local state and does not stop the server's transaction. Keep the
+  page open during a test. To recover a known demo charge after reload, select its
+  station, connect the simulator and press Start charging to check the server.
+  When the existing transaction appears, verify the **Final test meter register**
+  and use **Finish existing transaction**. This is a demo test tool, not physical
+  charger recovery or a source of billable final readings.
+
+For real equipment, use the device's stop/card flow and verify that its queued
+StopTransaction reaches the backend after reconnecting. The
+[OCA OCPP 1.6 test cases](https://openchargealliance.org/wp-content/uploads/2026/03/CompliancyTestTool-TestCaseDocument.pdf)
+cover offline stop/queued transactions (2.15.5–2.15.6) and configurations where
+unplugging at the vehicle does not itself end a transaction (2.3.5). The actual
+charger's behavior must be observed. Do not close transactions by timeout, delete
+claims or manufacture a meter reading to remove a warning.
+
+If the physical device permanently loses the stop, the current implementation
+can leave that connector blocked for another start and its final history/cost
+unresolved. An audited operator reconciliation procedure with actual device/meter
+evidence is still a production requirement; no such endpoint or remote-stop
+workflow has been added. Separately, the current one-assigned-Driver/card-per-device
+model described above must be confirmed with the client before multi-customer use.
+
+Before production, record acceptance evidence for lost start/stop acknowledgements,
+long reconnects, API and charger restart, offline message delivery, two connectors,
+PostgreSQL concurrency, invalid final readings and owner-only visibility. Include
+the case where the physical stop can never be recovered and define who resolves
+it. Local tests and simulator success do not certify the hardware or remove these
+release prerequisites. Existing live records were not edited by this change.
+
+Validation of this revision: 125 backend tests passed with the existing local
+in-process runner: 44 OCPP/API tests including all four new recovery regressions,
+and 81 architecture, operations and reconnect cases. The serial .NET
+build passed with zero warnings/errors; the standard VSTest process stalled after
+discovery, so it supplied no test results. All 100 mobile and 195 web Node tests,
+both TypeScript checks and both iOS/Android Hermes exports passed. Native modules
+and simulator sockets are mocked in unit tests; PostgreSQL and physical-device
+acceptance remain pending. The web suite includes two regressions for live
+cross-station blocker reconciliation. No schema migration is required.
 
 ## Production presentation and test mode
 

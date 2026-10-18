@@ -187,3 +187,77 @@ test("all standard fault codes and invalid simulation inputs are checked", () =>
   for (const changes of [{ capacityKWh: 0 }, { targetSoc: 10 }, { initialSoc: -1 }, { powerKW: NaN }, { speed: 61 }, { meterStartWh: 1.5 }, { url: "https://localhost" }])
     assert.throws(() => validateSimulatorConfig({ ...config, ...changes }));
 });
+
+for (const action of ["MeterValues", "DataTransfer", "StatusNotification"]) {
+  test(`a rejected final ${action} does not prevent the actual stop`, async t => {
+    let stopping = false;
+    const s = setup(t, {}, call => stopping && call[2] === action
+      && (action !== "StatusNotification" || call[3].status === "Finishing")
+      ? [4, call[1], "InternalError", "Final telemetry unavailable", {}] : undefined);
+    await s.engine.connect(); await s.engine.start(); await s.advance(5_000);
+    stopping = true;
+    await s.engine.stop();
+    assert.equal(s.calls.filter(call => call[2] === "StopTransaction").length, 1);
+    assert.equal(s.engine.snapshot.status, "Completed");
+    assert.equal(s.engine.snapshot.transactionId, null);
+    assert.ok(s.logs.some(log => log.action === "FinalTelemetryFailed"));
+  });
+}
+
+test("automatic target completion still stops when its final meter response is lost", async t => {
+  let atTarget = false;
+  const s = setup(t, { capacityKWh: 1, initialSoc: 20, targetSoc: 80, speed: 60 }, call =>
+    atTarget && call[2] === "MeterValues" ? "drop" : undefined);
+  await s.engine.connect(); await s.engine.start();
+  atTarget = true;
+  await s.advance(5_000);
+  assert.equal(s.engine.snapshot.transactionId, 83);
+  await s.advance(15_000);
+  const stop = s.calls.find(call => call[2] === "StopTransaction");
+  assert.equal(stop[3].meterStop, 1600);
+  assert.equal(s.engine.snapshot.status, "Completed");
+  assert.equal(s.engine.snapshot.transactionId, null);
+});
+
+test("a lost stop acknowledgement retries the identical intent after reconnect", async t => {
+  let stops = 0;
+  const s = setup(t, {}, call => call[2] === "StopTransaction" && ++stops === 1 ? "drop" : undefined);
+  await s.engine.connect(); await s.engine.start(); await s.advance(5_000);
+  const rejected = assert.rejects(s.engine.stop("EVDisconnected"), /timed out/);
+  await s.flush(); await s.advance(15_000); await rejected;
+  assert.equal(s.engine.snapshot.transactionId, 83);
+  assert.equal(s.engine.snapshot.connected, false);
+  const original = s.calls.find(call => call[2] === "StopTransaction");
+  const finalReports = s.calls.filter(call => call[2] === "MeterValues").length;
+  await s.engine.connect(); await s.advance(60_000);
+  assert.equal(s.calls.filter(call => call[2] === "MeterValues").length, finalReports);
+  await s.engine.stop("Local");
+  assert.deepEqual(s.calls.filter(call => call[2] === "StopTransaction").at(-1), original);
+  assert.equal(s.engine.snapshot.transactionId, null);
+  assert.equal(s.engine.snapshot.status, "Completed");
+});
+
+test("a pending stop prevents resuming a transaction whose stop may already be committed", async t => {
+  const s = setup(t, {}, call => call[2] === "StopTransaction" ? "drop" : undefined);
+  await s.engine.connect(); await s.engine.start();
+  const rejected = assert.rejects(s.engine.stop(), /timed out/);
+  await s.flush(); await s.advance(15_000); await rejected;
+  await s.engine.connect();
+  const count = s.calls.length;
+  await assert.rejects(s.engine.resume(), /stop is awaiting confirmation/);
+  assert.equal(s.calls.length, count);
+});
+
+test("recovery of an existing transaction retains its original stop across reconnect", async t => {
+  let stops = 0;
+  const s = setup(t, {}, call => call[2] === "StopTransaction" && ++stops === 1 ? "drop" : undefined);
+  await s.engine.connect();
+  const rejected = assert.rejects(s.engine.stopExisting(77, 1234), /timed out/);
+  await s.flush(); await s.advance(15_000); await rejected;
+  const original = s.calls.find(call => call[2] === "StopTransaction");
+  await s.engine.connect(); await s.advance(10_000);
+  await s.engine.stopExisting(77, 9999);
+  assert.deepEqual(s.calls.filter(call => call[2] === "StopTransaction").at(-1), original);
+  await s.engine.start();
+  assert.equal(s.calls.find(call => call[2] === "StartTransaction")[3].meterStart, 1234);
+});

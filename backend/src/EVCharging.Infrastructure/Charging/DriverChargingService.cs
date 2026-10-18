@@ -77,12 +77,37 @@ public sealed class DriverChargingService(
         // current charge. Its summary remains available in personal history.
         if (inUse)
             own = null;
+        // Mirror the manual demo-connect guard, including unstarted waiting requests.
+        // This is an owner-only navigation hint, never permission to end a transaction.
+        var canConnect =
+            verification.DemoBypassEnabled
+            && station.IsDemo
+            && connector is not null
+            && selectedNumber == 1;
+        var blockingConnection = !canConnect
+            ? null
+            : await (
+                from request in db.ChargingConnectionRequests.AsNoTracking()
+                join point in db.Stations.AsNoTracking() on request.StationId equals point.Id
+                where
+                    request.DriverId == driverId
+                    && !request.IsAutomatic
+                    && (
+                        request.State == "Linked"
+                        || request.State == "Waiting" && request.ExpiresAt > now
+                    )
+                    && (request.StationId != stationId || request.ConnectorNumber != selectedNumber)
+                select new BlockingChargingConnection(
+                    point.Id,
+                    point.Name,
+                    request.ConnectorNumber,
+                    request.State,
+                    request.ExpiresAt
+                )
+            ).SingleOrDefaultAsync(ct);
         return new(
             ChargingRealtime.StationDto(station, now),
-            verification.DemoBypassEnabled
-                && station.IsDemo
-                && connector is not null
-                && selectedNumber == 1,
+            canConnect,
             connector?.IsOnline == true,
             inUse,
             claim?.DriverId == driverId && claim.State == "Waiting"
@@ -111,7 +136,8 @@ public sealed class DriverChargingService(
                 : null,
             assigned is null ? null
                 : demoAccess ? "Demo"
-                : "Card"
+                : "Card",
+            blockingConnection
         );
     }
 

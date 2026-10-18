@@ -11,11 +11,12 @@ import { ChargingFault } from "./charging-fault";
 import { SimulatorDiagnostics } from "./simulator-diagnostics";
 import { createChargingTestReport, downloadChargingTestReport } from "./charging-test-report";
 import { AvailabilityCard } from "./station-availability";
-import { chargingGuidance } from "../../../../shared/charging-guidance";
+import { blockingConnection, blockingConnectionGuidance, chargingGuidance } from "../../../../shared/charging-guidance";
 
 export function StationChargingView({ initial, language }: { initial: StationCharging; language: Language }) {
   const testMode = useTestMode();
   const sq = language === "sq";
+  const connectionConflictMessage = sq ? "Ke tashmë një karikim ose pritje në një pikë tjetër." : "You already have a charging session or waiting request at another charger.";
   const stationId = initial.station.id;
   const selectedConnector = initial.connector?.number ?? 1;
   const url = `/api/driver/stations/${stationId}/charging?connector=${selectedConnector}`;
@@ -49,10 +50,18 @@ export function StationChargingView({ initial, language }: { initial: StationCha
       if (response.status === 401) { window.location.assign("/"); return; }
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
+        if (data.code === "driver_already_connected") {
+          // A waiting request on another device may be newer than this snapshot.
+          const current = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(10_000) }).catch(() => null);
+          if (current?.ok) {
+            const updated: StationCharging | null = await current.json().catch(() => null);
+            if (updated && mounted.current) setSnapshot(updated);
+          }
+        }
         throw new Error(data.code === "charger_in_use"
           ? (sq ? "Kjo pikë po përdoret nga një drejtues tjetër." : "This charger is in use by another driver.")
           : data.code === "driver_already_connected"
-            ? (sq ? "Ke tashmë një karikim ose pritje në një pikë tjetër." : "You already have a charging session or waiting request at another charger.")
+            ? connectionConflictMessage
           : (sq ? "Lidhja nuk u konfirmua. Provo përsëri." : "Connection was not confirmed. Please retry."));
       }
       const data: StationCharging = await response.json();
@@ -60,10 +69,12 @@ export function StationChargingView({ initial, language }: { initial: StationCha
     } catch (failure) {
       if (mounted.current) setError(failure instanceof Error ? failure.message : (sq ? "Lidhja dështoi." : "Connection failed."));
     } finally { mutationPending.current = false; if (mounted.current) setBusy(false); }
-  }, [url, sq, setSnapshot]);
+  }, [url, sq, connectionConflictMessage, setSnapshot]);
 
   const requestExpired = waiting && now > Date.parse(snapshot.connectionRequest!.expiresAt);
   const guidance = chargingGuidance(snapshot, language, unavailable);
+  const blocker = canConnect ? blockingConnection(snapshot, now) : null;
+  const blockerGuidance = blocker ? blockingConnectionGuidance(blocker.state, language) : null;
   return <div className="driver-content charge-point-page">
     <nav className="charge-page-navigation" aria-label={sq ? "Navigimi i karikimit" : "Charging navigation"}>
       <Link href="/driver">← {sq ? "Kthehu te harta" : "Back to map"}</Link>
@@ -85,7 +96,13 @@ export function StationChargingView({ initial, language }: { initial: StationCha
         href={`/driver/stations/${stationId}?connector=${number}`}>{sq ? "Lidhësi" : "Connector"} {number}</Link>)}
     </nav>}
     {driverAccessMode === "Demo" && <p className="charge-point-notice">{sq ? "Demonstrim: sinjalet dhe karikimet e reja të kësaj pajisjeje të caktohen automatikisht. Nuk ke nevojë të shtypësh Lidhu." : "Demonstration: device signals and new charges are assigned to you automatically. You do not need to press Connect."}</p>}
-    {error && <div className="form-error" role="alert">{error}</div>}
+    {error && !(error === connectionConflictMessage && snapshot.blockingConnection !== undefined && !blocker) && <div className="form-error" role="alert">{error}</div>}
+    {blocker && blockerGuidance && <section className="charge-waiting-card" aria-labelledby="charge-blocker-title">
+      <h2 id="charge-blocker-title">{blockerGuidance.title}</h2>
+      <strong>{blocker.stationName} · {sq ? "Lidhësi" : "Connector"} {blocker.connectorId}</strong>
+      <p>{blockerGuidance.body}</p>
+      <Link className="driver-history-link" href={`/driver/stations/${blocker.stationId}?connector=${blocker.connectorId}`}>{blockerGuidance.action} →</Link>
+    </section>}
     {snapshot.connector?.deviceStatus && (testMode || snapshot.connector.deviceFaultCode) && <section aria-label={sq ? "Pajisja qendrore e pikës" : "Station controller"}>
       {testMode && <p className="charge-point-notice" role="status">{sq ? "Statusi i pajisjes qendrore" : "Station controller status"}: {chargingLabels[snapshot.connector.deviceStatus]?.[sq ? 0 : 1] ?? snapshot.connector.deviceStatus}</p>}
       {snapshot.connector.deviceFaultCode && <ChargingFault code={snapshot.connector.deviceFaultCode} info={snapshot.connector.deviceFaultInfo} language={language} status={snapshot.connector.deviceStatus} />}
@@ -95,6 +112,7 @@ export function StationChargingView({ initial, language }: { initial: StationCha
     {snapshot.inUse && !active && <p className="charge-point-notice" role="status">{sq ? "Pika po përdoret nga një drejtues tjetër. Karikimi i tij nuk shfaqet në llogarinë tënde." : "Another driver is using this charger. Their session is private."}</p>}
     {session ? <ChargingProgress session={session} language={language} now={now || Date.parse(session.startReceivedAt ?? session.startedAt)} stale={unavailable} />
       : snapshot.inUse ? <AvailabilityCard station={station} language={language} nowMs={now || null} stale={unavailable || !connected}/>
+      : blocker ? null
       : <section className="charge-waiting-card" aria-labelledby="charge-wait-title">
         <div className={`charge-wait-icon ${waiting && snapshot.deviceConnected && !requestExpired ? "is-ready" : ""}`} aria-hidden="true">ϟ</div>
         <span className="driver-eyebrow">{sq ? "LIDHJA ME PIKËN" : "CONNECTING TO THE CHARGER"}</span>
@@ -122,10 +140,10 @@ export function StationChargingView({ initial, language }: { initial: StationCha
             : <button type="button" className="driver-history-link" disabled={busy || snapshot.inUse} onClick={() => void mutate("POST")}>{sq ? "Lidhu me pikën" : "Connect to charger"}</button>}
         </div>}
       </section>}
-    {session?.stoppedAt && canConnect && !snapshot.inUse && <div className="charge-connect-actions">
+    {session?.stoppedAt && canConnect && !blocker && !snapshot.inUse && <div className="charge-connect-actions">
       <button type="button" className="driver-history-link" disabled={busy} onClick={() => void mutate("POST")}>{sq ? "Përgatit karikim të ri" : "Prepare a new charge"} ↗</button>
     </div>}
-    {canConnect && !snapshot.inUse && !active && <p className="charge-test-instruction">{sq
+    {canConnect && !blocker && !snapshot.inUse && !active && <p className="charge-test-instruction">{sq
       ? `Për testin aktual, QR anashkalohet. Lidh simulatorin ${station.code} dhe shtyp Start charging me TAG-001, lidhësi 1.`
       : `QR is bypassed for this test. Connect simulator ${station.code}, then press Start charging with TAG-001, connector 1.`}</p>}
     {canConnect && station.isDemo && <p><a href={`/driver/simulator?station=${encodeURIComponent(station.code)}`} target="_blank" rel="noopener noreferrer">{sq ? "Hap simulatorin automatik ↗" : "Open automatic simulator ↗"}</a></p>}

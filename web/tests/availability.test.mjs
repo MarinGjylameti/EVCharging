@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { remainingChargingMinutes } from "../src/lib/availability.ts";
+import { remainingChargingMinutes } from "../../shared/availability.ts";
 
 test("a fresh device forecast shows the remaining charging minutes", () => {
   const now = Date.parse("2026-10-01T10:00:00Z");

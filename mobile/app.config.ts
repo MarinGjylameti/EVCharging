@@ -25,10 +25,15 @@ const config: ExpoConfig = {
     package: "al.evcharging.mobile", softwareKeyboardLayoutMode: "resize",
     ...(existsSync(resolve(__dirname, googleServices)) ? { googleServicesFile: googleServices } : {}),
     adaptiveIcon: { foregroundImage: "./assets/adaptive-icon.png", backgroundColor: "#15372e" },
-    blockedPermissions: ["android.permission.RECORD_AUDIO", "android.permission.CAMERA", "android.permission.ACCESS_FINE_LOCATION", "android.permission.ACCESS_COARSE_LOCATION", "android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE"],
+    blockedPermissions: ["android.permission.RECORD_AUDIO", "android.permission.CAMERA", "android.permission.ACCESS_BACKGROUND_LOCATION", "android.permission.FOREGROUND_SERVICE_LOCATION", "android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE"],
   },
   plugins: [
     "expo-secure-store", "expo-dev-client", "@react-native-community/datetimepicker",
+    ["expo-location", {
+      locationWhenInUsePermission: "EVCharging përdor vendndodhjen për të treguar në hartë ku je dhe pikën më të afërt të karikimit. / Show your location and the nearest charging station.",
+      locationAlwaysPermission: false, locationAlwaysAndWhenInUsePermission: false, motionUsagePermission: false,
+      isIosBackgroundLocationEnabled: false, isAndroidBackgroundLocationEnabled: false, isAndroidForegroundServiceEnabled: false,
+    }],
     ["expo-splash-screen", { image: "./assets/splash-mark.png", imageWidth: 160, resizeMode: "contain", backgroundColor: "#15372e" }],
     ["expo-notifications", { icon: "./assets/notification-icon.png", color: "#226947", defaultChannel: "charging" }],
   ],

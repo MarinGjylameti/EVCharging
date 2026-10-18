@@ -70,6 +70,10 @@ export type StationCharging = {
   session: DriverChargingSession | null;
   connector?: DriverConnectorState | null;
   diagnostics?: ChargingDiagnostics | null;
+  blockingConnection?: {
+    stationId: string; stationName: string; connectorId: number;
+    state: "Waiting" | "Linked"; expiresAt: string;
+  } | null;
 };
 export type DriverChargingState = { canTestSimulator: boolean; sessions: DriverChargingSession[] };
 export type DriverLiveSnapshot = {

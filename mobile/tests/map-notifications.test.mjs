@@ -6,11 +6,25 @@ const tick = async () => { for (let i = 0; i < 12; i++) await Promise.resolve();
 const history = compile("../../../shared/history.ts");
 const directions = compile("../../../shared/map-directions.ts");
 const geometry = compile("../../../shared/map-geometry.ts");
+const scene = compile("../../src/map-scene.ts", { "../../shared/map-geometry": geometry });
+const camera = compile("../../src/map-camera.ts", { "../../shared/map-geometry": geometry });
+const mapModules = { "./map-camera": camera };
+const locationModule = { "./map-location": { readInitialLocation: async () => null } };
 const stationsData = compile("../../src/station-data.ts", { "../../shared/map-directions": directions });
 const notificationsData = compile("../../src/notification-data.ts", { "../../shared/history": history });
 const ui = Object.fromEntries(["Button", "Card", "ChoiceField", "Chip", "Notice", "Screen"].map(name => [name, name]));
 ui.styles = {}; ui.colors = { ink: "green", muted: "gray", border: "gray", white: "white" };
-const native = { Text: "Text", View: "View", Pressable: "Pressable", Image: "Image", Platform: { OS: "ios" }, StyleSheet: { create: styles => styles } };
+class ValueXY {
+  constructor(value, config) { assert.equal(config.useNativeDriver, true); this.x = {}; this.y = {}; this.setValue(value); }
+  setValue(value) { this.x.value = value.x; this.y.value = value.y; }
+  getTranslateTransform() { return [{ translateX: this.x }, { translateY: this.y }]; }
+}
+const native = { Animated: { View: "AnimatedView", ValueXY }, Text: "Text", View: "View", Pressable: "Pressable", Image: "Image", Platform: { OS: "ios" }, StyleSheet: { create: styles => styles } };
+const mapReact = state => ({ ...state.react, useLayoutEffect: effect => effect() });
+const markerLeft = tree => {
+  const canvas = nodes(tree, n => n.type === "AnimatedView")[0].props.style;
+  return canvas.left + canvas.transform[0].translateX.value + nodes(tree, n => n.type === "Pressable" && n.props.accessibilityLabel?.includes("Central"))[0].props.style.left;
+};
 const i18n = compile("../../src/i18n.ts");
 const station = { id: "station", name: "Central", address: "Central road", connectorType: "Type 2", connectorCount: 2, latitude: 41.3275, longitude: 19.8187, status: "Available", city: "Tirana", powerKW: 22, pricePerKWh: .35, currency: "EUR" };
 
@@ -41,6 +55,7 @@ test("settings load the saved provider, save changes, and retain it when saving 
 test("map taps show details first; explicit navigation uses the saved app, falls back and coalesces taps", async () => {
   const state = hooks(), opened = [];
   const { StationsScreen } = compile("../../src/StationsScreen.tsx", {
+    ...locationModule,
     react: state.react, "react/jsx-runtime": jsx, "react-native": { ...native, Linking: { openURL: async url => { opened.push(url); if (url.startsWith("comgooglemaps:")) throw Error("Not installed"); } } },
     "./ui": ui, "./i18n": i18n, "./station-data": stationsData, "./StationMap": { StationMap: "StationMap" }, "./StationSummaryCard": { StationSummaryCard: "StationSummaryCard" }, "./map-preference": { readMapProvider: async () => "google" },
   });
@@ -58,8 +73,9 @@ test("map taps show details first; explicit navigation uses the saved app, falls
 test("native map renders only valid stations, fits their coordinates and exposes navigation targets", () => {
   const state = hooks(), selected = [];
   const { StationMap } = compile("../../src/StationMap.tsx", {
-    react: state.react, "react/jsx-runtime": jsx, "react-native": { ...native, PanResponder: { create: () => ({ panHandlers: {} }) } },
-    "../../shared/map-geometry": geometry, "./station-data": stationsData, "./ui": ui,
+    ...mapModules,
+    react: mapReact(state), "react/jsx-runtime": jsx, "react-native": { ...native, PanResponder: { create: () => ({ panHandlers: {} }) } },
+    "../../shared/map-geometry": geometry, "./map-scene": scene, "./station-data": stationsData, "./ui": ui,
   });
   const all = [station, { ...station, id: "invalid", latitude: NaN }];
   const render = () => { state.reset(); return StationMap({ stations: all, language: "en", stale: false, selectedId: station.id, onSelect: value => selected.push(value.id), onInteraction() {} }); };
@@ -76,6 +92,7 @@ test("native map renders only valid stations, fits their coordinates and exposes
 function stationsScreen() {
   const state = hooks(), opened = [];
   const { StationsScreen } = compile("../../src/StationsScreen.tsx", {
+    ...locationModule,
     react: state.react, "react/jsx-runtime": jsx, "react-native": { ...native, Linking: { openURL: () => assert.fail("Map selection must not navigate") } },
     "./ui": ui, "./i18n": i18n, "./station-data": stationsData, "./StationMap": { StationMap: "StationMap" },
     "./StationSummaryCard": { StationSummaryCard: "StationSummaryCard" }, "./map-preference": { readMapProvider: async () => "google" },
@@ -153,14 +170,15 @@ test("map gestures pan and pinch continuously, coalesce frames and release page 
   const drawFrame = () => { const callbacks = [...frames.values()]; frames.clear(); callbacks.forEach(callback => callback()); };
   const state = hooks(), interactions = []; let responder;
   const { StationMap } = compile("../../src/StationMap.tsx", {
-    react: state.react, "react/jsx-runtime": jsx, "react-native": { ...native, PanResponder: { create: value => { responder = value; return { panHandlers: {} }; } } },
-    "../../shared/map-geometry": geometry, "./station-data": stationsData, "./ui": ui,
+    ...mapModules,
+    react: mapReact(state), "react/jsx-runtime": jsx, "react-native": { ...native, PanResponder: { create: value => { responder = value; return { panHandlers: {} }; } } },
+    "../../shared/map-geometry": geometry, "./map-scene": scene, "./station-data": stationsData, "./ui": ui,
   });
   const render = (status = "Available") => { state.reset(); return StationMap({ stations: [{ ...station, status }], language: "en", stale: false, onSelect() {}, onInteraction: value => interactions.push(value) }); };
   let tree = render(); nodes(tree, n => n.type === "View" && n.props.onLayout)[0].props.onLayout({ nativeEvent: { layout: { width: 360 } } }); tree = render();
-  const markerLeft = tree => nodes(tree, n => n.type === "Pressable" && n.props.accessibilityLabel?.includes("Central"))[0].props.style.left;
   const before = markerLeft(tree), touches = x => ({ nativeEvent: { touches: [{ pageX: x, pageY: 100 }] } });
   responder.onPanResponderGrant(touches(100)); responder.onPanResponderMove(touches(110)); responder.onPanResponderMove(touches(130));
+  assert.ok(Math.abs(markerLeft(tree) - before - 30) < .001, "native translation follows the finger before a React render");
   assert.equal(frames.size, 1); drawFrame(); tree = render("Occupied");
   assert.ok(Math.abs(markerLeft(tree) - before - 30) < .001);
   responder.onPanResponderRelease(); assert.deepEqual(interactions, [true, false]);
@@ -203,4 +221,78 @@ test("notifications display eight cards and selecting a day resets the page", ()
   nodes(tree, n => n.type === "ChoiceField")[0].props.onChange("2026-10-18"); tree = render();
   assert.equal(nodes(tree, n => n.type === "Card").length, 8);
   assert.match(JSON.stringify(tree), /Albania time/);
+});
+
+function mapHarness(platform = "ios", mapSession = {}) {
+  const state = hooks(), interactions = []; let responder, writes = 0;
+  const { StationMap } = compile("../../src/StationMap.tsx", {
+    ...mapModules, "./map-scene": scene, "../../shared/map-geometry": geometry, "./station-data": stationsData, "./ui": ui,
+    react: { ...mapReact(state), useState: initial => { const [value, set] = state.react.useState(initial); return [value, next => { writes++; set(next); }]; } },
+    "react/jsx-runtime": jsx, "react-native": { ...native, Platform: { OS: platform }, PanResponder: { create: value => { responder = value; return { panHandlers: {} }; } } },
+  });
+  const onInteraction = value => interactions.push(value);
+  const render = (props = {}) => { state.reset(); return StationMap({ stations: [station], language: "en", stale: false, mapSession, onSelect() {}, onInteraction, ...props }); };
+  const mount = (props = {}) => {
+    const tree = render(props);
+    nodes(tree, n => n.props.onLayout)[0].props.onLayout({ nativeEvent: { layout: { width: 360 } } }); render(props);
+    return render(props);
+  };
+  return { render, mount, mapSession, interactions, get responder() { return responder; }, get writes() { return writes; } };
+}
+
+function animationFrames(t) {
+  const originals = [globalThis.requestAnimationFrame, globalThis.cancelAnimationFrame], frames = new Map(); let id = 0;
+  globalThis.requestAnimationFrame = fn => { frames.set(++id, fn); return id; };
+  globalThis.cancelAnimationFrame = key => frames.delete(key);
+  t.after(() => { [globalThis.requestAnimationFrame, globalThis.cancelAnimationFrame] = originals; });
+  return { frames, draw() { const pending = [...frames.values()]; frames.clear(); pending.forEach(fn => fn()); } };
+}
+const touch = (...xs) => ({ nativeEvent: { touches: xs.map(x => ({ pageX: x, pageY: 160 })) } });
+
+for (const platform of ["ios", "android"]) {
+  test(`${platform}: panning tracks touch-down without React updates for every move and rebases finger changes`, t => {
+    const clock = animationFrames(t), harness = mapHarness(platform), tree = harness.mount();
+    const viewport = nodes(tree, n => n.props.onLayout)[0];
+    let measured; viewport.props.ref.current = { measureInWindow: fn => { measured = fn; } };
+    const start = markerLeft(tree), writes = harness.writes;
+    viewport.props.onTouchStart(touch(100));
+    harness.responder.onPanResponderGrant(touch(104));
+    measured(20, 80); // Measurement arriving after grant must not change the drag delta.
+    harness.responder.onPanResponderMove(touch(105));
+    assert.ok(Math.abs(markerLeft(tree) - start - 5) < .001);
+    clock.draw(); assert.equal(harness.writes, writes, "same visible tiles require no React state update");
+    harness.responder.onPanResponderStart(touch(105, 205));
+    harness.responder.onPanResponderMove(touch(115, 215));
+    assert.ok(Math.abs(markerLeft(tree) - start - 15) < .001);
+    harness.responder.onPanResponderEnd(touch(115));
+    harness.responder.onPanResponderMove(touch(125));
+    assert.ok(Math.abs(markerLeft(tree) - start - 25) < .001);
+    harness.responder.onPanResponderTerminate();
+    assert.equal(clock.frames.size, 0); assert.equal(harness.interactions.at(-1), false);
+    const next = harness.render(); assert.ok(Math.abs(markerLeft(next) - start - 25) < .001);
+  });
+
+  test(`${platform}: initial location fits once; later location/status/filter updates and remounts preserve manual view`, () => {
+    const harness = mapHarness(platform), location = { latitude: 52.52, longitude: 13.405 };
+    let tree = harness.mount({ location });
+    assert.equal(harness.mapSession.focused, true);
+    assert.deepEqual(harness.mapSession.view, camera.initialMapView([station], location, 360, 360));
+    nodes(tree, n => n.props.accessibilityLabel === "Zoom in")[0].props.onPress();
+    const chosen = JSON.stringify(harness.mapSession.view);
+    harness.render({ location: station, stations: [{ ...station, status: "Charging" }] });
+    harness.render({ location: station, stations: [{ ...station, id: "another", longitude: 20 }] });
+    assert.equal(JSON.stringify(harness.mapSession.view), chosen);
+    const returned = mapHarness(platform, harness.mapSession); returned.mount({ location });
+    assert.equal(JSON.stringify(returned.mapSession.view), chosen);
+  });
+}
+
+test("a location fix arriving after a touch never steals the map; expired estimates never clutter its pins", () => {
+  const harness = mapHarness(), tree = harness.mount();
+  nodes(tree, n => n.props.onLayout)[0].props.onTouchStart(touch(100));
+  const before = JSON.stringify(harness.mapSession.view);
+  const next = harness.render({ location: { latitude: 52.52, longitude: 13.405 }, stations: [{ ...station, status: "Charging", availabilityForecast: { estimatedAvailableAt: "2099-01-01T00:00:00Z" } }] });
+  assert.equal(JSON.stringify(harness.mapSession.view), before);
+  assert.equal(nodes(next, n => n.type === "Text" && /min/.test(String(n.props.children))).length, 0);
+  assert.equal(nodes(next, n => n.props.accessibilityLabel === "Your location at opening").length, 1);
 });

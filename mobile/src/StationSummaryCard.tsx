@@ -2,6 +2,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { Language, Station } from "../../contracts/account";
 import { stationState } from "./station-data";
 import { messages } from "./i18n";
+import { StationAvailability } from "./StationAvailability";
 import { Button, colors, styles } from "./ui";
 
 export function StationSummaryCard({ station, language, stale, onOpen, onNavigate, onClose, actionsVisible = true, onToggleActions }: {
@@ -34,6 +35,7 @@ export function StationSummaryCard({ station, language, stale, onOpen, onNavigat
     {onToggleActions ? <Pressable accessibilityRole="button" accessibilityState={{ expanded: actionsVisible }}
       accessibilityHint={actionsVisible ? (sq ? "Prek për të fshehur butonat" : "Tap to hide actions") : (sq ? "Prek për të shfaqur butonat" : "Tap to show actions")}
       onPress={onToggleActions} style={({ pressed }) => ({ opacity: pressed ? .7 : 1 })}>{summary}</Pressable> : summary}
+    {actionsVisible && <StationAvailability station={station} language={language} stale={stale}/>}
     {actionsVisible && <View style={layout.actions}>
       <View style={layout.action}><Button title={sq ? "Hap karikimin" : "Open charging"} onPress={onOpen}/></View>
       <View style={layout.action}><Button title={t.openInMaps} secondary onPress={onNavigate}/></View>

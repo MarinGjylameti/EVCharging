@@ -1,5 +1,25 @@
 import type { Language, StationCharging } from "../contracts/account";
 
+// An expired waiting request is released by the server on the next connect.
+// Linked claims do not expire: the charger must confirm the end of its session.
+export function blockingConnection(view: StationCharging, now: number) {
+  const blocker = view.canConnect ? view.blockingConnection : null;
+  return blocker && (blocker.state === "Linked" || Date.parse(blocker.expiresAt) > now) ? blocker : null;
+}
+
+export function blockingConnectionGuidance(state: "Waiting" | "Linked", language: Language) {
+  const sq = language === "sq";
+  return state === "Waiting" ? {
+    title: sq ? "Ke një pritje në një pikë tjetër" : "You are waiting at another charger",
+    body: sq ? "Hap pikën e mëparshme. Mund të vazhdosh aty ose të anulosh pritjen përpara se të zgjedhësh këtë pikë." : "Open the previous charger. Continue there or cancel that waiting request before choosing this one.",
+    action: sq ? "Shko te pritja" : "Open waiting request",
+  } : {
+    title: sq ? "Ke një seancë ende të hapur" : "You still have an open session",
+    body: sq ? "Hap seancën për të parë gjendjen. Nëse e ke ndalur karikimin, presim konfirmimin nga karikuesi. Nëse nuk mbërrin, kontakto operatorin e pikës." : "Open the session to check its status. If you have stopped charging, we are waiting for the charger's confirmation. If it does not arrive, contact the station operator.",
+    action: sq ? "Shko te seanca" : "Open existing session",
+  };
+}
+
 // Guidance describes server-confirmed state; opening a station never claims a charge.
 export function chargingGuidance(view: StationCharging, language: Language, stale: boolean) {
   const sq = language === "sq";

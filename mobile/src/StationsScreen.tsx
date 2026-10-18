@@ -1,15 +1,24 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Linking, Platform, Pressable, StyleSheet, Text, View, type ScrollView } from "react-native";
 import type { Language, Station } from "../../contracts/account";
 import { messages, errorText } from "./i18n";
 import { navigationUrls, selectStations } from "./station-data";
 import { readMapProvider } from "./map-preference";
 import { StationMap } from "./StationMap";
+import { readInitialLocation } from "./map-location";
+import type { MapSession } from "./map-camera";
 import { StationSummaryCard } from "./StationSummaryCard";
 import { Button, Card, ChoiceField, Chip, Notice, Screen, colors, styles } from "./ui";
 
-export function StationsScreen({ stations, language, refresh, onSelect, stale = false }: { stations: Station[]; language: Language; refresh: () => Promise<void>; onSelect: (stationId: string) => void; stale?: boolean }) {
+export function StationsScreen({ stations, language, refresh, onSelect, stale = false, mapSession }: { stations: Station[]; language: Language; refresh: () => Promise<void>; onSelect: (stationId: string) => void; stale?: boolean; mapSession?: MapSession }) {
   const t = messages[language], sq = language === "sq";
+  const localSession = useRef<MapSession>({}), session = mapSession ?? localSession.current;
+  const [location, setLocation] = useState(session.location);
+  useEffect(() => {
+    let mounted = true;
+    void readInitialLocation(session).then(point => { if (mounted) setLocation(point); });
+    return () => { mounted = false; };
+  }, [session]);
   const [city, setCity] = useState("");
   const [availableOnly, setAvailableOnly] = useState(false);
   const [power, setPower] = useState<"all" | "ac" | "fast">("all");
@@ -71,7 +80,8 @@ export function StationsScreen({ stations, language, refresh, onSelect, stale = 
     {!!error && <Notice text={error}/>}
     {stale && <Notice text={sq ? "Lidhja është ndërprerë. Gjendjet e pikave janë nga përditësimi i fundit." : "Connection lost. Station statuses are from the last update."}/>}
     {shown.length > 0 ? mode === "map" ? <>
-      <StationMap stations={shown} language={language} stale={stale} selectedId={selected?.id} onSelect={selectPoint} onInteraction={setInteracting}/>
+      <StationMap stations={shown} language={language} stale={stale} selectedId={selected?.id} onSelect={selectPoint} onInteraction={setInteracting} mapSession={session} location={location}/>
+      {location === null && <Text style={layout.mapHint}>{sq ? "Vendndodhja nuk është e disponueshme. Mund ta lëvizësh hartën për të zgjedhur pikën." : "Location is unavailable. You can move the map to choose a station."}</Text>}
       {selected ? <View key={selected.id} onLayout={event => {
         detailY.current = event.nativeEvent.layout.y;
         if (pendingReveal.current) { pendingReveal.current = false; revealDetails(detailY.current); }

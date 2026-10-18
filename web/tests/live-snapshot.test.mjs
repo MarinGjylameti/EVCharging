@@ -214,6 +214,41 @@ const session = { id: "session-1", version: 1, startedAt: "2026-10-02T12:00:00Z"
   status: "Charging", stoppedAt: null, energyKWh: 0 };
 const charging = { station, session: null, connectionRequest: { id: "claim", state: "Waiting" }, deviceConnected: true, inUse: false };
 
+test("completion at the blocking charger refreshes this station without merging the other session", async t => {
+  const initial = { ...charging, canConnect: true, connectionRequest: null,
+    blockingConnection: { stationId: "station-2", connectorId: 1, state: "Linked" } };
+  const h = mount(t, "station-1", initial, policyExports.chargingLivePolicy);
+  await h.resolveData(initial);
+  h.streams[0].handlers.heartbeat();
+  h.changed(event("SessionMeasured", { stationId: "station-2", session: { ...session, stationId: "station-2" } }));
+  await h.advance(0);
+  assert.equal(h.requests.length, 1, "unrelated meter traffic does not refetch");
+  h.changed(event("SessionCompleted", { stationId: "station-2", session: { ...session, stationId: "station-2", stoppedAt: "2026-10-02T12:10:00Z" } }));
+  await h.advance(0);
+  assert.equal(h.requests.length, 2);
+  assert.equal(h.requests.at(-1).url, "/snapshot");
+  assert.equal(h.state[0].session, null);
+  await h.resolveData({ ...initial, blockingConnection: null });
+  assert.equal(h.state[0].blockingConnection, null);
+  assert.equal(h.state[0].station.id, "station-1");
+});
+
+test("cross-station claim changes trigger a trailing authenticated read, including cancellation during an old read", async t => {
+  const waiting = { ...charging, canConnect: true, connectionRequest: null,
+    blockingConnection: { stationId: "station-2", connectorId: 1, state: "Waiting" } };
+  const h = mount(t, "station-1", waiting, policyExports.chargingLivePolicy);
+  h.changed(event("OwnershipChanged", { stationId: "station-2" }));
+  await h.resolveData(waiting); await h.advance(0);
+  assert.equal(h.requests.length, 2);
+  await h.resolveData({ ...waiting, blockingConnection: null });
+  assert.equal(h.state[0].blockingConnection, null);
+  h.changed(event("OwnershipChanged", { eventId: "new-claim", stationId: "station-3" }));
+  await h.advance(0); assert.equal(h.requests.length, 3);
+  await h.resolveData({ ...waiting, blockingConnection: { ...waiting.blockingConnection, stationId: "station-3" } });
+  assert.equal(h.state[0].blockingConnection.stationId, "station-3");
+  assert.equal(h.state[0].session, null);
+});
+
 test("1000 private meter deltas cause no map/history requests; completion only fetches history once", async t => {
   const initial = { stations: [station], history: [] };
   const h = mount(t, null, initial, policyExports.driverLivePolicy);

@@ -11,6 +11,7 @@ export const simulatorErrors = ["ConnectorLockFailure", "EVCommunicationError", 
 export const simulatorStopReasons = ["Local", "Remote", "EVDisconnected", "EmergencyStop", "DeAuthorized", "HardReset", "PowerLoss", "Reboot", "SoftReset", "UnlockCommand", "Other"] as const;
 
 type Pending = { resolve: (payload: Record<string, unknown>) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout>; action: string };
+type StopIntent = { id: string; payload: { transactionId: number; meterStop: number; timestamp: string; reason: string } };
 
 export function validateSimulatorConfig(config: SimulatorConfig) {
   const url = new URL(config.url);
@@ -38,6 +39,7 @@ export class AutomaticSimulator {
   private chargingPowerKW: number;
   private disposed = false;
   private estimatesSupported = true;
+  private stopIntent: StopIntent | null = null;
   private state: SimulatorState;
 
   constructor(readonly config: SimulatorConfig, private changed: (state: SimulatorState) => void,
@@ -65,9 +67,8 @@ export class AutomaticSimulator {
     for (const call of this.pending.values()) { clearTimeout(call.timer); call.reject(new Error(message)); }
     this.pending.clear();
   }
-  private call(action: string, payload: object): Promise<Record<string, unknown>> {
+  private call(action: string, payload: object, id: string = crypto.randomUUID()): Promise<Record<string, unknown>> {
     if (!this.state.connected || !this.socket) return Promise.reject(new Error("Simulator disconnected."));
-    const id = crypto.randomUUID();
     const frame = JSON.stringify([2, id, action, payload]);
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => { this.pending.delete(id); reject(new Error(`${action}: response timed out. Reconnect and check the active transaction before retrying.`)); }, 15_000);
@@ -181,9 +182,10 @@ export class AutomaticSimulator {
     this.meter = setInterval(() => {
       if (this.busy) return;
       void this.exclusive(async () => {
-        if (!this.state.connected || this.state.transactionId === null) return;
-        this.advance(); await this.readings();
+        if (!this.state.connected || this.state.transactionId === null || this.stopIntent) return;
+        this.advance();
         if (this.state.status === "Charging" && this.state.soc >= this.config.targetSoc) await this.finish("Local");
+        else await this.readings();
       }).catch(error => {
         this.log("SYS", "MeterValues", String(error));
         // A missing response leaves server state uncertain. Preserve transaction
@@ -195,6 +197,7 @@ export class AutomaticSimulator {
 
   async start() {
     await this.exclusive(async () => {
+      if (this.stopIntent) throw new Error("A stop is awaiting confirmation. Retry stopping before starting another transaction.");
       if (this.state.transactionId !== null) throw new Error("An active transaction already exists. Stop it first.");
       const auth = await this.call("Authorize", { idTag: "TAG-001" });
       if ((auth.idTagInfo as { status?: string } | undefined)?.status !== "Accepted") throw new Error("Authorization rejected.");
@@ -220,6 +223,7 @@ export class AutomaticSimulator {
   }
   async resume() {
     await this.exclusive(async () => {
+      if (this.stopIntent) throw new Error("A stop is awaiting confirmation. Retry stopping before resuming.");
       if (this.state.transactionId === null) throw new Error("No active transaction.");
       await this.status("Charging");
       this.state.status = "Charging"; this.state.powerKW = this.chargingPowerKW; this.lastTick = this.now();
@@ -243,9 +247,20 @@ export class AutomaticSimulator {
   }
   private async finish(reason: string) {
     if (this.state.transactionId === null) throw new Error("No active transaction.");
-    this.advance(); this.state.status = "Paused"; this.state.powerKW = 0;
-    await this.readings("Transaction.End"); await this.status("Finishing");
-    await this.call("StopTransaction", { transactionId: this.state.transactionId, meterStop: this.meterWh, timestamp: this.timestamp(), reason });
+    if (!this.stopIntent) {
+      this.advance(); this.state.status = "Paused"; this.state.powerKW = 0;
+      this.stopIntent = { id: crypto.randomUUID(), payload: {
+        transactionId: this.state.transactionId, meterStop: this.meterWh, timestamp: this.timestamp(), reason,
+      } };
+      this.publish();
+      // Final telemetry is useful, but its rejection or lost reply must not
+      // prevent the transaction's authoritative stop from being attempted.
+      for (const report of [() => this.readings("Transaction.End"), () => this.status("Finishing")]) {
+        try { await report(); }
+        catch (error) { this.log("SYS", "FinalTelemetryFailed", String(error)); }
+      }
+    }
+    await this.sendStopIntent();
     this.state.transactionId = null; this.state.status = "Completed";
     if (this.meter) clearInterval(this.meter); this.meter = null;
     this.publish(); await this.status("Available");
@@ -267,10 +282,19 @@ export class AutomaticSimulator {
       throw new Error("Invalid transaction or final meter reading.");
     await this.exclusive(async () => {
       if (this.state.transactionId !== null) throw new Error("Stop this simulator's active transaction first.");
-      await this.call("StopTransaction", { transactionId, meterStop, timestamp: this.timestamp(), reason: "Local" });
+      if (this.stopIntent && this.stopIntent.payload.transactionId !== transactionId)
+        throw new Error("Retry the pending stop before finishing another transaction.");
+      this.stopIntent ??= { id: crypto.randomUUID(), payload: { transactionId, meterStop, timestamp: this.timestamp(), reason: "Local" } };
+      const finalWh = this.stopIntent.payload.meterStop;
+      await this.sendStopIntent();
+      this.meterBaseWh = finalWh; this.state.energyKWh = 0; this.state.status = "Idle"; this.publish();
       await this.status("Available");
-      this.meterBaseWh = meterStop; this.state.energyKWh = 0; this.state.status = "Idle"; this.publish();
     });
+  }
+  private async sendStopIntent() {
+    const intent = this.stopIntent!;
+    await this.call("StopTransaction", intent.payload, intent.id);
+    this.stopIntent = null;
   }
   disconnect() {
     this.clearTimers(); this.socket?.close();

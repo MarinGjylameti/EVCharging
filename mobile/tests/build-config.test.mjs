@@ -8,7 +8,16 @@ test("app config keeps independent EVCharging identifiers and native assets", ()
   assert.equal(config.ios.bundleIdentifier, "al.evcharging.mobile");
   assert.equal(config.android.package, "al.evcharging.mobile");
   assert.equal(config.scheme, "evcharging"); assert.equal(config.android.softwareKeyboardLayoutMode, "resize");
-  assert.ok(config.android.blockedPermissions.includes("android.permission.ACCESS_FINE_LOCATION"));
+  assert.ok(!config.android.blockedPermissions.includes("android.permission.ACCESS_FINE_LOCATION"));
+  assert.ok(!config.android.blockedPermissions.includes("android.permission.ACCESS_COARSE_LOCATION"));
+  assert.ok(config.android.blockedPermissions.includes("android.permission.ACCESS_BACKGROUND_LOCATION"));
+  const location = config.plugins.find(item => Array.isArray(item) && item[0] === "expo-location")[1];
+  assert.match(location.locationWhenInUsePermission, /charging station/);
+  assert.equal(location.locationAlwaysPermission, false);
+  assert.equal(location.locationAlwaysAndWhenInUsePermission, false);
+  assert.equal(location.isIosBackgroundLocationEnabled, false);
+  assert.equal(location.isAndroidBackgroundLocationEnabled, false);
+  assert.equal(location.isAndroidForegroundServiceEnabled, false);
   assert.ok(config.plugins.some(item => Array.isArray(item) && item[0] === "expo-notifications" && item[1].defaultChannel === "charging"));
   assert.ok(config.plugins.includes("@react-native-community/datetimepicker"), "the native date picker plugin must be registered explicitly in dynamic Expo config");
   const icon = readFileSync(new URL("../assets/icon.png", import.meta.url));

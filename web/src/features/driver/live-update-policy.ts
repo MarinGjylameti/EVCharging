@@ -4,6 +4,7 @@ export type LiveUpdate<T> = { snapshot: T; refreshUrl?: string } | { refreshUrl:
 export type LivePolicy<T> = {
   event: (current: T, event: ChargingRealtimeEvent) => LiveUpdate<T>;
   merge: (current: T, incoming: T, url: string) => T;
+  refreshForRelatedEvent?: (current: T, event: ChargingRealtimeEvent) => boolean;
 };
 const sessionEvents = new Set(["SessionStarted", "SessionMeasured", "SessionStatusChanged", "SessionCompleted", "SessionVehicleChanged"]);
 
@@ -35,6 +36,14 @@ function updateFailure(diagnostics: ChargingDiagnostics | null | undefined, comm
 }
 
 export const chargingLivePolicy: LivePolicy<StationCharging> = {
+  refreshForRelatedEvent(current, event) {
+    if (!current.canConnect) return false;
+    // Ownership events are owner-scoped by the API. A request on another device
+    // may create/remove a blocker; its session data must never be merged here.
+    if (event.eventType === "OwnershipChanged") return true;
+    return current.blockingConnection?.stationId.toLowerCase() === event.stationId.toLowerCase()
+      && ["SessionStarted", "SessionCompleted", "StationRemoved"].includes(event.eventType);
+  },
   event(current, event) {
     const number = current.connector?.number;
     const refreshUrl = `/api/driver/stations/${current.station.id}/charging${number ? `?connector=${number}` : ""}`;

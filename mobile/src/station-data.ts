@@ -2,9 +2,9 @@ import type { DriverChargingSession, Language, Station, StationCharging } from "
 import { directionsUrl, type MapProvider } from "../../shared/map-directions";
 
 export const stationStates: Record<Station["status"], [string, string, string]> = {
-  Available: ["E lirë", "Available", "#287d57"], Occupied: ["E zënë", "Occupied", "#946017"],
-  Charging: ["Në karikim", "Charging", "#355d7d"], OutOfService: ["Jashtë funksionit", "Out of service", "#973a2e"],
-  Maintenance: ["Në mirëmbajtje", "Maintenance", "#536b5e"], Unknown: ["Në pritje të statusit", "Awaiting status", "#536b5e"],
+  Available: ["E lirë", "Available", "#008443"], Occupied: ["E zënë", "Occupied", "#b85c00"],
+  Charging: ["Në karikim", "Charging", "#1769e0"], OutOfService: ["Jashtë funksionit", "Out of service", "#d92d35"],
+  Maintenance: ["Në mirëmbajtje", "Maintenance", "#8644c5"], Unknown: ["Në pritje të statusit", "Awaiting status", "#68756e"],
 };
 export function stationState(status: string, language: Language) {
   const item = stationStates[status as Station["status"]] ?? stationStates.Unknown;

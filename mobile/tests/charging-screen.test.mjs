@@ -74,3 +74,52 @@ test("charging card receives fresh time, polling failures and recovery; another 
   snapshot.inUse = true; await app.refresh();
   assert.equal(card(), undefined);
 });
+
+const blocker = { stationId: "24eedf70-4774-4b4d-808e-8f91dbbc13ce", stationName: "Previous charger", connectorId: 1, state: "Waiting", expiresAt: "2099-01-01T00:00:00Z" };
+const available = { station, canConnect: true, inUse: false, session: null, connectionRequest: null, deviceConnected: true };
+test("waiting and disconnected-session conflicts lead to the actual charger without starting or stopping it", async () => {
+  for (const state of ["Waiting", "Linked"]) {
+    const opened = [], calls = [];
+    const app = screen(async (path, token, method) => { calls.push(method); return { ...available, blockingConnection: { ...blocker, state } }; },
+      { onOpenConnection: (id, connector) => opened.push([id, connector]) });
+    app.render(); await app.refresh();
+    const tree = app.render();
+    assert.match(JSON.stringify(tree), /Previous charger/);
+    assert.equal(nodes(tree, n => n.type === "Button" && /Prepare|Cancel|Stop/.test(n.props.title)).length, 0);
+    nodes(tree, n => n.type === "Button" && n.props.title === (state === "Waiting" ? "Open waiting request" : "Open existing session"))[0].props.onPress();
+    assert.deepEqual(opened, [[blocker.stationId, 1]]);
+    assert.deepEqual(calls, ["GET"]);
+    if (state === "Linked") assert.match(JSON.stringify(tree), /confirmation|station operator/);
+  }
+});
+
+test("a conflict appearing between polls refreshes its recovery target instead of repeating the failed connection", async () => {
+  let conflict = false;
+  const calls = [];
+  const app = screen(async (path, token, method) => {
+    calls.push(method);
+    if (method === "POST") { conflict = true; throw new Error("driver_already_connected"); }
+    return { ...available, blockingConnection: conflict ? blocker : null };
+  }, { onOpenConnection() {} });
+  app.render(); await app.refresh();
+  nodes(app.render(), n => n.type === "Button" && n.props.title === "Prepare charger connection")[0].props.onPress();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(calls, ["GET", "POST", "GET"]);
+  assert.ok(nodes(app.render(), n => n.type === "Button" && n.props.title === "Open waiting request").length);
+  assert.match(JSON.stringify(app.render()), /existing connection/);
+});
+
+test("only waiting expiry releases the navigation blocker; linked sessions survive its old expiry", async t => {
+  const time = Date.parse("2026-10-18T12:00:00Z");
+  t.mock.timers.enable({ apis: ["Date"], now: time });
+  let current = { ...blocker, expiresAt: new Date(time + 1000).toISOString() };
+  const app = screen(async () => ({ ...available, blockingConnection: current }), { onOpenConnection() {} });
+  app.render(); await app.refresh();
+  assert.ok(nodes(app.render(), n => n.type === "Button" && n.props.title === "Open waiting request").length);
+  t.mock.timers.tick(1000); await app.tick();
+  assert.ok(nodes(app.render(), n => n.type === "Button" && n.props.title === "Prepare charger connection").length);
+  current = { ...current, state: "Linked" }; await app.refresh();
+  assert.ok(nodes(app.render(), n => n.type === "Button" && n.props.title === "Open existing session").length);
+  current = null; await app.refresh();
+  assert.ok(nodes(app.render(), n => n.type === "Button" && n.props.title === "Prepare charger connection").length);
+});

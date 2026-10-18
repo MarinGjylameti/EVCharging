@@ -107,8 +107,11 @@ export function useLiveSnapshot<T>(initial: T, url: string, stationId?: string, 
             // Empty/legacy hints mean "resync". Only ignore an explicit other point.
             if (hint && typeof hint === "object" && "stationId" in hint
               && typeof hint.stationId === "string" && hint.stationId.length > 0
-              && hint.stationId.toLowerCase() !== stationId.toLowerCase()) return;
-          } catch { /* Malformed hints still trigger an authorized snapshot. */ }
+              && hint.stationId.toLowerCase() !== stationId.toLowerCase()) {
+              if (policy?.refreshForRelatedEvent?.(current.current, hint as ChargingRealtimeEvent)) schedule(url);
+              return;
+            }
+          } catch { schedule(url); return; }
         }
         try {
           if (policy && hint && typeof hint === "object" && "eventType" in hint) {

@@ -2,6 +2,14 @@ namespace EVCharging.Application.Charging;
 
 public sealed record ChargingConnectionDto(Guid Id, string State, DateTimeOffset ExpiresAt);
 
+public sealed record BlockingChargingConnection(
+    Guid StationId,
+    string StationName,
+    int ConnectorId,
+    string State,
+    DateTimeOffset ExpiresAt
+);
+
 public sealed record DriverStationCharging(
     DriverStationDto Station,
     bool CanConnect,
@@ -11,7 +19,8 @@ public sealed record DriverStationCharging(
     DriverChargingSession? Session,
     DriverConnectorState? Connector = null,
     ChargingDiagnostics? Diagnostics = null,
-    string? DriverAccessMode = null
+    string? DriverAccessMode = null,
+    BlockingChargingConnection? BlockingConnection = null
 );
 
 public interface IDriverCharging
