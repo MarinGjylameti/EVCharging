@@ -6,10 +6,44 @@ An electric vehicle charging platform with a web application, backend API, and m
 - `web/` — Next.js web application.
 - `mobile/` — React Native / Expo mobile application.
 
+### Authentication limits and partial mobile loading
+
+Authentication uses two fixed one-minute limits per API instance. Login and
+registration share 15 attempts per normalized email, across web/native clients
+and IP addresses. Password changes use a separate quota for the authenticated
+account. The connection-IP ceiling is 300 requests, allowing independent users
+behind the web server's shared egress IP. Configure these with
+`EVCHARGING_AuthLimits__AccountAttemptsPerMinute` (1–100) and
+`EVCHARGING_AuthLimits__IpRequestsPerMinute` (at least the account limit, up to
+10,000); see `backend/.env.example`. Invalid settings fail startup.
+
+Caller-supplied `Forwarded` and `X-Forwarded-For` headers are not trusted.
+Rejected requests receive HTTP 429, `rate_limited`, a trace ID and `Retry-After`.
+Logout remains available to revoke a session even after a quota is exhausted.
+Counters are in memory and reset on restart; multiple API replicas have separate
+quotas. A shared limiter would be needed to enforce one deployment-wide quota.
+
+After validating the signed-in driver, mobile loads stations,
+notifications and charging sessions independently. History has its own paged
+loader while its screen is open. A slow or failed section
+does not hold up ready sections. A failed refresh retains that account's last
+data with a warning/retry; initial failure does not appear as an empty list.
+Stale station data is marked, and stale charging sessions cannot produce an
+active-session shortcut. Logout/account changes clear the in-memory cache;
+cancelled or previous-account responses cannot replace current data.
+
+Web uses Next.js 15.5.28 with sharp 0.35.5 for the
+[October security release](https://nextjs.org/blog/nextjs-security-update-october-14-2026).
+The scoped `next.postcss` override selects PostCSS 8.5.30, with patched nanoid
+and source-map-js in the lockfile, including the
+[PostCSS source-map fix](https://github.com/postcss/postcss/security/advisories/GHSA-fxqj-rqcc-2cmp).
+Keep the override until Next's dependency no longer needs it, and rerun
+`npm audit`, the web tests, typecheck and production build when updating it.
+
 ### Preview on a physical phone
 
 The project now uses Expo SDK 57, matching the reported iPhone's Expo Go version.
-The user confirmed that it opens on that iPhone. Full TypeScript, 82 local tests
+The user confirmed that it opens on that iPhone. Full TypeScript, 115 local tests
 and Hermes exports for iOS/Android pass on SDK 57. Exports are JavaScript/native
 bytecode bundles, not signed APK/IPA files or complete physical-device tests.
 
@@ -41,8 +75,12 @@ APK delivery is deferred while physical testing continues through Expo Go on iOS
 All mobile changes still apply to both iOS and Android and are checked with both
 platform exports. The last EAS attempt created the project and Android keystore,
 but uploading stopped because the archive staging directory was inside the source
-repository (`EINVAL`). The packaging directory needs correcting before another
-APK attempt; no signed APK has been produced.
+repository (`EINVAL`). The workflow now passes the system temporary directory
+only to EAS and keeps compiler temporary files inside the project. Set
+`EVCHARGING_EAS_TEMP_DIR` to an existing external directory if the system temp
+location is unsuitable. It resolves junctions/symlinks and rejects paths inside
+the repository before any build/install/write. The cloud build has not been
+rerun; no signed APK is claimed.
 
 The existing workflow, retained for later use, is run from `mobile/`:
 
@@ -78,7 +116,38 @@ the API, but no Expo Go, Metro tunnel or running laptop. See the
 
 `npm.cmd run build:apk -- --plan` prints the workflow without changes. No store
 submission, commit or push is performed. Future cloud steps require a terminal
-with npm/Expo connectivity after the packaging issue above is fixed.
+with npm/Expo connectivity and the project's signing credentials.
+
+### Complete driver history and mobile CI
+
+Web and iOS/Android history screens use `GET /api/v1/driver/history/search`.
+Filtering and totals cover all of the authenticated driver's eligible history,
+including archived stations. The server applies the test-mode visibility rule,
+station, energy, currency and completion-date filters before paging. Page size
+defaults to 8 (maximum 100); sorting uses completion time and ID for stable ties.
+Costs remain separate for each currency. Summary, chart and list share one
+repeatable-read PostgreSQL snapshot within a request.
+
+Parameters are `period=7d|30d|6m|custom`, `from`, `until`, `stationId`,
+`energy=all|small|medium|large`, `currency`, `page`, `pageSize` and optional
+`bucket` (the selected chart bucket's start date). Dates are inclusive calendar
+days in Europe/Tirane, including DST. Presets end at the latest completion;
+custom dates can reach older history. Charts use bounded SQL aggregates, with
+at most 62 buckets even for long ranges. The original `/driver/history` array
+remains for older clients and the web map's explicitly labelled recent-session
+preview; it is not the source of full-history totals.
+
+Changing filters/pages cancels the old request and hides its results immediately.
+A failed refresh of the same query retains its previous result with a warning
+and retry. Account changes discard previous-account data. Mobile requests history
+only while that screen is mounted and pauses reads in the background.
+
+GitHub Actions now verifies mobile in a separate job: locked `npm ci`, TypeScript,
+unit/component tests and Expo exports for both iOS and Android. Platform bundles
+are retained for seven days. These are Hermes bundles, not signed app packages;
+the workflow does not submit to stores. CI itself runs only after the workflow is
+published. Production preflight still requires the configured HTTPS API, real
+privacy/deletion pages, Firebase for Android push and Apple signing/APNs for iOS.
 
 ### Station map, navigation and notification dates
 
@@ -300,6 +369,8 @@ charger**, plus an allowed-card list whose charges have no personal Driver owner
 It is not a general multi-customer RFID registry. Do not change assignments during
 a charge; past history retains its original owner. Confirm this operational model
 with the client before treating it as a shared public charging network.
+The decision about a different physical-charger ownership model is deferred;
+the October 21 review retains this behavior until that model is defined.
 
 A QR printed on a charger should identify only the station and connector. The
 authenticated app already identifies the person; scanning a public label must not

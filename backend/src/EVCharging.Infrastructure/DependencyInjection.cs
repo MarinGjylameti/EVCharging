@@ -79,6 +79,7 @@ public static class DependencyInjection
         services.AddScoped<OperationsNotifications>();
         services.AddScoped<IOperationsManagement, OperationsManagementService>();
         services.AddScoped<IDriverQueries, DriverQueries>();
+        services.AddScoped<IDriverHistoryQueries, DriverHistoryQueries>();
         services.AddScoped<IDriverCharging, DriverChargingService>();
         services.AddScoped<IChargerEventReceiver, ChargerEventReceiver>();
         services.AddScoped<StationProjection>();

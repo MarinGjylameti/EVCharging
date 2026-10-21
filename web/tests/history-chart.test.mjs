@@ -3,19 +3,25 @@ import assert from "node:assert/strict";
 import { loadTypescript } from "./helpers/load-typescript.mjs";
 import React, { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { historyPageFixture } from "../../tests/helpers/history-page.mjs";
 
 function compile(path, dependencies = {}) {
   return loadTypescript(new URL(path, import.meta.url), dependencies);
 }
 
 const sharedData = compile("../../shared/history.ts");
+const queryData = compile("../../shared/history-query.ts");
 const data = compile("../src/features/driver/history-chart-data.ts", { "../../../../shared/history": sharedData });
 const { HistoryChart } = compile("../src/features/driver/history-chart.tsx", { "./history-chart-data": data });
-const { HistoryView } = compile("../src/features/driver/history-view.tsx", { "./history-chart-data": data, "./history-chart": { HistoryChart }, "next/link": { default: ({ children, ...props }) => createElement("a", props, children) } });
+const { HistoryView } = compile("../src/features/driver/history-view.tsx", { "../../../../shared/history-query": queryData, "./use-history-page": { useHistoryPage: initial => ({ data: initial }) }, "./history-chart-data": data, "./history-chart": { HistoryChart }, "next/link": { default: ({ children, ...props }) => createElement("a", props, children) } });
 const { buildHistoryMonths, buildHistoryBuckets, historyRange, historyDay, filterHistory, historyPage, historyScale, summarizeHistory, defaultHistoryFilters } = data;
 const charge = (endedAt, energyKWh, totalCost, currency = "EUR", extra = {}) => ({
   id: endedAt + currency, startedAt: endedAt, endedAt, energyKWh, totalCost, currency,
   stationId: "station-1", stationCode: "CP-001", stationName: "Central", city: "Tirana", unitPriceSnapshot: .35, isDemo: false, ...extra,
+});
+test("multi-month server buckets expose the full covered range", () => {
+  const html = renderToStaticMarkup(createElement(HistoryChart, { buckets: [{ key: "2020-01-01", date: "2020-01-01T12:00:00Z", from: "2020-01-01", until: "2020-03-31", charges: 105, energyKWh: 100, costs: { EUR: 30 } }], granularity: "month", language: "en", metric: "energy", currency: "EUR", selectedKey: "", onSelect() {}, onMetricChange() {} }));
+  assert.match(html, /January 2020 – March 2020/);
 });
 function chartProps(history, overrides = {}) {
   const filters = { ...defaultHistoryFilters, period: "6m" };
@@ -34,14 +40,16 @@ function mountView(history, language = "en") {
   const states = [];
   let cursor = 0;
   const { HistoryView: View } = compile("../src/features/driver/history-view.tsx", {
+    "../../../../shared/history-query": queryData,
+    "./use-history-page": { useHistoryPage: (_initial, filters, page, bucket) => ({ data: historyPageFixture(history, data, filters, page, bucket) }) },
     "./history-chart-data": data, "./history-chart": { HistoryChart },
     "next/link": { default: ({ children, ...props }) => createElement("a", props, children) },
-    react: { ...React, useMemo: fn => fn(), useState(initial) {
+    react: { ...React, useRef: value => ({ current: value }), useMemo: fn => fn(), useState(initial) {
       const index = cursor++; if (!(index in states)) states[index] = initial;
       return [states[index], next => { states[index] = typeof next === "function" ? next(states[index]) : next; }];
     } },
   });
-  return () => { cursor = 0; return View({ history, language }); };
+  return () => { cursor = 0; return View({ initial: historyPageFixture(history, data), language }); };
 }
 const rows = tree => all(tree, node => node.props?.className === "history-row");
 const button = (tree, text) => find(tree, node => node.type === "button" && node.props.children === text);
@@ -88,7 +96,7 @@ test("empty or invalid history does not create fabricated activity", () => {
   assert.deepEqual(buildHistoryMonths([]), []);
   assert.deepEqual(buildHistoryMonths([charge("bad-date", 1, 2)]), []);
   assert.equal(historyRange([], defaultHistoryFilters), null);
-  const html = renderToStaticMarkup(createElement(HistoryView, { history: [], language: "sq" }));
+  const html = renderToStaticMarkup(createElement(HistoryView, { initial: historyPageFixture([], data), language: "sq" }));
   assert.match(html, /Ende asnjë karikim/);
   assert.doesNotMatch(html, /class="history-column"|class="history-detail"/);
 });
@@ -238,7 +246,7 @@ test("chart metrics, selection toggle and arrow/Home/End navigation work without
 
 test("Albanian labels and zero-valued completed charges stay visible", () => {
   assert.equal(data.historyDateLabel("2026-10-07", "sq"), "7 tetor 2026");
-  const html = renderToStaticMarkup(createElement(HistoryView, { history: [charge("2026-10-07T12:00:00Z", 0, 0)], language: "sq" }));
+  const html = renderToStaticMarkup(createElement(HistoryView, { initial: historyPageFixture([charge("2026-10-07T12:00:00Z", 0, 0)], data), language: "sq" }));
   assert.match(html, /7 tetor 2026/); assert.match(html, /class="history-row"/);
   assert.match(html, /height:0%/); assert.doesNotMatch(html, /October|NaN|Infinity/);
 });

@@ -52,8 +52,6 @@ jobs:
       - name: Web integration tests and coverage
         working-directory: web
         run: npm run test:coverage
-      - name: Mobile data, lifecycle and API unit tests
-        run: node --test mobile/tests/*.test.mjs
       - name: Web types and production build
         working-directory: web
         run: |
@@ -67,3 +65,33 @@ jobs:
           name: test-reports
           path: .local/coverage/
           retention-days: 14
+  mobile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: '1'
+      EXPO_NO_TELEMETRY: '1'
+      EXPO_OFFLINE: '1'
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Install locked mobile dependencies
+        run: npm ci
+      - name: Mobile TypeScript
+        run: npm run typecheck
+      - name: Mobile data, lifecycle and component tests
+        run: npm test
+      - name: Export iOS and Android bundles
+        run: npm run export -- --output-dir ../.local/ci-mobile-export
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile-platform-bundles
+          path: .local/ci-mobile-export/
+          retention-days: 7

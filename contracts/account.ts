@@ -30,6 +30,13 @@ export type ChargingHistory = {
   unitPriceSnapshot: number; totalCost: number; currency: string;
   isDemo: boolean; stationId: string; stationCode: string; stationName: string; city: string;
 };
+export type DriverHistoryPage = {
+  items: ChargingHistory[]; total: number; page: number; pageSize: number; pages: number; offset: number;
+  bounds: { from: string; until: string } | null; range: { from: string; until: string } | null;
+  summary: { charges: number; energyKWh: number; costs: Record<string, number> };
+  chart: { granularity: "day" | "week" | "month"; buckets: { key: string; date: string; from: string; until: string; charges: number; energyKWh: number; costs: Record<string, number> }[] };
+  stations: { stationId: string; stationName: string; stationCode: string }[]; currencies: string[]; hasDemo: boolean;
+};
 export type DriverChargingSession = {
   id: string; stationId: string; stationName: string; stationCode: string;
   connectorId: number; status: string; energyKWh: number | null; powerKW: number | null;

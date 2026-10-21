@@ -1,36 +1,31 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
-import type { ChargingHistory, Language } from "../../../../contracts/account";
+import type { DriverHistoryPage, Language } from "../../../../contracts/account";
+import { emptyHistoryPage } from "../../../../shared/history-query";
+import { useHistoryPage } from "./use-history-page";
 import { HistoryChart } from "./history-chart";
 import {
-  buildHistoryBuckets, defaultHistoryFilters, filterHistory, historyBounds, historyDateLabel,
-  historyDay, historyPage, historyRange, summarizeHistory, type HistoryFilters, type HistoryMetric, type HistoryPeriod,
+  defaultHistoryFilters, historyDateLabel, historyDay, historyRange, type HistoryFilters, type HistoryMetric, type HistoryPeriod,
 } from "./history-chart-data";
 
-export function HistoryView({ history, language }: { history: ChargingHistory[]; language: Language }) {
+export function HistoryView({ initial, language }: { initial: DriverHistoryPage; language: Language }) {
   const sq = language === "sq";
   const [filters, setFilters] = useState<HistoryFilters>(defaultHistoryFilters);
   const [metric, setMetric] = useState<HistoryMetric>("energy");
   const [selectedKey, setSelectedKey] = useState("");
   const [pageNumber, setPageNumber] = useState(1);
   const [selectedId, setSelectedId] = useState("");
-  const bounds = useMemo(() => historyBounds(history), [history]);
-  const range = useMemo(() => historyRange(history, filters), [history, filters]);
-  const filtered = useMemo(() => filterHistory(history, filters, range), [history, filters, range]);
-  const chart = useMemo(() => range ? buildHistoryBuckets(filtered, range, filters.period === "6m") : { buckets: [], granularity: "day" as const }, [filtered, range, filters.period]);
+  const validRange = filters.period !== "custom" || historyRange([], filters) !== null;
+  const result = useHistoryPage(initial, filters, pageNumber, selectedKey);
+  const metadata = useRef(initial);
+  if (result.data) metadata.current = result.data;
+  const { bounds, stations, currencies } = metadata.current;
+  const page = result.data ?? emptyHistoryPage();
+  const { range, chart, summary } = page;
   const selectedBucket = chart.buckets.find(item => item.key === selectedKey);
-  const matching = selectedBucket ? filtered.filter(item => {
-    const day = historyDay(item.endedAt)!;
-    return day >= selectedBucket.from && day <= selectedBucket.until;
-  }) : filtered;
-  const summary = summarizeHistory(matching);
-  const page = historyPage(matching, pageNumber);
   const selected = page.items.find(item => item.id === selectedId) ?? page.items[0];
-  const stations = useMemo(() => [...new Map(history.map(item => [item.stationId, item])).values()]
-    .sort((a, b) => a.stationName.localeCompare(b.stationName)), [history]);
-  const currencies = useMemo(() => [...new Set(history.map(item => item.currency))].sort(), [history]);
   const currency = filters.currency || (currencies.includes("EUR") ? "EUR" : currencies[0] ?? "EUR");
   const number = (value: number, digits = 1) => new Intl.NumberFormat(sq ? "sq-AL" : "en-GB", { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value);
   const money = (value: number, code: string) => `${number(value, 2)} ${code}`;
@@ -68,12 +63,14 @@ export function HistoryView({ history, language }: { history: ChargingHistory[];
   const reset = () => { changeFilters(defaultHistoryFilters); setMetric("energy"); };
 
   return <div className="driver-content driver-history">
-    {history.some(item => item.isDemo) && <div className="demo-banner" role="note"><span aria-hidden="true">✦</span>
+    {page.hasDemo && <div className="demo-banner" role="note"><span aria-hidden="true">✦</span>
       {sq ? "Historik demo: këto karikime janë krijuar vetëm për testimin e pamjes." : "Demo history: these charges exist only for the preview."}</div>}
     <div className="driver-welcome"><div><span className="driver-eyebrow">{sq ? "SEANCAT E MIA" : "MY SESSIONS"}</span>
       <h1>{sq ? "Historiku i karikimeve" : "Charging history"}</h1>
       <p>{sq ? "Shiko si ke karikuar dhe gjej seancat që të interesojnë." : "See your charging activity and find the sessions you need."}</p></div>
       <Link href="/driver" className="driver-history-link">← {sq ? "Kthehu te harta" : "Back to map"}</Link></div>
+    {result.pending && <p role="status">{sq ? "Duke ngarkuar historikun…" : "Loading history…"}</p>}
+    {result.error && <p role="alert">{sq ? "Historiku nuk u rifreskua. Kontrollo datat dhe riprovo." : "History could not refresh. Check the dates and retry."} {result.data && (sq ? "Po shfaqen të dhënat e fundit." : "Showing the last loaded data.")} <button type="button" onClick={() => void result.reload()}>{sq ? "Riprovo" : "Retry"}</button></p>}
     {bounds ? <>
       <section className="history-filters" aria-labelledby="history-filters-title">
         <div className="history-filter-heading"><h2 id="history-filters-title">{sq ? "Filtro historikun" : "Filter your history"}</h2>
@@ -85,8 +82,8 @@ export function HistoryView({ history, language }: { history: ChargingHistory[];
         </div>
         <div className="history-filter-fields">
           {filters.period === "custom" && <>
-            <label>{sq ? "Nga data" : "From date"}<input type="date" value={filters.from} max={bounds.until} aria-invalid={!range} aria-describedby={!range ? "history-range-error" : undefined} onChange={event => changeFilters({ ...filters, from: event.target.value })} /></label>
-            <label>{sq ? "Deri më" : "Until date"}<input type="date" value={filters.until} max={bounds.until} aria-invalid={!range} aria-describedby={!range ? "history-range-error" : undefined} onChange={event => changeFilters({ ...filters, until: event.target.value })} /></label>
+            <label>{sq ? "Nga data" : "From date"}<input type="date" value={filters.from} max={bounds.until} aria-invalid={!validRange} aria-describedby={!validRange ? "history-range-error" : undefined} onChange={event => changeFilters({ ...filters, from: event.target.value })} /></label>
+            <label>{sq ? "Deri më" : "Until date"}<input type="date" value={filters.until} max={bounds.until} aria-invalid={!validRange} aria-describedby={!validRange ? "history-range-error" : undefined} onChange={event => changeFilters({ ...filters, until: event.target.value })} /></label>
           </>}
           <label>{sq ? "Pika e karikimit" : "Charging station"}<select value={filters.stationId} onChange={event => changeFilters({ ...filters, stationId: event.target.value })}>
             <option value="">{sq ? "Të gjitha pikat" : "All stations"}</option>{stations.map(item => <option key={item.stationId} value={item.stationId}>{item.stationName} · {item.stationCode}</option>)}
@@ -98,9 +95,10 @@ export function HistoryView({ history, language }: { history: ChargingHistory[];
             <option value="">{sq ? "Të gjitha monedhat" : "All currencies"}</option>{currencies.map(code => <option key={code}>{code}</option>)}
           </select></label>}
         </div>
-        {!range && <p id="history-range-error" className="history-filter-error" role="alert">{sq ? "Plotëso të dyja datat. Data e fundit duhet të jetë pas ose njësoj me datën e parë." : "Enter both dates. The end date must be on or after the start date."}</p>}
-        <p className="history-filter-note">{sq ? `Filtrat vlejnë për grafikun, përmbledhjen dhe listën. Bazuar në ${history.length} seancat e fundit të ngarkuara, sipas përfundimit në orën e Tiranës.` : `Filters apply to the chart, summary and list. Based on the ${history.length} latest loaded sessions, by completion date in Tirana time.`}</p>
+        {!validRange && <p id="history-range-error" className="history-filter-error" role="alert">{sq ? "Plotëso të dyja datat. Data e fundit duhet të jetë pas ose njësoj me datën e parë." : "Enter both dates. The end date must be on or after the start date."}</p>}
+        <p className="history-filter-note">{sq ? "Filtrat përfshijnë të gjithë historikun tënd, sipas përfundimit në orën e Tiranës." : "Filters include your full history, by completion date in Tirana time."}</p>
       </section>
+      {result.data && <>
       <div className="history-scope" aria-live="polite"><span>{sq ? "Përmbledhja" : "Summary"}{scope && ` · ${scope}`}</span>
         {selectedBucket && <button type="button" className="history-text-button" onClick={() => selectBucket("")}>{sq ? "Hiq zgjedhjen ×" : "Clear selection ×"}</button>}</div>
       <div className="driver-kpis history-kpis">
@@ -113,7 +111,7 @@ export function HistoryView({ history, language }: { history: ChargingHistory[];
         <section className="history-list" aria-labelledby="history-list-title">
           <div className="history-list-head"><span className="driver-eyebrow">{sq ? "SEANCAT SIPAS FILTRAVE" : "FILTERED SESSIONS"}</span>
             <h2 id="history-list-title">{sq ? "Karikimet e përfunduara" : "Completed charges"}</h2>
-            <p className="history-result-count" aria-live="polite">{matching.length ? `${page.offset + 1}–${page.offset + page.items.length} ${sq ? "nga" : "of"} ${matching.length} ${sq ? "seanca" : "sessions"}` : (sq ? "0 seanca" : "0 sessions")}</p>
+            <p className="history-result-count" aria-live="polite">{page.total ? `${page.offset + 1}–${page.offset + page.items.length} ${sq ? "nga" : "of"} ${page.total} ${sq ? "seanca" : "sessions"}` : (sq ? "0 seanca" : "0 sessions")}</p>
           </div>
           {page.items.map(item => <button key={item.id} type="button" className="history-row" aria-pressed={selected?.id === item.id} onClick={() => setSelectedId(item.id)}>
             <span className="history-row-icon" aria-hidden="true">ϟ</span>
@@ -121,7 +119,7 @@ export function HistoryView({ history, language }: { history: ChargingHistory[];
             <span className="history-row-values"><strong>{number(item.energyKWh)} kWh</strong><small>{money(item.totalCost, item.currency)}</small></span>
             <span className="history-row-chevron" aria-hidden="true">›</span>
           </button>)}
-          {!matching.length && <div className="history-no-results"><h3>{sq ? "Asnjë seancë për këta filtra" : "No matching sessions"}</h3><p>{sq ? "Zgjidh një ditë tjetër ose zgjero filtrat." : "Choose another day or broaden your filters."}</p><button type="button" className="history-text-button" onClick={selectedBucket ? () => selectBucket("") : reset}>{selectedBucket ? (sq ? "Shfaq gjithë periudhën" : "Show the whole period") : (sq ? "Rivendos filtrat" : "Reset filters")}</button></div>}
+          {!page.total && <div className="history-no-results"><h3>{sq ? "Asnjë seancë për këta filtra" : "No matching sessions"}</h3><p>{sq ? "Zgjidh një ditë tjetër ose zgjero filtrat." : "Choose another day or broaden your filters."}</p><button type="button" className="history-text-button" onClick={selectedBucket ? () => selectBucket("") : reset}>{selectedBucket ? (sq ? "Shfaq gjithë periudhën" : "Show the whole period") : (sq ? "Rivendos filtrat" : "Reset filters")}</button></div>}
           {page.pages > 1 && <nav className="history-pagination" aria-label={sq ? "Faqet e seancave" : "Session pages"}>
             <button type="button" disabled={page.page === 1} onClick={() => changePage(page.page - 1)} aria-label={sq ? "Faqja e mëparshme" : "Previous page"}>← {sq ? "Para" : "Previous"}</button>
             <span aria-live="polite">{sq ? "Faqja" : "Page"} {page.page} / {page.pages}</span>
@@ -140,7 +138,7 @@ export function HistoryView({ history, language }: { history: ChargingHistory[];
           <div className="history-total"><span>{sq ? "Kosto e llogaritur" : "Calculated cost"}</span><strong>{money(selected.totalCost, selected.currency)}</strong></div>
           <p className="history-note">{sq ? "Kjo shumë është informuese. Nuk është kryer pagesë." : "This amount is informational. No payment was made."}</p>
         </aside>}
-      </div>
-    </> : <section className="empty-state"><h2>{sq ? "Ende asnjë karikim" : "No charges yet"}</h2><p>{sq ? "Kur një seancë të përfundojë, do ta shohësh këtu." : "Completed sessions will appear here."}</p></section>}
+      </div></>}
+    </> : !result.pending && !result.error && <section className="empty-state"><h2>{sq ? "Ende asnjë karikim" : "No charges yet"}</h2><p>{sq ? "Kur një seancë të përfundojë, do ta shohësh këtu." : "Completed sessions will appear here."}</p></section>}
   </div>;
 }

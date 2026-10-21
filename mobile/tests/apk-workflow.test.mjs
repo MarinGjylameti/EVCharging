@@ -10,13 +10,14 @@ const source = readFileSync(new URL("../scripts/build-apk.cjs", import.meta.url)
 const id = "11111111-2222-3333-4444-555555555555";
 const settings = JSON.parse(readFileSync(new URL("../eas.json", import.meta.url), "utf8"));
 
-function workflow({ linked = "", fail = "", returnedId = id, returnedSlug = "evcharging", plan = false } = {}) {
+function workflow({ linked = "", fail = "", returnedId = id, returnedSlug = "evcharging", plan = false, tempPath, realTempPath } = {}) {
   const commands = [], writes = [], errors = [], files = new Map();
-  const process = { argv: ["node", "build-apk.cjs", ...(plan ? ["--plan"] : [])], execPath: "node", env: { npm_execpath: "npm-cli.js" }, exitCode: undefined, exit: code => { throw { exit: code }; } };
+  const process = { argv: ["node", "build-apk.cjs", ...(plan ? ["--plan"] : [])], execPath: "node", env: { npm_execpath: "npm-cli.js", ...(tempPath ? { EVCHARGING_EAS_TEMP_DIR: tempPath } : {}) }, exitCode: undefined, exit: code => { throw { exit: code }; } };
   const dependencies = {
     "../config/project-link.cjs": { linkedProjectId: () => linked },
     "../config/build-environment.cjs": required("../config/build-environment.cjs"),
     "node:fs": {
+      realpathSync: path => path === tempPath && realTempPath ? realTempPath : path,
       existsSync: path => files.has(path),
       readFileSync: path => path.replaceAll("\\", "/").endsWith("expo/package.json") ? JSON.stringify({ version: "57.0.30" }) : path.endsWith("eas.json") ? JSON.stringify(settings) : files.get(path),
       mkdirSync: path => writes.push({ path, directory: true }),
@@ -57,6 +58,25 @@ test("APK creation saves only EAS's returned project ID and builds the internal 
   assert.equal(build.env.EAS_BUILD_PROFILE, "preview-ui");
   assert.equal(build.env.EXPO_PUBLIC_API_BASE_URL, settings.build["preview-ui"].env.EXPO_PUBLIC_API_BASE_URL);
   assert.ok(result.commands.at(-2).args.includes("export"));
+});
+
+test("EAS alone uses external staging, while compiler temporary files stay local", () => {
+  const tempPath = required("node:path").resolve("C:/external-eas-temp");
+  const result = workflow({ linked: id, tempPath });
+  assert.equal(result.exitCode, undefined, result.errors.join("\n"));
+  assert.equal(result.commands.at(-1).env.TEMP, tempPath);
+  assert.equal(result.commands.at(-1).env.TMPDIR, tempPath);
+  assert.notEqual(result.commands[0].env.TEMP, tempPath);
+});
+
+test("staging inside the repository or via a junction is rejected before any command/write", () => {
+  const repository = fileURLToPath(new URL("../../", import.meta.url));
+  const inside = required("node:path").resolve(repository, ".local/eas-temp");
+  for (const options of [{ tempPath: repository }, { tempPath: inside }, { tempPath: required("node:path").resolve("C:/external-eas-temp"), realTempPath: inside }]) {
+    const result = workflow(options);
+    assert.equal(result.exitCode, 1); assert.match(result.errors[0], /outside the repository/);
+    assert.equal(result.commands.length, 0); assert.equal(result.writes.length, 0);
+  }
 });
 
 test("APK workflow reuses the linked project without initialization or rewriting its ID", () => {

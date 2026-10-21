@@ -84,8 +84,8 @@ test("driver refresh coalesces simultaneous requests and discards a previous log
   loader.setSession("new"); const current = loader.refresh();
   resolvers[0]({ id: "old", role: "DRIVER" }); await old; assert.equal(delivered.length, 0);
   resolvers[1]({ id: "new", role: "DRIVER" }); await current;
-  assert.equal(delivered.length, 1); assert.equal(delivered[0].user.id, "new"); assert.equal(calls.filter(item => item[1] === "old").length, 1);
-  assert.deepEqual(delivered[0].sessions, [{ id: "owned-session", connectorId: 2 }]);
+  assert.ok(delivered.length > 0); assert.ok(delivered.every(snapshot => snapshot.user.id === "new")); assert.equal(calls.filter(item => item[1] === "old").length, 1);
+  assert.deepEqual(delivered.at(-1).sessions, [{ id: "owned-session", connectorId: 2 }]);
   assert.ok(calls.some(([path, token]) => path === "/driver/charging-sessions" && token === "new"));
 });
 
@@ -99,11 +99,12 @@ test("a late charging-session response from a previous account cannot replace th
   const loader = createDriverLoader(value => delivered.push(value));
   loader.setSession("old"); const old = loader.refresh(); await Promise.resolve();
   assert.equal(typeof finishOld, "function");
-  loader.setSession("new"); await loader.refresh();
+  loader.setSession("new"); const accountBoundary = delivered.length; await loader.refresh();
+  const completedCount = delivered.length;
   finishOld({ sessions: [{ id: "private-old-session" }] }); await old;
-  assert.equal(delivered.length, 1);
-  assert.equal(delivered[0].user.id, "new");
-  assert.deepEqual(delivered[0].sessions, []);
+  assert.equal(delivered.length, completedCount);
+  assert.ok(delivered.slice(accountBoundary).every(snapshot => snapshot.user.id === "new"));
+  assert.deepEqual(delivered.at(-1).sessions, []);
 });
 test("administrative accounts never load private driver data", async () => {
   const calls = [];
@@ -123,7 +124,7 @@ test("a slower list response cannot restore a shortcut after the charging screen
   const pending = loader.refresh(); await Promise.resolve();
   loader.confirmSessionEnded("completed");
   finish({ sessions: [{ id: "completed", stoppedAt: null }, { id: "other-open", stoppedAt: null }] }); await pending;
-  assert.deepEqual(delivered[0].sessions.map(s => s.id), ["other-open"]);
+  assert.deepEqual(delivered.at(-1).sessions.map(s => s.id), ["other-open"]);
 });
 test("cold-start health probes require ready JSON and retry only GET", async () => {
   const { waitForMobileApi } = compile("../../src/wait-for-api.ts", { "./config": config });

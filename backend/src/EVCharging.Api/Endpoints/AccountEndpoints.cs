@@ -10,17 +10,19 @@ public static class AccountEndpoints
 {
     public static void MapAccountEndpoints(this WebApplication app)
     {
-        var auth = app.MapGroup("/api/v1/auth").RequireRateLimiting("auth");
+        var auth = app.MapGroup("/api/v1/auth").AddEndpointFilter<AuthAttemptFilter>();
         auth.MapPost(
-            "/register",
-            async (RegisterRequest request, AccountService accounts, CancellationToken ct) =>
-                Results.Ok(await accounts.RegisterAsync(request, ct))
-        );
+                "/register",
+                async (RegisterRequest request, AccountService accounts, CancellationToken ct) =>
+                    Results.Ok(await accounts.RegisterAsync(request, ct))
+            )
+            .RequireRateLimiting("auth");
         auth.MapPost(
-            "/login",
-            async (LoginRequest request, AccountService accounts, CancellationToken ct) =>
-                Results.Ok(await accounts.LoginAsync(request, ct))
-        );
+                "/login",
+                async (LoginRequest request, AccountService accounts, CancellationToken ct) =>
+                    Results.Ok(await accounts.LoginAsync(request, ct))
+            )
+            .RequireRateLimiting("auth");
         auth.MapPost(
                 "/logout",
                 async (ClaimsPrincipal user, AccountService accounts, CancellationToken ct) =>
@@ -43,7 +45,8 @@ public static class AccountEndpoints
                     return Results.NoContent();
                 }
             )
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .RequireRateLimiting("auth");
 
         var me = app.MapGroup("/api/v1/me").RequireAuthorization();
         me.MapGet(

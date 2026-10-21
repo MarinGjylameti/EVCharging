@@ -1,5 +1,6 @@
-const { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } = require("node:fs");
-const { resolve, join } = require("node:path");
+const { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, realpathSync } = require("node:fs");
+const { resolve, join, relative, isAbsolute } = require("node:path");
+const { tmpdir } = require("node:os");
 const { spawnSync } = require("node:child_process");
 const { linkedProjectId } = require("../config/project-link.cjs");
 const { buildEnvironment } = require("../config/build-environment.cjs");
@@ -10,13 +11,14 @@ const tools = join(local, "mobile-tools");
 const temp = join(local, "mobile-build-tmp");
 const eas = join(tools, "node_modules/eas-cli/bin/run");
 const profile = "preview-ui";
+let easTemp;
 const args = process.argv.slice(2);
 if (args.length) {
   if (args.length !== 1 || args[0] !== "--plan") {
     console.error("Usage: npm run build:apk [-- --plan]");
     process.exit(1);
   }
-  console.log("Check SDK 57, TypeScript and mobile tests → install EAS CLI locally if needed → create/link the EVCharging Expo project → validate the UI-preview configuration → export Android → run the signed internal APK build. No store submission, commit or push. EAS supplies the real download link after success.");
+  console.log("Check SDK 57, TypeScript and mobile tests → install EAS CLI locally if needed → create/link the EVCharging Expo project → validate the UI-preview configuration → export Android → run the signed internal APK build. EAS stages its archive in the system temporary directory, outside the repository (override with EVCHARGING_EAS_TEMP_DIR). No store submission, commit or push. EAS supplies the real download link after success.");
   process.exit(0);
 }
 
@@ -26,12 +28,23 @@ function run(label, file, parameters, { cwd = root, env = {} } = {}) {
     cwd, stdio: "inherit",
     env: { ...process.env, EXPO_NO_TELEMETRY: "1",
       npm_config_cache: join(local, "npm-cache"), npm_config_audit: "false", npm_config_fund: "false",
-      TEMP: temp, TMP: temp, TMPDIR: temp, ...env },
+      TEMP: file === eas ? easTemp : temp, TMP: file === eas ? easTemp : temp,
+      TMPDIR: file === eas ? easTemp : temp, ...env },
   });
   if (result.error || result.status !== 0) throw new Error(`${label} failed. Stopping; no APK is being claimed. ${result.error?.message || "See the output above."}`);
 }
 
 try {
+  // EAS copies the Git source tree into its temporary directory. A destination
+  // inside that tree causes recursive copying / EINVAL, even when gitignored.
+  const repository = realpathSync(resolve(root, ".."));
+  const candidate = resolve(process.env.EVCHARGING_EAS_TEMP_DIR || tmpdir());
+  // Require an existing directory so junctions/symlinks can be resolved before writes.
+  const actual = realpathSync(candidate);
+  const child = relative(repository, actual);
+  if (!child || (!child.startsWith(".." + require("node:path").sep) && child !== ".." && !isAbsolute(child)))
+    throw new Error("EAS temporary directory must be outside the repository. Set EVCHARGING_EAS_TEMP_DIR to an existing external directory.");
+  easTemp = actual;
   const expo = JSON.parse(readFileSync(join(root, "node_modules/expo/package.json"), "utf8"));
   if (!expo.version.startsWith("57.")) throw new Error("Finish npm run upgrade:expo-go before building this APK.");
   mkdirSync(temp, { recursive: true });

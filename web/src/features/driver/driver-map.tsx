@@ -138,7 +138,7 @@ export function DriverMap({stations: initialStations, history: initialHistory, l
     <div className="driver-kpis">
       <article><span>{sq ? "PIKA NË HARTË" : "POINTS ON MAP"}</span><strong>{stations.length}</strong><small>{stationCities.length} {sq?"qytete":"cities"}</small></article>
       <article><span>{sq ? "TË SHËNUARA TË LIRA" : "MARKED AVAILABLE"}</span><strong className="green">{available}</strong><small>{sq ? "sipas gjendjes së ruajtur" : "from saved status"}</small></article>
-      <article><span>{sq ? "KARIKIMET E MIA" : "MY CHARGES"}</span><strong>{sessionCount}</strong><small>{totalEnergy.toFixed(1)} kWh {sq ? "gjithsej" : "total"}</small></article>
+      <article><span>{sq ? "SEANCAT E FUNDIT" : "RECENT SESSIONS"}</span><strong>{sessionCount}</strong><small>{totalEnergy.toFixed(1)} kWh · {sq ? "deri në 100 seancat e fundit" : "up to 100 latest sessions"}</small></article>
     </div>
     <section className="driver-map-section" aria-labelledby="map-title">
       <span className={`charging-live ${connected && !unavailable ? "is-live" : ""}`} role="status"><i aria-hidden="true" />{connected && !unavailable ? (sq ? "Përditësime aktive" : "Live updates") : (sq ? "Po rilidhet…" : "Reconnecting…")}</span>

@@ -24,7 +24,9 @@ export function HistoryChart({ buckets, granularity, language, metric, currency,
   const selected = buckets.find(item => item.key === selectedKey);
   const peak = buckets.reduce<HistoryBucket | undefined>((best, item) => item.charges > 0 && (!best || value(item) >= value(best)) ? item : best, undefined);
   const focus = selected ?? peak;
-  const label = (item: HistoryBucket, short = false) => granularity === "week"
+  const label = (item: HistoryBucket, short = false) => granularity === "month" && item.from.slice(0, 7) !== item.until.slice(0, 7)
+    ? `${historyDateLabel(item.from, language, "month", short)} – ${historyDateLabel(item.until, language, "month", short)}`
+    : granularity === "week"
     ? `${historyDateLabel(item.from, language, "day", short)} – ${historyDateLabel(item.until, language, "day", short)}`
     : historyDateLabel(item.from, language, granularity === "month" ? "month" : "day", short);
   const hasActivity = buckets.some(item => item.charges > 0);

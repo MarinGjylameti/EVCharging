@@ -50,6 +50,15 @@ public static class DriverEndpoints
         );
 
         driver.MapGet(
+            "/history/search",
+            async (
+                ClaimsPrincipal user,
+                IDriverHistoryQueries queries,
+                [AsParameters] DriverHistoryFilter filter,
+                CancellationToken ct
+            ) => Results.Ok(await queries.SearchAsync(user.UserId(), filter, ct))
+        );
+        driver.MapGet(
             "/history",
             async (ClaimsPrincipal user, IDriverQueries queries, CancellationToken ct) =>
                 Results.Ok(await queries.GetHistoryAsync(user.UserId(), ct))

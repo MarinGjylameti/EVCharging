@@ -4,7 +4,7 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import * as Notifications from "expo-notifications";
 import type { AuthResult, Language, User } from "../contracts/account";
 import { readSession, saveSession, clearSession, request, subscribeSessionExpiry } from "./src/api";
-import { createDriverLoader, type DriverData } from "./src/driver-data";
+import { createDriverLoader, emptyDriverData } from "./src/driver-data";
 import { useForegroundPoll } from "./src/use-foreground-poll";
 import { messages, errorText } from "./src/i18n";
 import { AuthScreen } from "./src/AuthScreen";
@@ -37,8 +37,8 @@ function AppContent() {
   const [warming, setWarming] = useState(false);
   const bootController = useRef<AbortController | null>(null);
   const [error, setError] = useState("");
-  const [data, setData] = useState<Omit<DriverData, "user">>({ notifications: [], stations: [], history: [], sessions: [] });
-  const [dataReady, setDataReady] = useState(false), [networkStale, setNetworkStale] = useState(false);
+  const [data, setData] = useState(emptyDriverData);
+  const [networkStale, setNetworkStale] = useState(false);
   const t = messages[language];
   const updateUser = useCallback((value: User) => {
     if (userRef.current?.id === value.id && userRef.current.version > value.version) return;
@@ -46,7 +46,7 @@ function AppContent() {
   }, []);
   const loaderRef = useRef<ReturnType<typeof createDriverLoader> | null>(null);
   if (!loaderRef.current) loaderRef.current = createDriverLoader(snapshot => {
-    updateUser(snapshot.user); setData(snapshot); setDataReady(true); setNetworkStale(false); setError("");
+    updateUser(snapshot.user); setData(snapshot); setLoading(false); setWarming(false); setNetworkStale(false); setError("");
   });
   const sessionEnded = useCallback((id: string) => {
     loaderRef.current!.confirmSessionEnded(id);
@@ -55,9 +55,9 @@ function AppContent() {
   const expire = useCallback(async (reason = "") => {
     mapSession.current = {};
     tokenRef.current = null; userRef.current = null; loaderRef.current!.setSession(null);
-    setToken(null); setUser(null); setExpiresAt(""); setData({ notifications: [], stations: [], history: [], sessions: [] });
+    setToken(null); setUser(null); setExpiresAt(""); setData(emptyDriverData());
     setTab("stations"); setStationId(null); setError(reason);
-    setDataReady(false); setNetworkStale(false);
+    setNetworkStale(false);
     await clearSession();
   }, []);
   const refresh = useCallback(async (signal?: AbortSignal) => {
@@ -67,6 +67,7 @@ function AppContent() {
       if (current !== tokenRef.current) return;
       setNetworkStale(true);
       if (failure instanceof Error && failure.message === "administratorAccount") { await expire("administratorAccount"); return; }
+      if (failure instanceof Error && failure.message === "session_expired") { await expire("session_expired"); return; }
       throw failure;
     }
   }, [expire]);
@@ -81,6 +82,8 @@ function AppContent() {
       loaderRef.current!.setSession(stored?.token ?? null);
       if (stored) {
         if (!await waitForMobileApi(controller.signal, () => setWarming(true))) throw new Error("service_unavailable");
+        // The first authenticated snapshot hides the startup overlay while
+        // independent sections continue to load.
         await refresh(controller.signal);
       }
     } catch (failure) { if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : "genericError"); }
@@ -131,27 +134,31 @@ function AppContent() {
     await saveSession({ token: auth.accessToken, expiresAt: auth.expiresAt });
     tokenRef.current = auth.accessToken; loaderRef.current!.setSession(auth.accessToken);
     setToken(auth.accessToken); setExpiresAt(auth.expiresAt); updateUser(auth.user); setError("");
-    setTab("stations"); setStationId(null); setData({ notifications: [], stations: [], history: [], sessions: [] });
-    setDataReady(false); setNetworkStale(false);
+    setTab("stations"); setStationId(null); setData(emptyDriverData());
+    setNetworkStale(false);
     void refresh().catch(failure => { if (auth.accessToken === tokenRef.current) setError(failure instanceof Error ? failure.message : "genericError"); });
   }
   if (loading) return <View style={[styles.content, { justifyContent: "center" }]}><Brand/><ActivityIndicator color={colors.green}/><Text accessibilityLiveRegion="polite" style={styles.body}>{warming ? t.warming : t.loading}</Text></View>;
   if (!user && token) return <Screen><Text style={styles.brand}>EVCharging</Text><Notice text={errorText(new Error(error), language)}/><Button title={t.retry} onPress={() => void boot()}/><Button title={t.logout} secondary onPress={() => void expire().catch(() => setError("genericError"))}/></Screen>;
   if (!user || !token) return <View style={{ flex: 1 }}>{error && <View style={{ paddingHorizontal: 20 }}><Notice text={errorText(new Error(error), language)}/></View>}<AuthScreen language={language} setLanguage={setLanguage} onAuthenticated={login}/></View>;
+  const section = !stationId && (tab === "stations" || tab === "notifications") ? data.sections[tab] : null;
+  const sectionError = section?.error ? errorText(new Error(section.error), language) : "";
+  const retry = () => void refresh().catch(failure => setError(failure instanceof Error ? failure.message : "genericError"));
   return <View style={{ flex: 1 }}>
     <View style={[styles.row, { paddingHorizontal: 20, paddingVertical: 10, flexWrap: "wrap", backgroundColor: colors.white }]}>
       <Brand/>
-      <Pressable accessibilityRole="button" onPress={() => { setStationId(null); setTab("notifications"); }} style={{ minHeight: 44, justifyContent: "center" }}><Text style={styles.label}>{t.notifications} · {data.notifications.length}</Text></Pressable>
+      <Pressable accessibilityRole="button" onPress={() => { setStationId(null); setTab("notifications"); }} style={{ minHeight: 44, justifyContent: "center" }}><Text style={styles.label}>{t.notifications} · {data.sections.notifications.loaded ? data.notifications.length : "—"}</Text></Pressable>
     </View>
     {error ? <View style={{ paddingHorizontal: 20 }}><Notice text={errorText(new Error(error), language)}/></View> : null}
-    {!dataReady && tab !== "profile" && tab !== "settings" ? <Screen language={language}><ActivityIndicator color={colors.green}/><Text style={styles.body}>{t.loading}</Text><Button title={t.retry} secondary onPress={() => void refresh().catch(failure => setError(failure instanceof Error ? failure.message : "genericError"))}/></Screen> :
+    {section?.loaded && sectionError ? <View style={{ paddingHorizontal: 20 }}><Notice text={`${sectionError} ${language === "sq" ? "Po shfaqen të dhënat e fundit të ngarkuara." : "Showing the last loaded data."}`}/><Button title={t.retry} secondary onPress={retry}/></View> : null}
+    {section && !section.loaded ? <Screen language={language}>{section.pending && <ActivityIndicator color={colors.green}/>}<Notice text={sectionError}/>{!sectionError && <Text style={styles.body}>{t.loading}</Text>}<Button title={t.retry} secondary onPress={retry}/></Screen> :
       stationId ? <StationChargingScreen key={`${token}:${stationId}:${chargingConnector}`} stationId={stationId} token={token} language={language} initialConnector={chargingConnector} onConnectorChange={setChargingConnector} onSessionEnded={sessionEnded} onOpenConnection={(id, connector) => { setChargingConnector(connector); setStationId(id); }} onBack={() => setStationId(null)} onOpenProfile={() => { setStationId(null); setTab("profile"); }}/> :
-      tab === "stations" ? <StationsScreen stations={data.stations} stale={networkStale} language={language} refresh={refresh} mapSession={mapSession.current} onSelect={id => { setChargingConnector(1); setStationId(id); }}/> :
-      tab === "history" ? <HistoryScreen history={data.history} language={language} refresh={refresh}/> :
+      tab === "stations" ? <StationsScreen stations={data.stations} stale={networkStale || !!data.sections.stations.error} language={language} refresh={refresh} mapSession={mapSession.current} onSelect={id => { setChargingConnector(1); setStationId(id); }}/> :
+      tab === "history" ? <HistoryScreen key={token} token={token} language={language}/> :
       tab === "profile" ? <Screen language={language}><View style={styles.row}><Text style={styles.title}>{t.overview}</Text><Button title={t.settings} secondary onPress={() => setTab("settings")}/></View><ProfileScreen key={user.id} user={user} token={token} onUpdate={updateUser} language={language}/></Screen> :
       tab === "settings" ? <SettingsScreen user={user} token={token} onUpdate={updateUser} onExpired={() => expire("passwordChanged")} onBack={() => setTab("profile")} refresh={refresh} onLogout={async () => { try { await request("/auth/logout", token, "POST"); } finally { await expire(); } }}/> :
       <NotificationsScreen notifications={data.notifications} language={language} refresh={refresh}/>}
-    <ActiveChargingShortcut sessions={data.sessions} language={language} currentStationId={stationId} currentConnector={chargingConnector} stale={networkStale}
+    <ActiveChargingShortcut sessions={data.sessions} language={language} currentStationId={stationId} currentConnector={chargingConnector} stale={networkStale || !data.sections.sessions.loaded || !!data.sections.sessions.error}
       onOpen={session => { setChargingConnector(session.connectorId); setStationId(session.stationId); setTab("stations"); }}/>
     <BottomNavigation active={tab === "settings" || tab === "notifications" ? "profile" : tab} language={language}
       onSelect={value => { setStationId(null); setTab(value); }}/>

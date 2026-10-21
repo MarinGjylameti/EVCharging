@@ -13,6 +13,16 @@
     "test:e2e": "node e2e/run.mjs",
     "test:e2e:smoke": "node e2e/run.mjs --smoke"
   },
-  "dependencies": { "next": "15.2.8", "react": "19.0.0", "react-dom": "19.0.0" },
-  "devDependencies": { "typescript": "5.9.3", "@types/node": "20.19.37", "@types/react": "19.2.14", "@types/react-dom": "19.2.3" }
+  "overrides": { "next": { "postcss": "8.5.30" } },
+  "dependencies": {
+    "next": "15.5.28",
+    "react": "19.0.0",
+    "react-dom": "19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "20.19.37",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "typescript": "5.9.3"
+  }
 }

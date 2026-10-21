@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { compile, hooks, jsx, nodes } from "./helpers/compile.mjs";
+import { historyPageFixture } from "../../tests/helpers/history-page.mjs";
 const tick = async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); };
 
 test("foreground polling stops in the background, aborts pending reads and resumes immediately", async t => {
@@ -94,8 +95,9 @@ test("UI preview explains unavailable push and language changes retain the accou
 
 function mountHistory(history) {
   const state = hooks();
-  const { HistoryScreen } = compile("../../src/HistoryScreen.tsx", { react: state.react, "react/jsx-runtime": jsx, "react-native": native, "../../shared/history": historyData, "./i18n": i18n, "./ui": ui, "./DateField": { DateField: "DateField" } });
-  return () => { state.reset(); return HistoryScreen({ history, language: "en", refresh: async () => {} }); };
+  const { HistoryScreen } = compile("../../src/HistoryScreen.tsx", { react: state.react, "react/jsx-runtime": jsx, "react-native": native, "../../shared/history": historyData, "./i18n": i18n, "./ui": ui, "./DateField": { DateField: "DateField" },
+    "../../shared/history-query": compile("../../../shared/history-query.ts"), "./use-history-page": { useHistoryPage: (_token, filters, page, bucket) => ({ data: historyPageFixture(history, historyData, filters, page, bucket), reload: async () => {} }) } });
+  return () => { state.reset(); return HistoryScreen({ token: "driver-token", language: "en" }); };
 }
 const charges = Array.from({ length: 12 }, (_, i) => ({ id: `${i}`, stationId: i % 2 ? "A" : "B", stationName: `Station ${i % 2 ? "A" : "B"}`, endedAt: "2026-10-07T12:00:00Z", startedAt: "2026-10-07T11:00:00Z", energyKWh: 12, totalCost: 4, currency: "EUR", unitPriceSnapshot: .35 }));
 const activity = tree => nodes(tree, item => item.type === "Pressable" && item.props.accessibilityState?.expanded !== undefined);
